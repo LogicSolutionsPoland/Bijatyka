@@ -42,4 +42,4 @@ Each attack press starts exactly one action. Punch and kick have separate timing
 
 ## Android
 
-The project uses the source-confirmed Godot 4.7.2 Compatibility renderer and ARM64 as the intended Android architecture. The Android export preset and package build are validated in GitHub Actions. Device performance has not been measured yet; no Android hardware result is claimed.
+The project uses the source-confirmed Godot 4.7.2 Compatibility renderer, ETC2/ASTC texture import, and ARM64 as the intended Android architecture. The Android export preset and package build are validated in GitHub Actions. Device performance has not been measured yet; no Android hardware result is claimed.

@@ -5,7 +5,7 @@
 - New game project: `game/` in `LogicSolutionsPoland/Bijatyka`, on `codex/retribution-godot-foundation`.
 - The target repository's default branch contained only its README before the foundation work. All implementation is isolated to the feature branch.
 - Source of legacy rules and assets: `LogicSolutionsPoland/Retribution-mark-of-sin`, main plus the RAGE design branch `feat/rage-1-0-20261022`.
-- Current engine from source `project.godot`: Godot 4.7.2; GL Compatibility renderer; Android ARM64 export target. The foundation does not upgrade that engine or renderer.
+- Current engine from source `project.godot`: Godot 4.7.2; GL Compatibility renderer; Android ARM64 export target. The foundation enables the Android ETC2/ASTC texture import setting required for Android exports. It does not upgrade that engine or renderer.
 
 ## Reused material
 

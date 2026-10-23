@@ -22,11 +22,21 @@ jobs:
           version: 4.7.2
           use-dotnet: false
       - name: Import Godot project and assets
-        run: godot --headless --editor --path game --import --quit
+        run: |
+          set -o pipefail
+          godot --headless --editor --path game --import --quit 2>&1 | tee "$RUNNER_TEMP/godot-import.log"
+          if grep -E "SCRIPT ERROR:|ERROR: Failed to load" "$RUNNER_TEMP/godot-import.log"; then exit 1; fi
       - name: Run combat and progression checks
-        run: godot --headless --path game --script res://tests/test_runner.gd
+        run: |
+          set -o pipefail
+          godot --headless --path game --script res://tests/test_runner.gd 2>&1 | tee "$RUNNER_TEMP/godot-tests.log"
+          grep -q "PASS: " "$RUNNER_TEMP/godot-tests.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/godot-tests.log"; then exit 1; fi
       - name: Smoke-run the playable scene
-        run: godot --headless --path game --quit-after 150
+        run: |
+          set -o pipefail
+          godot --headless --path game --quit-after 150 2>&1 | tee "$RUNNER_TEMP/godot-smoke.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/godot-smoke.log"; then exit 1; fi
   android-export:
     needs: validate
     runs-on: ubuntu-24.04
@@ -48,11 +58,16 @@ jobs:
           java -version
           godot --version
       - name: Import Godot project and assets
-        run: godot --headless --editor --path game --import --quit
+        run: |
+          set -o pipefail
+          godot --headless --editor --path game --import --quit 2>&1 | tee "$RUNNER_TEMP/android-import.log"
+          if grep -E "SCRIPT ERROR:|ERROR: Failed to load" "$RUNNER_TEMP/android-import.log"; then exit 1; fi
       - name: Export Android ARM64 debug package
         run: |
+          set -o pipefail
           mkdir -p build
-          godot --headless --path game --export-debug "Android ARM64" "$GITHUB_WORKSPACE/build/retribution-mark-of-sin-arm64.apk"
+          godot --headless --path game --export-debug "Android ARM64" "$GITHUB_WORKSPACE/build/retribution-mark-of-sin-arm64.apk" 2>&1 | tee "$RUNNER_TEMP/android-export.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/android-export.log"; then exit 1; fi
           test -s "$GITHUB_WORKSPACE/build/retribution-mark-of-sin-arm64.apk"
       - name: Publish APK artifact
         uses: actions/upload-artifact@v4

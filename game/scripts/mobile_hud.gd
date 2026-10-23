@@ -140,7 +140,7 @@ func update_status(current_hp: int, max_hp: int, current_rage: float, max_rage: 
 	if _status == null:
 		return
 	var threshold_text := "inactive" if threshold <= 0.0 else "%.1f" % threshold
-	var spell_text := "NO SPELL" if school.is_empty() else AURA_LABELS.get(school, school.to_upper())
+	var spell_text: String = "NO SPELL" if school.is_empty() else str(AURA_LABELS.get(school, school.to_upper()))
 	_status.text = "RETRIBUTION  |  RAGE %.0f / %.0f  •  MAX %.0f\nHP %d / %d   •   MAGIC %.0f   •   %s\nCondemnation %s  •  Manual attacks, no queued combos" % [current_rage, 1000.0, max_rage, current_hp, max_hp, mana, spell_text, threshold_text]
 	if _spell_button != null:
 		_spell_button.disabled = school.is_empty()

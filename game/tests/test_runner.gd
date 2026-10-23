@@ -3,6 +3,9 @@ extends SceneTree
 const Rage := preload("res://scripts/rage_progression.gd")
 const Player := preload("res://scripts/player_controller.gd")
 const Enemy := preload("res://scripts/enemy.gd")
+const Foundation := preload("res://scripts/foundation.gd")
+const Hud := preload("res://scripts/mobile_hud.gd")
+const TouchStickResource := preload("res://scripts/touch_stick.gd")
 
 var failures: Array[String] = []
 var checks := 0
@@ -11,6 +14,7 @@ func _initialize() -> void:
 	call_deferred("_run_all")
 
 func _run_all() -> void:
+	_check(Foundation != null and Hud != null and TouchStickResource != null, "scene, HUD, and touch-control scripts compile")
 	_test_rage_rules()
 	_test_multiple_milestones_and_reset()
 	await _test_manual_attack_and_hit_window()
