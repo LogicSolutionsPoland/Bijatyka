@@ -2,6 +2,8 @@ extends SceneTree
 
 const Rage := preload("res://scripts/rage_progression.gd")
 const Player := preload("res://scripts/player_controller.gd")
+const RightPunchBuilder := preload("res://scripts/right_punch_animation.gd")
+const KickAnimationBuilder := preload("res://scripts/kick_animation.gd")
 const Enemy := preload("res://scripts/enemy.gd")
 const Foundation := preload("res://scripts/foundation.gd")
 const Hud := preload("res://scripts/mobile_hud.gd")
@@ -20,6 +22,8 @@ func _run_all() -> void:
 	await _test_touch_stick_direction()
 	await _test_hud_aura_choices()
 	await _test_enemy_variant_health()
+	await _test_right_punch_animation()
+	await _test_kick_animation()
 	await _test_manual_attack_and_hit_window()
 	await _test_magic_unlock_and_damage()
 	await _test_jump_and_enemy_interrupt_rules()
@@ -109,6 +113,49 @@ func _test_hud_aura_choices() -> void:
 	_check(is_equal_approx(hud._rage_bar.value, 15.0), "HUD RAGE meter reflects current RAGE")
 	_check(is_equal_approx(hud._magic_bar.value, 60.0), "HUD magic meter reflects current energy")
 	hud.queue_free()
+	await process_frame
+
+func _test_kick_animation() -> void:
+	var player := Player.new() as FoundationPlayer
+	player.set_physics_process(false)
+	root.add_child(player)
+	await process_frame
+	_check(bool(player._kick_animation_ready.get("left", false)) and bool(player._kick_animation_ready.get("right", false)), "Thornbound rig receives both authored kick clips")
+	if not bool(player._kick_animation_ready.get("left", false)) or not bool(player._kick_animation_ready.get("right", false)):
+		player.queue_free()
+		await process_frame
+		return
+	_check(player._animation_player.has_animation(RightPunchBuilder.CLIP_PATH), "adding kick clips keeps the right-punch clip installed")
+	for side in ["left", "right"]:
+		var clip_path := KickAnimationBuilder.clip_path(side)
+		var clip := player._animation_player.get_animation(clip_path) as Animation
+		_check(clip != null and is_equal_approx(clip.length, 0.87), "%s kick spans the full attack timeline" % side)
+		if clip == null:
+			continue
+		_check(clip.has_marker(&"chamber") and clip.has_marker(&"contact"), "%s kick marks chamber and contact" % side)
+		_check(is_equal_approx(clip.get_marker_time(&"contact"), 0.23), "%s kick contact matches the hit window" % side)
+		var leg_suffixes := [":LeftThigh", ":LeftUpperLeg", ":LeftUpLeg"] if side == "left" else [":RightThigh", ":RightUpperLeg", ":RightUpLeg"]
+		var leg_track := -1
+		for track in range(clip.get_track_count()):
+			var track_path := str(clip.track_get_path(track))
+			for suffix in leg_suffixes:
+				if track_path.ends_with(suffix):
+					leg_track = track
+					break
+			if leg_track >= 0:
+				break
+		_check(leg_track >= 0 and clip.track_get_key_count(leg_track) == 8, "%s kicking leg uses eight authored pose keys" % side)
+	var left_started := player.request_attack("kick", "left")
+	var left_path := KickAnimationBuilder.clip_path("left")
+	_check(left_started and player._animation_player.current_animation == left_path and player._animation_player.is_playing(), "left KICK plays its keyed clip")
+	player._update_attack_pose()
+	_check(player._animation_player.current_animation == left_path and player._animation_player.is_playing(), "procedural pose updates do not overwrite the left kick clip")
+	_check(not player.request_attack("kick", "right") and player.attack_count == 1, "a kick cannot queue another attack")
+	for _phase in range(3):
+		player._update_attack(1.0)
+	var right_started := player.request_attack("kick", "right")
+	_check(right_started and player._animation_player.current_animation == KickAnimationBuilder.clip_path("right"), "right KICK plays its own keyed clip")
+	player.queue_free()
 	await process_frame
 
 func _test_manual_attack_and_hit_window() -> void:
@@ -209,6 +256,32 @@ func _test_enemy_variant_health() -> void:
 		_check(enemy.hp == expected and enemy.starting_health == expected, "%s starts at its configured health" % enemy.enemy_variant)
 	for enemy in spawned:
 		enemy.queue_free()
+	await process_frame
+
+func _test_right_punch_animation() -> void:
+	var player := Player.new() as FoundationPlayer
+	player.set_physics_process(false)
+	root.add_child(player)
+	await process_frame
+	_check(player._right_punch_animation_ready, "Thornbound rig receives the authored right-punch clip")
+	if not player._right_punch_animation_ready:
+		player.queue_free()
+		await process_frame
+		return
+	var clip := player._animation_player.get_animation(RightPunchBuilder.CLIP_PATH) as Animation
+	_check(clip != null and is_equal_approx(clip.length, 0.60), "right-punch clip spans the complete attack timeline")
+	if clip != null:
+		_check(clip.has_marker(&"contact") and is_equal_approx(clip.get_marker_time(&"contact"), 0.14), "right-punch contact marker matches the hit window")
+		var right_arm_track := -1
+		for track in range(clip.get_track_count()):
+			if str(clip.track_get_path(track)).ends_with(":RightUpperArm"):
+				right_arm_track = track
+				break
+		_check(right_arm_track >= 0 and clip.track_get_key_count(right_arm_track) == 8, "right upper arm uses eight authored pose keys")
+	var started := player.request_attack("punch", "right")
+	_check(started and player._animation_player.is_playing() and player._animation_player.current_animation == RightPunchBuilder.CLIP_PATH, "right-punch input plays the keyed clip")
+	_check(not player.request_attack("punch", "right") and player.attack_count == 1, "right-punch clip cannot queue a second attack")
+	player.queue_free()
 	await process_frame
 
 func _test_boss_damage_rule() -> void:
@@ -316,6 +389,9 @@ func _test_ten_button_controls() -> void:
 		_tap(hud._button_for_action(action))
 		_check(player.attack_count == count_before + 1 and player.attack_kind == action.get_slice("_", 0) and player.attack_side == action.get_slice("_", 1), "touch routes %s to the correct limb" % action)
 		player._update_attack_pose()
+		if action.begins_with("kick_"):
+			var kick_side := action.get_slice("_", 1)
+			_check(player._animation_player.current_animation == KickAnimationBuilder.clip_path(kick_side), "touch %s plays its authored kick clip" % action)
 		for step in range(4):
 			player._update_attack(1.0)
 	var count_before_mouse := player.attack_count
@@ -380,3 +456,4 @@ func _test_ten_button_controls() -> void:
 	arena.queue_free()
 	await process_frame
 	root.size = original_size
+
