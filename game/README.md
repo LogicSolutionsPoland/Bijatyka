@@ -48,6 +48,8 @@ independent fingers allow moving and attacking together. Combat input is blocked
 
 Each attack press starts exactly one action. Punch and kick have separate timings, ranges, damage, and procedural rig poses. A held key never chains attacks.
 
+The camera follows behind the player from a close right-shoulder viewpoint. The character stays left of center while the open center of the screen looks down the combat lane. The spring arm retracts near walls and ignores the player's own collision body.
+
 ## Carried-forward rules and current scope
 
 - The Thornbound mobile GLB player and rigged LOD1 zombie were copied from user-supplied Retribution assets; no music is used.
