@@ -33,6 +33,7 @@ var magic_energy := MAX_MAGIC
 var current_spell := ""
 var attack_phase := "ready"
 var attack_kind := ""
+var attack_side := "right"
 var attack_phase_time := 0.0
 var attack_count := 0
 var movement_slow_time := 0.0
@@ -175,10 +176,11 @@ func _update_movement(delta: float) -> void:
 	velocity.x = direction.x * speed
 	velocity.z = direction.z * speed
 
-func request_attack(kind: String) -> bool:
-	if attack_phase != "ready" or not ATTACKS.has(kind) or rage.current_soul_condemned:
+func request_attack(kind: String, side: String = "right") -> bool:
+	if attack_phase != "ready" or not ATTACKS.has(kind) or side not in ["left", "right"] or rage.current_soul_condemned:
 		return false
 	attack_kind = kind
+	attack_side = side
 	attack_phase = "windup"
 	attack_phase_time = float(ATTACKS[kind].windup)
 	attack_count += 1
@@ -311,6 +313,12 @@ func cast_spell() -> bool:
 	magic_changed.emit(magic_energy, MAX_MAGIC, current_spell)
 	return true
 
+func cast_spell_slot(slot: int) -> bool:
+	if slot < 0 or slot >= rage.unlocked_spells.size() or rage.current_soul_condemned:
+		return false
+	current_spell = rage.unlocked_spells[slot]
+	return cast_spell()
+
 func _apply_spell_damage(target: FoundationEnemy, amount: int) -> int:
 	var direction := target.global_position - global_position
 	direction.y = 0.0
@@ -387,14 +395,16 @@ func _update_attack_pose() -> void:
 		_animation_player.stop()
 	_skeleton.reset_bone_poses()
 	var windup_blend := 1.0 if attack_phase == "active" else 0.55
+	var limb := "Left" if attack_side == "left" else "Right"
+	var mirror := -1.0 if attack_side == "left" else 1.0
 	if attack_kind == "punch":
-		_set_bone_rotation("Chest", Vector3(-0.08, -0.18 * windup_blend, 0.03))
-		_set_bone_rotation("RightUpperArm", Vector3(-1.15 * windup_blend, 0.0, -0.15))
-		_set_bone_rotation("RightForearm", Vector3(-0.70 * windup_blend, 0.0, 0.0))
+		_set_bone_rotation("Chest", Vector3(-0.08, -0.18 * windup_blend * mirror, 0.03 * mirror))
+		_set_bone_rotation(limb + "UpperArm", Vector3(-1.15 * windup_blend, 0.0, -0.15 * mirror))
+		_set_bone_rotation(limb + "Forearm", Vector3(-0.70 * windup_blend, 0.0, 0.0))
 	else:
-		_set_bone_rotation("Chest", Vector3(-0.12, 0.04, 0.0))
-		_set_bone_rotation("RightThigh", Vector3(-1.28 * windup_blend, 0.0, 0.0))
-		_set_bone_rotation("RightShin", Vector3(0.42 * windup_blend, 0.0, 0.0))
+		_set_bone_rotation("Chest", Vector3(-0.12, 0.04 * mirror, 0.0))
+		_set_bone_rotation(limb + "Thigh", Vector3(-1.28 * windup_blend, 0.0, 0.0))
+		_set_bone_rotation(limb + "Shin", Vector3(0.42 * windup_blend, 0.0, 0.0))
 
 func _set_bone_rotation(bone_name: String, euler: Vector3) -> void:
 	var bone_index := _skeleton.find_bone(bone_name)

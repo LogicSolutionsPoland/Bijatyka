@@ -22,12 +22,29 @@ godot --headless --path game --script res://tests/test_runner.gd
 | Action | Keyboard | Touch |
 |---|---|---|
 | Move | WASD / arrows | Left virtual stick |
-| Punch | J | PUNCH |
-| Kick | K | KICK |
+| Punch | J (right) | Left / right PUNCH |
+| Kick | K (right) | Left / right KICK |
 | Jump | Space | JUMP |
 | Dash | Shift | DASH |
-| Cast unlocked spell | L | MAGIC |
-| Cycle unlocked spells | U | CYCLE |
+| Cast unlocked spell | L (selected spell) | Four direct MAGIC slots |
+| Cycle unlocked spells | U | Use the desired MAGIC slot directly |
+
+The touch buttons form two columns at the screen edges, in this exact order:
+
+| Left side | Right side |
+|---|---|
+| PUNCH (left arm) | PUNCH (right arm) |
+| KICK (left leg) | KICK (right leg) |
+| MAGIC (slot 1) | MAGIC (slot 2) |
+| MAGIC (slot 3) | MAGIC (slot 4) |
+| DASH | JUMP |
+
+The movement stick sits just inside the left column, without overlapping a button.
+Magic slots fill in the order distinct spells are unlocked through aura choices.
+All four stay visible while locked; unlocked slots show the spell name below MAGIC.
+Spells stay in their slots through normal RAGE decay and all slots lock again on a soul reset.
+Touch actions trigger once on finger-down. Holding or dragging a finger never queues another attack;
+independent fingers allow moving and attacking together. Combat input is blocked during aura selection.
 
 Each attack press starts exactly one action. Punch and kick have separate timings, ranges, damage, and procedural rig poses. A held key never chains attacks.
 

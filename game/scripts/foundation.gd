@@ -341,13 +341,16 @@ func _spawn_enemy(kind: String, at: Vector3, boss_target: bool = false) -> void:
 	enemy.attach_status_label(label)
 
 func _on_hud_action(action: String) -> void:
+	if get_tree().paused:
+		return
 	match action:
-		"punch": player.request_attack("punch")
-		"kick": player.request_attack("kick")
+		"punch_left": player.request_attack("punch", "left")
+		"punch_right": player.request_attack("punch", "right")
+		"kick_left": player.request_attack("kick", "left")
+		"kick_right": player.request_attack("kick", "right")
 		"jump": player.try_jump()
 		"dash": player.try_dash()
-		"spell": player.cast_spell()
-		"cycle_spell": player.cycle_spell()
+		"spell_0", "spell_1", "spell_2", "spell_3": player.cast_spell_slot(int(action.get_slice("_", 1)))
 
 func _on_aura_chosen(aura_id: String) -> void:
 	if not player.rage.resolve_selection(aura_id):
@@ -378,7 +381,7 @@ func _on_enemy_telegraph(_enemy: Node, is_boss: bool) -> void:
 func _refresh_hud(_a: float = 0.0, _b: float = 0.0, _c: float = 0.0) -> void:
 	if hud == null or player == null:
 		return
-	hud.update_status(player.health, player.MAX_HEALTH, player.rage.rage, player.rage.maximum_rage, player.rage.condemnation_threshold(), player.magic_energy, player.current_spell)
+	hud.update_status(player.health, player.MAX_HEALTH, player.rage.rage, player.rage.maximum_rage, player.rage.condemnation_threshold(), player.magic_energy, player.current_spell, player.rage.unlocked_spells)
 
 func _material(color: Color, roughness: float = 0.85) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()

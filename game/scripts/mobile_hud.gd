@@ -8,6 +8,13 @@ const TouchStickScript := preload("res://scripts/touch_stick.gd")
 const AURA_LABELS := {
 	"light": "LIGHT", "judgment": "JUDGMENT", "fire": "FIRE", "shadow": "SHADOW"
 }
+const ACTION_ROWS := [
+	["punch_left", "punch_right"],
+	["kick_left", "kick_right"],
+	["spell_0", "spell_1"],
+	["spell_2", "spell_3"],
+	["dash", "jump"]
+]
 
 var _root: Control
 var _stick: TouchStick
@@ -19,7 +26,8 @@ var _health_tag: Label
 var _rage_tag: Label
 var _magic_tag: Label
 var _notice: Label
-var _spell_button: Button
+var _action_buttons: Dictionary = {}
+var _pressed_pointers: Dictionary = {}
 var _selection_panel: PanelContainer
 var _layout_size := Vector2.ZERO
 
@@ -114,23 +122,30 @@ func _create_meter_row(caption: String, fill_color: Color) -> Dictionary:
 func _build_controls() -> void:
 	_stick = TouchStickScript.new()
 	_stick.name = "MovementStick"
+	_stick.process_mode = Node.PROCESS_MODE_PAUSABLE
 	_root.add_child(_stick)
-	_create_action_button("PUNCH", "punch", Vector2.ZERO)
-	_create_action_button("KICK", "kick", Vector2.ZERO)
-	_create_action_button("JUMP", "jump", Vector2.ZERO)
-	_create_action_button("DASH", "dash", Vector2.ZERO)
-	_spell_button = _create_action_button("MAGIC", "spell", Vector2.ZERO)
-	_spell_button.disabled = true
-	_spell_button.tooltip_text = "Unlock a spell through a RAGE aura choice."
-	_create_action_button("CYCLE", "cycle_spell", Vector2.ZERO, Vector2(76.0, 54.0))
+	for row in ACTION_ROWS:
+		for action: String in row:
+			var caption := action.get_slice("_", 0).to_upper()
+			if action.begins_with("spell_"):
+				caption = "MAGIC"
+			var button := _create_action_button(caption, action, Vector2.ZERO)
+			if action.begins_with("spell_"):
+				button.disabled = true
+				button.tooltip_text = "Unlock a spell through a RAGE aura choice."
 
 func _create_action_button(caption: String, action: String, at: Vector2, dimensions: Vector2 = Vector2(88.0, 82.0)) -> Button:
 	var button := Button.new()
 	button.text = caption
+	button.name = action.to_pascal_case() + "Button"
 	button.set_meta("action", action)
 	button.position = at
 	button.size = dimensions
 	button.focus_mode = Control.FOCUS_NONE
+	# Pointer events are handled below so every finger is independent and an
+	# emulated mouse click cannot repeat a touch action.
+	button.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	button.toggle_mode = true
 	button.process_mode = Node.PROCESS_MODE_ALWAYS
 	button.add_theme_font_size_override("font_size", 17 if dimensions.x > 80.0 else 13)
 	button.add_theme_color_override("font_color", Color(0.96, 0.96, 0.90))
@@ -143,12 +158,60 @@ func _create_action_button(caption: String, action: String, at: Vector2, dimensi
 	var pressed := normal.duplicate() as StyleBoxFlat
 	pressed.bg_color = Color(0.38, 0.13, 0.10, 0.95)
 	button.add_theme_stylebox_override("pressed", pressed)
+	var disabled_style := normal.duplicate() as StyleBoxFlat
+	disabled_style.bg_color = Color(0.06, 0.08, 0.11, 0.72)
+	disabled_style.border_color = Color(0.35, 0.37, 0.42, 0.7)
+	button.add_theme_stylebox_override("disabled", disabled_style)
 	_root.add_child(button)
+	_action_buttons[action] = button
 	button.pressed.connect(_emit_action.bind(action))
 	return button
 
 func _emit_action(action: String) -> void:
+	if get_tree().paused or _selection_panel != null:
+		return
 	action_requested.emit(action)
+
+func _input(event: InputEvent) -> void:
+	if event is InputEventScreenTouch:
+		if _handle_pointer(event.index, event.position, event.pressed and not event.canceled):
+			get_viewport().set_input_as_handled()
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.device == InputEvent.DEVICE_ID_EMULATION:
+			return
+		if _handle_pointer(-1, event.position, event.pressed):
+			get_viewport().set_input_as_handled()
+
+func _handle_pointer(pointer_id: int, screen_position: Vector2, pressed: bool) -> bool:
+	if not pressed:
+		if not _pressed_pointers.has(pointer_id):
+			return false
+		var released_button: Button = _pressed_pointers[pointer_id]
+		_pressed_pointers.erase(pointer_id)
+		released_button.set_pressed_no_signal(_pressed_pointers.values().has(released_button))
+		return true
+	if _pressed_pointers.has(pointer_id):
+		return true
+	if get_tree().paused or _selection_panel != null:
+		return false
+	for button: Button in _action_buttons.values():
+		var local := button.get_global_transform_with_canvas().affine_inverse() * screen_position
+		if button.is_visible_in_tree() and Rect2(Vector2.ZERO, button.size).has_point(local):
+			if not button.disabled:
+				_pressed_pointers[pointer_id] = button
+				button.set_pressed_no_signal(true)
+				_emit_action(str(button.get_meta("action")))
+			return true
+	return false
+
+func _release_pointers() -> void:
+	for button: Button in _pressed_pointers.values():
+		button.set_pressed_no_signal(false)
+	_pressed_pointers.clear()
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
+		_release_pointers()
 
 func _build_notice() -> void:
 	_notice = Label.new()
@@ -169,31 +232,31 @@ func _layout() -> void:
 	if size == _layout_size or size.x < 1.0:
 		return
 	_layout_size = size
+	var scale_factor := minf(size.x / 1280.0, size.y / 720.0)
+	var margin := 20.0 * scale_factor
+	var dimensions := Vector2(108.0, 88.0) * scale_factor
+	var gap := 12.0 * scale_factor
+	var top := size.y - margin - dimensions.y * 5.0 - gap * 4.0
+	for row_index in range(ACTION_ROWS.size()):
+		for column in range(2):
+			var button := _button_for_action(ACTION_ROWS[row_index][column])
+			button.add_theme_font_size_override("font_size", maxi(12, roundi(17.0 * scale_factor)))
+			button.size = dimensions
+			button.position = Vector2(margin if column == 0 else size.x - margin - dimensions.x, top + row_index * (dimensions.y + gap))
 	if _stick != null:
-		_stick.position = Vector2(34.0, size.y - 192.0)
-		_stick.size = Vector2(156.0, 156.0)
-	var punch := _button_for_action("punch")
-	var kick := _button_for_action("kick")
-	var jump := _button_for_action("jump")
-	var dash := _button_for_action("dash")
-	var magic := _spell_button
-	var cycle := _button_for_action("cycle_spell")
-	punch.position = Vector2(size.x - 212.0, size.y - 196.0)
-	kick.position = Vector2(size.x - 114.0, size.y - 196.0)
-	jump.position = Vector2(size.x - 212.0, size.y - 102.0)
-	dash.position = Vector2(size.x - 114.0, size.y - 102.0)
-	magic.position = Vector2(size.x - 310.0, size.y - 102.0)
-	cycle.position = Vector2(size.x - 306.0, size.y - 196.0)
+		_stick.custom_minimum_size = Vector2(156.0, 156.0) * scale_factor
+		_stick.size = _stick.custom_minimum_size
+		_stick.radius = 68.0 * scale_factor
+		_stick.position = Vector2(margin + dimensions.x + gap, size.y - margin - _stick.size.y)
 	_notice.position = Vector2(size.x * 0.25, 28.0)
 	_notice.size = Vector2(size.x * 0.5, 52.0)
+	if _selection_panel != null:
+		_selection_panel.position = (size - _selection_panel.size) * 0.5
 
 func _button_for_action(action: String) -> Button:
-	for node in _root.get_children():
-		if node is Button and node.has_meta("action") and node.get_meta("action") == action:
-			return node as Button
-	return _create_action_button(action.to_upper(), action, Vector2.ZERO)
+	return _action_buttons.get(action) as Button
 
-func update_status(current_hp: int, max_hp: int, current_rage: float, max_rage: float, threshold: float, mana: float, school: String) -> void:
+func update_status(current_hp: int, max_hp: int, current_rage: float, max_rage: float, threshold: float, mana: float, school: String, unlocked_spells: Array[String] = []) -> void:
 	if _status == null:
 		return
 	var threshold_text := "--" if threshold <= 0.0 else "%.0f" % threshold
@@ -208,9 +271,13 @@ func update_status(current_hp: int, max_hp: int, current_rage: float, max_rage: 
 	if _magic_bar != null:
 		_magic_bar.value = clampf(mana, 0.0, 100.0)
 		_magic_tag.text = "MAGIC %d" % roundi(mana)
-	if _spell_button != null:
-		_spell_button.disabled = school.is_empty()
-		_spell_button.text = "MAGIC" if school.is_empty() else spell_text
+	for slot in range(4):
+		var button := _button_for_action("spell_%d" % slot)
+		var unlocked := slot < unlocked_spells.size()
+		button.disabled = not unlocked
+		button.text = "MAGIC\n%s" % str(AURA_LABELS.get(unlocked_spells[slot], unlocked_spells[slot].to_upper())) if unlocked else "MAGIC"
+		button.tooltip_text = "Cast %s" % unlocked_spells[slot] if unlocked else "Unlock a spell through a RAGE aura choice."
+
 
 
 func show_notice(message: String, color: Color = Color(1.0, 0.83, 0.33)) -> void:
@@ -224,6 +291,7 @@ func show_notice(message: String, color: Color = Color(1.0, 0.83, 0.33)) -> void
 			_notice.visible = false)
 
 func show_aura_selection(milestone: int) -> void:
+	_release_pointers()
 	if _selection_panel != null:
 		_selection_panel.queue_free()
 	_selection_panel = PanelContainer.new()

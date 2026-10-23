@@ -17,13 +17,14 @@ func _run_all() -> void:
 	_check(Foundation != null and Hud != null and TouchStickResource != null, "scene, HUD, and touch-control scripts compile")
 	_test_rage_rules()
 	_test_multiple_milestones_and_reset()
-	_test_touch_stick_direction()
+	await _test_touch_stick_direction()
 	await _test_hud_aura_choices()
 	await _test_enemy_variant_health()
 	await _test_manual_attack_and_hit_window()
 	await _test_magic_unlock_and_damage()
-	_test_jump_and_enemy_interrupt_rules()
-	_test_boss_damage_rule()
+	await _test_jump_and_enemy_interrupt_rules()
+	await _test_boss_damage_rule()
+	await _test_ten_button_controls()
 	if failures.is_empty():
 		print("PASS: %d foundation checks" % checks)
 		quit(0)
@@ -229,3 +230,153 @@ func _test_boss_damage_rule() -> void:
 	player.queue_free()
 	boss.queue_free()
 	await process_frame
+
+func _send_touch(at: Vector2, finger: int, down: bool, canceled: bool = false) -> void:
+	var event := InputEventScreenTouch.new()
+	event.position = at
+	event.index = finger
+	event.pressed = down
+	event.canceled = canceled
+	root.push_input(event, true)
+
+func _tap(button: Button, finger: int = 5) -> void:
+	var at := button.get_global_rect().get_center()
+	_send_touch(at, finger, true)
+	_send_touch(at, finger, false)
+
+func _test_ten_button_controls() -> void:
+	var original_size := root.size
+	root.size = Vector2i(1280, 720)
+	var arena := Foundation.new()
+	root.add_child(arena)
+	var player: FoundationPlayer = arena.player
+	var hud: FoundationHUD = arena.hud
+	player.set_physics_process(false)
+	arena.set_process(false)
+	for enemy: Node in get_nodes_in_group("enemies"):
+		enemy.set_physics_process(false)
+	await process_frame
+	var expected_rows := [
+		["punch_left", "punch_right"], ["kick_left", "kick_right"],
+		["spell_0", "spell_1"], ["spell_2", "spell_3"], ["dash", "jump"]
+	]
+	_check(hud._action_buttons.size() == 10, "HUD has exactly the ten requested action buttons")
+	for viewport_size in [Vector2(1280, 720), Vector2(1600, 720), Vector2(960, 540)]:
+		hud._root.size = viewport_size
+		hud._layout()
+		var occupied: Array[Rect2] = [hud._stick.get_global_rect()]
+		var previous_y := -1.0
+		for row in expected_rows:
+			var left := hud._button_for_action(row[0])
+			var right := hud._button_for_action(row[1])
+			_check(left != null and right != null, "both requested row actions exist")
+			if left == null or right == null:
+				continue
+			_check(is_equal_approx(left.position.y, right.position.y) and left.position.y > previous_y, "left and right actions align in the requested top-to-bottom order")
+			_check(left.position.x < viewport_size.x * 0.2 and right.position.x > viewport_size.x * 0.8, "action columns stay at opposite screen edges")
+			previous_y = left.position.y
+			for button: Button in [left, right]:
+				var rect := button.get_global_rect()
+				_check(Rect2(Vector2.ZERO, viewport_size).encloses(rect), "action stays inside the landscape viewport")
+				for other in occupied:
+					_check(not rect.intersects(other), "buttons and movement stick do not overlap")
+				occupied.append(rect)
+	hud._root.size = Vector2(1280, 720)
+	hud._layout()
+	var emitted: Array[String] = []
+	hud.action_requested.connect(func(action: String) -> void: emitted.append(action))
+	for slot in range(4):
+		var locked := hud._button_for_action("spell_%d" % slot)
+		_check(locked.disabled and locked.text == "MAGIC", "locked MAGIC slot remains visible")
+		_tap(locked)
+	_check(emitted.is_empty() and player.magic_energy == 100.0, "locked magic taps cannot cast or spend energy")
+
+	var stick_at := hud._stick.get_global_rect().get_center() - Vector2(0, 50)
+	_send_touch(stick_at, 0, true)
+	_check(player.move_input().y < -0.5, "real touch event moves the joystick forward")
+	var left_punch := hud._button_for_action("punch_left")
+	var punch_at := left_punch.get_global_rect().get_center()
+	_send_touch(punch_at, 1, true)
+	_check(player.attack_count == 1 and player.attack_kind == "punch" and player.attack_side == "left", "second finger starts one left-arm punch while moving")
+	_check(player.move_input().y < -0.5, "attacking does not steal the movement finger")
+	_send_touch(punch_at, 1, true)
+	_check(player.attack_count == 1 and emitted.size() == 1, "holding one pointer does not repeat an action")
+	_tap(hud._button_for_action("punch_right"), 2)
+	_check(player.attack_count == 1 and player.attack_side == "left", "opposite punch cannot queue or change an active attack")
+	for step in range(4):
+		player._update_attack(1.0)
+	_check(player.attack_phase == "ready" and player.attack_count == 1, "held touch does not start another attack after recovery")
+	_send_touch(Vector2(640, 360), 1, false, true)
+	_check(not left_punch.button_pressed, "canceled touch releases its button even outside its rectangle")
+	_send_touch(stick_at, 0, false)
+	_check(player.move_input() == Vector2.ZERO, "releasing the movement finger stops movement")
+
+	for action: String in ["punch_right", "kick_left", "kick_right"]:
+		var count_before := player.attack_count
+		_tap(hud._button_for_action(action))
+		_check(player.attack_count == count_before + 1 and player.attack_kind == action.get_slice("_", 0) and player.attack_side == action.get_slice("_", 1), "touch routes %s to the correct limb" % action)
+		player._update_attack_pose()
+		for step in range(4):
+			player._update_attack(1.0)
+	var count_before_mouse := player.attack_count
+	var mouse := InputEventMouseButton.new()
+	mouse.button_index = MOUSE_BUTTON_LEFT
+	mouse.position = punch_at
+	mouse.pressed = true
+	mouse.device = InputEvent.DEVICE_ID_EMULATION
+	root.push_input(mouse, true)
+	_check(player.attack_count == count_before_mouse, "emulated mouse events do not duplicate touch attacks")
+
+	player.rage.unlocked_spells.assign(["light"])
+	arena._refresh_hud()
+	_check(not hud._button_for_action("spell_0").disabled and hud._button_for_action("spell_1").disabled, "first unlocked spell only enables its own slot")
+	player.rage.unlocked_spells.assign(["light", "fire", "judgment", "shadow"])
+	player.rage.gain_per_effective_hit = 0.0
+	arena._refresh_hud()
+	var target := get_first_node_in_group("enemies") as FoundationEnemy
+	target.global_position = player.global_position + Vector3(0, 0, -3)
+	var energy_after := [80.0, 85.0, 80.0, 80.0]
+	var damage := [0, 20, 35, 25]
+	for slot in range(4):
+		player.health = 50
+		player.magic_energy = 100.0
+		target.hp = 100
+		var button := hud._button_for_action("spell_%d" % slot)
+		_check(not button.disabled and button.text.begins_with("MAGIC\n"), "unlocked slot retains MAGIC label and names its spell")
+		_tap(button)
+		_check(player.current_spell == player.rage.unlocked_spells[slot] and player.magic_energy == energy_after[slot], "direct magic slot casts the matching spell with its existing cost")
+		_check(target.hp == 100 - damage[slot], "direct magic slot preserves its spell effect")
+	player.rage.advance(0.1)
+	arena._refresh_hud()
+	_check(not hud._button_for_action("spell_3").disabled, "ordinary RAGE decay keeps unlocked magic slots")
+	hud._root.size = Vector2(960, 540)
+	hud._layout()
+	for slot in range(4):
+		_check(Rect2(Vector2.ZERO, hud._root.size).encloses(hud._button_for_action("spell_%d" % slot).get_global_rect()), "unlocked spell labels stay inside the smaller viewport")
+	hud._root.size = Vector2(1280, 720)
+	hud._layout()
+
+	var actions_before_pause := emitted.size()
+	paused = true
+	hud.show_aura_selection(10)
+	_tap(hud._button_for_action("dash"))
+	_check(emitted.size() == actions_before_pause and player.dash_time == 0.0, "aura menu blocks gameplay buttons")
+	hud.close_aura_selection()
+	paused = false
+	await process_frame
+	_tap(hud._button_for_action("dash"))
+	_check(player.dash_time > 0.0 and player.DASH_DISTANCE == 15.0, "bottom-left button starts the existing 15 m dash")
+	await physics_frame
+	player.velocity = Vector3(0, -10, 0)
+	player.move_and_slide()
+	_check(player.is_on_floor(), "jump fixture is grounded on the courtyard")
+	_tap(hud._button_for_action("jump"))
+	_check(player.velocity.y > 0.0 and player.jump_impact_armed, "bottom-right button jumps and arms landing impact")
+	player._reset_at_safe_base()
+	arena._refresh_hud()
+	for slot in range(4):
+		_check(hud._button_for_action("spell_%d" % slot).disabled and not player.cast_spell_slot(slot), "soul reset clears and locks every magic slot")
+	_check(not player.cast_spell_slot(-1) and not player.cast_spell_slot(4), "out-of-range magic slots cannot cast")
+	arena.queue_free()
+	await process_frame
+	root.size = original_size
