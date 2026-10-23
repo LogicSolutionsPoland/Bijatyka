@@ -1,25 +1,62 @@
-name: Actions access validation
+name: Godot foundation validation
 on:
   push:
     branches:
       - codex/retribution-godot-foundation
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  runner:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
     steps:
       - name: Check out feature branch
         uses: actions/checkout@v4
-      - name: Verify hosted runner basics
+      - name: Install the source-confirmed Godot version
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+      - name: Import Godot project and assets
+        run: godot --headless --editor --path game --import --quit
+      - name: Run combat and progression checks
+        run: godot --headless --path game --script res://tests/test_runner.gd
+      - name: Smoke-run the playable scene
+        run: godot --headless --path game --quit-after 150
+  android-export:
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v4
+      - name: Install Godot and matching export templates
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: true
+      - name: Verify Android build tools are available
         run: |
           set -eu
-          test "$(uname -s)" = Linux
-          printf 'Architecture: '
-          uname -m
-          printf 'Available disk: '
-          df -h / | tail -n 1
-          printf 'Java: '
-          java -version 2>&1 | head -n 1
-          git --version
+          test -n "${ANDROID_HOME:-}"
+          test -d "$ANDROID_HOME"
+          java -version
+          godot --version
+      - name: Import Godot project and assets
+        run: godot --headless --editor --path game --import --quit
+      - name: Export Android ARM64 debug package
+        run: |
+          mkdir -p build
+          godot --headless --path game --export-debug "Android ARM64" "$GITHUB_WORKSPACE/build/retribution-mark-of-sin-arm64.apk"
+          test -s "$GITHUB_WORKSPACE/build/retribution-mark-of-sin-arm64.apk"
+      - name: Publish APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: retribution-mark-of-sin-android-arm64
+          path: build/retribution-mark-of-sin-arm64.apk
+          if-no-files-found: error

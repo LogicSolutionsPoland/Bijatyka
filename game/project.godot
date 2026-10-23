@@ -1,0 +1,40 @@
+; Engine configuration file.
+; Retribution: Mark of Sin — mobile vertical slice.
+config_version=5
+
+[application]
+config/name="Retribution: Mark of Sin — Thornbound Trial"
+run/main_scene="res://scenes/foundation.tscn"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+
+[display]
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/size/window_width_override=1280
+window/size/window_height_override=720
+window/stretch/mode="canvas_items"
+
+[input]
+move_left={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":65),Object(InputEventKey,"physical_keycode":4194311)]}
+move_right={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":68),Object(InputEventKey,"physical_keycode":4194313)]}
+move_forward={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":87),Object(InputEventKey,"physical_keycode":4194320)]}
+move_back={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":83),Object(InputEventKey,"physical_keycode":4194322)]}
+jump={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":32)]}
+dash={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":4194321)]}
+attack_punch={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":74)]}
+attack_kick={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":75)]}
+cast_spell={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":76)]}
+cycle_spell={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":85)]}
+
+[rendering]
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+environment/defaults/default_clear_color=Color(0.035, 0.045, 0.065, 1)
+
+[physics]
+3d/default_gravity=24.0
+
+[android]
+min_sdk="23"
+target_sdk="35"
+
