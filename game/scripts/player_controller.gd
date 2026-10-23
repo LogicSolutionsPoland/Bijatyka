@@ -10,6 +10,7 @@ signal interrupted(duration: float)
 signal jump_impact(target: Node)
 
 const RAGE_SCRIPT := preload("res://scripts/rage_progression.gd")
+const RIGHT_PUNCH_BUILDER := preload("res://scripts/right_punch_animation.gd")
 const PLAYER_MODEL_PATH := "res://assets/characters/thornbound/Retribution_Player_Thornbound_Warrior_MOBILE.glb"
 const GRAVITY := 24.0
 const MAX_HEALTH := 100
@@ -44,6 +45,7 @@ var jump_impact_armed := false
 var _was_airborne := false
 var _animation_player: AnimationPlayer
 var _skeleton: Skeleton3D
+var _right_punch_animation_ready := false
 var _camera_yaw := 0.0
 var _burns: Array[Dictionary] = []
 var _magic_hud_timer := 0.0
@@ -84,6 +86,7 @@ func _load_player_visual() -> void:
 			visual_root.add_child(model)
 			_animation_player = model.find_child("AnimationPlayer", true, false) as AnimationPlayer
 			_skeleton = model.find_child("Skeleton3D", true, false) as Skeleton3D
+			_right_punch_animation_ready = RIGHT_PUNCH_BUILDER.install(_animation_player, _skeleton, ATTACKS["punch"])
 			_set_locomotion_animation("Idle")
 	else:
 		_add_debug_visual()
@@ -189,7 +192,10 @@ func request_attack(kind: String, side: String = "right") -> bool:
 	attack_count += 1
 	attack_started.emit(kind)
 	if _animation_player != null:
-		_animation_player.stop()
+		if kind == "punch" and side == "right" and _right_punch_animation_ready:
+			_animation_player.play(RIGHT_PUNCH_BUILDER.CLIP_PATH, 0.04)
+		else:
+			_animation_player.stop()
 	return true
 
 func _update_attack(delta: float) -> void:
@@ -395,6 +401,8 @@ func _update_attack_pose() -> void:
 		return
 	if attack_phase == "ready":
 		return
+	if attack_kind == "punch" and attack_side == "right" and _right_punch_animation_ready:
+		return
 	if _animation_player != null:
 		_animation_player.stop()
 	_skeleton.reset_bone_poses()
@@ -447,3 +455,4 @@ func _reset_at_safe_base() -> void:
 	_burns.clear()
 	rage.reset_soul()
 	health_changed.emit(health, MAX_HEALTH)
+
