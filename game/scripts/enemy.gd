@@ -6,6 +6,7 @@ signal attack_resolved(enemy: Node, hit: bool)
 signal defeated(enemy: Node)
 
 const ENEMY_MODEL_PATH := "res://assets/zombies/brutal_v2/Retribution_Zombie_01_Brutal_V2_RIGGED_LOD1.glb"
+const SHADOW_POLICY := preload("res://scripts/shadow_policy.gd")
 const GRAVITY := 24.0
 
 @export_enum("shambler", "brute", "stalker", "boss") var enemy_variant := "shambler"
@@ -108,6 +109,7 @@ func _build_visual() -> void:
 	if is_boss or enemy_variant == "brute":
 		_add_silhouette_piece()
 	_build_health_display()
+	SHADOW_POLICY.disable_in_tree(_visual_root)
 
 func attach_status_label(label: Label3D) -> void:
 	_status_label = label
@@ -162,6 +164,7 @@ func _show_impact_flash(is_jump_hit: bool) -> void:
 		return
 	var flash := MeshInstance3D.new()
 	flash.name = "ImpactFlash"
+	flash.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var sphere := SphereMesh.new()
 	sphere.radius = 0.24
 	sphere.height = 0.48
@@ -304,10 +307,6 @@ func _set_distance_detail(distance: float) -> void:
 		return
 	_lod_band = band
 	_visual_root.visible = distance <= 55.0
-	var cast_shadows := distance <= 18.0
-	for node in _descendants(_visual_root):
-		if node is GeometryInstance3D:
-			(node as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if cast_shadows else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	if _animation_player != null:
 		if distance <= 18.0:
 			_animation_player.speed_scale = 1.0

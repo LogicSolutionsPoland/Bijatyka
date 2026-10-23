@@ -52,6 +52,7 @@ Each attack press starts exactly one action. Punch and kick have separate timing
 
 - The Thornbound mobile GLB player and rigged LOD1 zombie were copied from user-supplied Retribution assets; no music is used.
 - The yard's enemies have telegraphed windups. Ordinary zombies can interrupt, slow, or lengthen recovery but never reduce HP. The boss can damage the player.
+- Shadows are disabled on every scene light, imported player/enemy model, and procedural mesh. Distance-based enemy detail never switches them back on, and the HUD notice has no text shadow.
 - Jump landing impacts can hit and damage enemies. Dash uses the previously selected 15 m mobility distance.
 - RAGE begins at zero, only confirmed positive damage adds RAGE, it continuously decays, missed attacks do not count, aura choices occur at 10/30/50/70/90, aura layers gate on current RAGE, and unlocked spells persist until a soul reset. Condemnation depends on the run maximum and is one-shot.
 - The provisional values (+3 per effective hit, 1 per second decay, cap 1000, threshold `max(3, 25% of run maximum)`) are source-design defaults, not approved balance. They are configurable in `rage_progression.gd`.
