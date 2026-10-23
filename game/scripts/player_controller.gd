@@ -51,6 +51,8 @@ var safe_base_position := Vector3.ZERO
 
 @onready var visual_root: Node3D = get_node_or_null("VisualRoot")
 
+const SHADOW_POLICY := preload("res://scripts/shadow_policy.gd")
+
 func _ready() -> void:
 	add_to_group("player")
 	collision_layer = 1
@@ -68,6 +70,7 @@ func _ready() -> void:
 		visual_root.name = "VisualRoot"
 		add_child(visual_root)
 	_load_player_visual()
+	SHADOW_POLICY.disable_in_tree(visual_root)
 	rage.condemned.connect(_on_condemned)
 	rage.selection_resolved.connect(_on_selection_resolved)
 
@@ -366,6 +369,7 @@ func _find_target(max_range: float, min_facing_dot: float) -> FoundationEnemy:
 
 func _spawn_spell_burst(at: Vector3) -> void:
 	var root := MeshInstance3D.new()
+	root.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var sphere := SphereMesh.new()
 	sphere.radius = 0.28
 	sphere.height = 0.56

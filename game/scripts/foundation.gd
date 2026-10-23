@@ -4,6 +4,7 @@ const PLAYER_SCENE := preload("res://scenes/player.tscn")
 const PLAYER_SCRIPT := preload("res://scripts/player_controller.gd")
 const ENEMY_SCRIPT := preload("res://scripts/enemy.gd")
 const HUD_SCRIPT := preload("res://scripts/mobile_hud.gd")
+const SHADOW_POLICY := preload("res://scripts/shadow_policy.gd")
 
 var player: FoundationPlayer
 var camera_rig: Node3D
@@ -23,6 +24,7 @@ func _ready() -> void:
 	_build_camera()
 	_build_hud()
 	_spawn_enemies()
+	SHADOW_POLICY.disable_in_tree(self)
 	player.rage.rage_changed.connect(_refresh_hud)
 	player.rage.selection_pending.connect(_on_selection_pending)
 	player.rage.condemned.connect(_on_condemned)
@@ -78,8 +80,7 @@ func _build_environment() -> void:
 	sun.rotation_degrees = Vector3(-39.0, -34.0, 0.0)
 	sun.light_color = Color(1.0, 0.72, 0.54)
 	sun.light_energy = 1.15
-	sun.shadow_enabled = true
-	sun.directional_shadow_max_distance = 32.0
+	sun.shadow_enabled = false
 	add_child(sun)
 
 func _build_arena() -> void:

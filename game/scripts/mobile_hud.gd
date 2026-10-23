@@ -219,9 +219,6 @@ func _build_notice() -> void:
 	_notice.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_notice.add_theme_font_size_override("font_size", 24)
 	_notice.add_theme_color_override("font_color", Color(1.0, 0.83, 0.33))
-	_notice.add_theme_color_override("font_shadow_color", Color(0.02, 0.03, 0.04, 0.95))
-	_notice.add_theme_constant_override("shadow_offset_x", 2)
-	_notice.add_theme_constant_override("shadow_offset_y", 2)
 	_notice.visible = false
 	_root.add_child(_notice)
 
