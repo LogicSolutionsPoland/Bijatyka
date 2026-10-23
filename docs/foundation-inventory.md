@@ -9,7 +9,7 @@
 
 ## Reused material
 
-- Player model: `Retribution_Player_Thornbound_Warrior_MOBILE.glb`, supplied user asset pack; 21-joint rig with `Idle`, `Walk`, `Sprint`, `Jump`, and `Sword_Slash` clips. Attack poses are procedural because there are no dedicated punch/kick clips in the pack.
+- Player model: `Retribution_Player_Thornbound_Warrior_MOBILE.glb`, supplied user asset pack; 21-joint rig with `Idle`, `Walk`, `Sprint`, `Jump`, and `Sword_Slash` clips. `right_punch_animation.gd` adds a keyed right-punch clip at runtime for the existing rig; left punches and kicks still use procedural poses because the pack has no dedicated punch/kick clips.
 - Zombie model: `Retribution_Zombie_01_Brutal_V2_RIGGED_LOD1.glb`, source branch asset. Brute, stalker, and boss variants use the same authored zombie base with different scale, tint, silhouettes, attack timings, and stats.
 - No music is imported or played. The initial slice uses generated visual spell bursts and has no sound assets.
 
@@ -28,3 +28,4 @@
 - The full foundation workflow passed on commit `70223bb921edd7bed5e0a3d0708633502eab9cdf`: 49 headless checks, project import, and playable-scene smoke run passed. Android ARM64 debug export and artifact publication also passed.
 - The Android artifact is `retribution-mark-of-sin-android-arm64`, approximately 31.8 MB, from Actions run `40019970976`. It is a debug package signed by the runner's debug keystore.
 - The initial blockout uses procedural geometry and generated visual effects. Distance-based enemy animation, AI cadence, shadow, and visibility reductions are implemented, but handset performance has not been profiled and APK installation has not been tested. No target Android device was specified.
+
