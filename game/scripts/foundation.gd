@@ -26,8 +26,8 @@ func _ready() -> void:
 	player.rage.rage_changed.connect(_refresh_hud)
 	player.rage.selection_pending.connect(_on_selection_pending)
 	player.rage.condemned.connect(_on_condemned)
-	player.health_changed.connect(func(_current: int, _maximum: int) -> void: _refresh_hud(player.health, player.MAX_HEALTH, player.rage.rage, player.rage.maximum_rage, player.rage.condemnation_threshold()))
-	player.magic_changed.connect(func(_current: float, _maximum: float, _school: String) -> void: _refresh_hud(player.health, player.MAX_HEALTH, player.rage.rage, player.rage.maximum_rage, player.rage.condemnation_threshold()))
+	player.health_changed.connect(func(_current: int, _maximum: int) -> void: _refresh_hud())
+	player.magic_changed.connect(func(_current: float, _maximum: float, _school: String) -> void: _refresh_hud())
 	_refresh_hud(player.rage.rage, player.rage.maximum_rage, player.rage.condemnation_threshold())
 	hud.show_notice("Thornbound awakens. Zombies interrupt; only bosses damage HP.")
 

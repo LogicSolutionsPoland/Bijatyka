@@ -90,6 +90,7 @@ func _test_manual_attack_and_hit_window() -> void:
 		player._update_attack(0.01)
 	await process_frame
 	_check(player.request_attack("kick") and player.attack_count == 2, "a fresh kick press after recovery starts its own action")
+	var rage_before_miss := player.rage.rage
 	target.hp = target.starting_health
 	player.attack_phase = "ready"
 	player.attack_kind = ""
@@ -97,7 +98,7 @@ func _test_manual_attack_and_hit_window() -> void:
 	_check(player.request_attack("kick"), "kick input starts its distinct action")
 	player._update_attack(0.24)
 	_check(target.hp == target.starting_health, "missed kick does not damage or build RAGE")
-	_check(player.rage.rage == 3.0, "missed kick does not increase RAGE")
+	_check(player.rage.rage == rage_before_miss, "missed kick does not increase RAGE")
 	player.queue_free()
 	target.queue_free()
 	await process_frame
