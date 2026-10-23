@@ -1,0 +1,25 @@
+name: Actions access validation
+on:
+  push:
+    branches:
+      - codex/retribution-godot-foundation
+permissions:
+  contents: read
+jobs:
+  runner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v4
+      - name: Verify hosted runner basics
+        run: |
+          set -eu
+          test "$(uname -s)" = Linux
+          printf 'Architecture: '
+          uname -m
+          printf 'Available disk: '
+          df -h / | tail -n 1
+          printf 'Java: '
+          java -version 2>&1 | head -n 1
+          git --version
