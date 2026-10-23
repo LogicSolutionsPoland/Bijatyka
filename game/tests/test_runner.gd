@@ -19,6 +19,7 @@ func _run_all() -> void:
 	_test_multiple_milestones_and_reset()
 	_test_touch_stick_direction()
 	await _test_hud_aura_choices()
+	await _test_enemy_variant_health()
 	await _test_manual_attack_and_hit_window()
 	await _test_magic_unlock_and_damage()
 	_test_jump_and_enemy_interrupt_rules()
@@ -102,6 +103,10 @@ func _test_hud_aura_choices() -> void:
 		var button := column.get_child(index + 2) as Button
 		button.pressed.emit()
 		_check(not selected.is_empty() and selected.back() == expected[index], "aura menu button emits its distinct selection")
+	hud.update_status(50, 100, 15.0, 20.0, 5.0, 60.0, "fire")
+	_check(is_equal_approx(hud._health_bar.value, 50.0), "HUD health meter reflects current HP")
+	_check(is_equal_approx(hud._rage_bar.value, 15.0), "HUD RAGE meter reflects current RAGE")
+	_check(is_equal_approx(hud._magic_bar.value, 60.0), "HUD magic meter reflects current energy")
 	hud.queue_free()
 	await process_frame
 
@@ -187,6 +192,24 @@ func _test_jump_and_enemy_interrupt_rules() -> void:
 	zombie.queue_free()
 	await process_frame
 
+func _test_enemy_variant_health() -> void:
+	var variants := {"shambler": 90, "brute": 150, "stalker": 75, "boss": 360}
+	var spawned: Array[FoundationEnemy] = []
+	for kind in variants.keys():
+		var enemy := Enemy.new() as FoundationEnemy
+		enemy.configure(str(kind), str(kind) == "boss")
+		enemy.set_physics_process(false)
+		root.add_child(enemy)
+		spawned.append(enemy)
+	await process_frame
+	for index in range(spawned.size()):
+		var enemy := spawned[index]
+		var expected := int(variants[enemy.enemy_variant])
+		_check(enemy.hp == expected and enemy.starting_health == expected, "%s starts at its configured health" % enemy.enemy_variant)
+	for enemy in spawned:
+		enemy.queue_free()
+	await process_frame
+
 func _test_boss_damage_rule() -> void:
 	var player := Player.new() as FoundationPlayer
 	player.position = Vector3.ZERO
@@ -199,7 +222,8 @@ func _test_boss_damage_rule() -> void:
 	root.add_child(boss)
 	await process_frame
 	boss._player = player
-	for _hit in range(5):
+	_check(boss.hp == 360, "boss starts with configured boss health")
+	for _hit in range(17):
 		boss._resolve_enemy_attack(2.0)
 	_check(player.health == 0, "boss attacks can defeat the player")
 	player.queue_free()

@@ -29,6 +29,9 @@ var _player: FoundationPlayer
 var _model: Node3D
 var _animation_player: AnimationPlayer
 var _visual_root: Node3D
+var _status_label: Label3D
+var _health_bar_root: Node3D
+var _health_bar_fill: MeshInstance3D
 var _attack_latched := false
 var _lod_band := -1
 
@@ -41,8 +44,8 @@ func _ready() -> void:
 	collision_layer = 2
 	collision_mask = 1
 	name = enemy_variant.capitalize()
-	hp = starting_health
 	_apply_variant()
+	hp = starting_health
 	_build_collision()
 	_build_visual()
 
@@ -104,6 +107,82 @@ func _build_visual() -> void:
 		_build_debug_variant()
 	if is_boss or enemy_variant == "brute":
 		_add_silhouette_piece()
+	_build_health_display()
+
+func attach_status_label(label: Label3D) -> void:
+	_status_label = label
+	if _visual_root != null:
+		_visual_root.add_child(label)
+	else:
+		add_child(label)
+	_update_health_display()
+
+func _build_health_display() -> void:
+	_health_bar_root = Node3D.new()
+	_health_bar_root.name = "EnemyHealthBar"
+	_health_bar_root.position.y = 3.05 if is_boss else 2.58
+	_health_bar_root.visible = is_boss
+	_visual_root.add_child(_health_bar_root)
+	var back := MeshInstance3D.new()
+	var back_mesh := QuadMesh.new()
+	back_mesh.size = Vector2(0.90, 0.085)
+	back.mesh = back_mesh
+	back.material_override = _health_bar_material(Color(0.035, 0.025, 0.03))
+	_health_bar_root.add_child(back)
+	_health_bar_fill = MeshInstance3D.new()
+	var fill_mesh := QuadMesh.new()
+	fill_mesh.size = Vector2(0.82, 0.044)
+	_health_bar_fill.mesh = fill_mesh
+	_health_bar_fill.position = Vector3(-0.41, 0.0, 0.006)
+	_health_bar_fill.material_override = _health_bar_material(Color(0.86, 0.12, 0.09))
+	_health_bar_root.add_child(_health_bar_fill)
+	_update_health_display()
+
+func _health_bar_material(tint: Color) -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.albedo_color = tint
+	material.emission_enabled = true
+	material.emission = tint * 0.45
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	return material
+
+func _update_health_display() -> void:
+	var ratio := clampf(float(hp) / maxf(1.0, float(starting_health)), 0.0, 1.0)
+	if _status_label != null:
+		_status_label.text = "%s  %d%%" % [enemy_variant.to_upper(), roundi(ratio * 100.0)]
+	if _health_bar_fill != null:
+		_health_bar_fill.scale.x = ratio
+		_health_bar_fill.position.x = -0.41 * (1.0 - ratio)
+	if _health_bar_root != null:
+		_health_bar_root.visible = is_boss or hp < starting_health
+
+func _show_impact_flash(is_jump_hit: bool) -> void:
+	if _visual_root == null:
+		return
+	var flash := MeshInstance3D.new()
+	flash.name = "ImpactFlash"
+	var sphere := SphereMesh.new()
+	sphere.radius = 0.24
+	sphere.height = 0.48
+	sphere.radial_segments = 8
+	sphere.rings = 4
+	flash.mesh = sphere
+	flash.position = Vector3(0.0, 1.0, 0.0)
+	var tint := Color(1.0, 0.72, 0.24) if is_jump_hit else Color(1.0, 0.86, 0.68)
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(tint.r, tint.g, tint.b, 0.92)
+	material.emission_enabled = true
+	material.emission = tint
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	flash.material_override = material
+	_visual_root.add_child(flash)
+	var tween := create_tween()
+	tween.tween_property(flash, "scale", Vector3.ONE * 2.2, 0.18)
+	tween.parallel().tween_property(material, "albedo_color:a", 0.0, 0.18)
+	tween.parallel().tween_property(material, "emission:a", 0.0, 0.18)
+	tween.tween_callback(flash.queue_free)
 
 func _apply_variant_overlay() -> void:
 	var tint := Color(0.43, 0.82, 0.47, 0.15)
@@ -316,6 +395,8 @@ func receive_hit(damage: int, hit_direction: Vector3 = Vector3.ZERO, is_jump_hit
 		return 0
 	var dealt := mini(hp, damage)
 	hp -= dealt
+	_update_health_display()
+	_show_impact_flash(is_jump_hit)
 	state = "hit"
 	state_time = 0.30 if not is_jump_hit else 0.42
 	if hit_direction.length_squared() > 0.01:

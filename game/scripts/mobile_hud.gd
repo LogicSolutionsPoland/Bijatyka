@@ -12,6 +12,12 @@ const AURA_LABELS := {
 var _root: Control
 var _stick: TouchStick
 var _status: Label
+var _health_bar: ProgressBar
+var _rage_bar: ProgressBar
+var _magic_bar: ProgressBar
+var _health_tag: Label
+var _rage_tag: Label
+var _magic_tag: Label
 var _notice: Label
 var _spell_button: Button
 var _selection_panel: PanelContainer
@@ -38,24 +44,72 @@ func get_move_vector() -> Vector2:
 func _build_status() -> void:
 	var panel := PanelContainer.new()
 	panel.name = "StatusPanel"
-	panel.position = Vector2(20.0, 18.0)
-	panel.custom_minimum_size = Vector2(390.0, 96.0)
+	panel.position = Vector2(18.0, 16.0)
+	panel.custom_minimum_size = Vector2(332.0, 138.0)
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.025, 0.035, 0.05, 0.84)
-	style.border_color = Color(0.73, 0.22, 0.15, 0.88)
+	style.bg_color = Color(0.018, 0.026, 0.038, 0.88)
+	style.border_color = Color(0.72, 0.23, 0.15, 0.95)
 	style.set_border_width_all(2)
-	style.set_corner_radius_all(10)
-	style.content_margin_left = 14.0
-	style.content_margin_right = 14.0
-	style.content_margin_top = 10.0
-	style.content_margin_bottom = 10.0
+	style.set_corner_radius_all(12)
+	style.content_margin_left = 13.0
+	style.content_margin_right = 13.0
+	style.content_margin_top = 9.0
+	style.content_margin_bottom = 9.0
 	panel.add_theme_stylebox_override("panel", style)
 	_root.add_child(panel)
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 3)
+	panel.add_child(column)
+	var title := Label.new()
+	title.text = "RETRIBUTION  /  THORNBOUND"
+	title.add_theme_font_size_override("font_size", 15)
+	title.add_theme_color_override("font_color", Color(0.95, 0.77, 0.60))
+	column.add_child(title)
 	_status = Label.new()
-	_status.text = "RETRIBUTION  |  RAGE 0 / 100\nHP 100   •   MAGIC 100\nWASD move   J punch   K kick   Space jump   Shift dash"
-	_status.add_theme_color_override("font_color", Color(0.92, 0.93, 0.88))
-	_status.add_theme_font_size_override("font_size", 15)
-	panel.add_child(_status)
+	_status.text = "MAX RAGE 0  •  SPELL NONE"
+	_status.add_theme_font_size_override("font_size", 12)
+	_status.add_theme_color_override("font_color", Color(0.78, 0.82, 0.86))
+	column.add_child(_status)
+	var hp_row := _create_meter_row("HP", Color(0.88, 0.16, 0.11))
+	var rage_row := _create_meter_row("RAGE", Color(0.96, 0.36, 0.11))
+	var magic_row := _create_meter_row("MAGIC", Color(0.25, 0.62, 0.96))
+	column.add_child(hp_row["row"])
+	column.add_child(rage_row["row"])
+	column.add_child(magic_row["row"])
+	_health_bar = hp_row["bar"] as ProgressBar
+	_rage_bar = rage_row["bar"] as ProgressBar
+	_magic_bar = magic_row["bar"] as ProgressBar
+	_health_tag = hp_row["tag"] as Label
+	_rage_tag = rage_row["tag"] as Label
+	_magic_tag = magic_row["tag"] as Label
+
+func _create_meter_row(caption: String, fill_color: Color) -> Dictionary:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 7)
+	var tag := Label.new()
+	tag.text = caption
+	tag.custom_minimum_size.x = 52.0
+	tag.add_theme_font_size_override("font_size", 11)
+	tag.add_theme_color_override("font_color", Color(0.82, 0.85, 0.87))
+	row.add_child(tag)
+	var bar := ProgressBar.new()
+	bar.min_value = 0.0
+	bar.max_value = 100.0
+	bar.value = 100.0
+	bar.show_percentage = false
+	bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bar.custom_minimum_size.y = 13.0
+	var track := StyleBoxFlat.new()
+	track.bg_color = Color(0.055, 0.064, 0.078, 1.0)
+	track.set_corner_radius_all(5)
+	bar.add_theme_stylebox_override("background", track)
+	var fill := StyleBoxFlat.new()
+	fill.bg_color = fill_color
+	fill.set_corner_radius_all(5)
+	bar.add_theme_stylebox_override("fill", fill)
+	row.add_child(bar)
+	return {"row": row, "bar": bar, "tag": tag}
+
 
 func _build_controls() -> void:
 	_stick = TouchStickScript.new()
@@ -142,12 +196,22 @@ func _button_for_action(action: String) -> Button:
 func update_status(current_hp: int, max_hp: int, current_rage: float, max_rage: float, threshold: float, mana: float, school: String) -> void:
 	if _status == null:
 		return
-	var threshold_text := "inactive" if threshold <= 0.0 else "%.1f" % threshold
-	var spell_text: String = "NO SPELL" if school.is_empty() else str(AURA_LABELS.get(school, school.to_upper()))
-	_status.text = "RETRIBUTION  |  RAGE %.0f / %.0f  •  MAX %.0f\nHP %d / %d   •   MAGIC %.0f   •   %s\nCondemnation %s  •  Manual attacks, no queued combos" % [current_rage, 1000.0, max_rage, current_hp, max_hp, mana, spell_text, threshold_text]
+	var threshold_text := "--" if threshold <= 0.0 else "%.0f" % threshold
+	var spell_text: String = "NONE" if school.is_empty() else str(AURA_LABELS.get(school, school.to_upper()))
+	_status.text = "PEAK RAGE %.0f  •  CONDEMN %s  •  %s" % [max_rage, threshold_text, spell_text]
+	if _health_bar != null:
+		_health_bar.value = 100.0 * float(current_hp) / maxf(1.0, float(max_hp))
+		_health_tag.text = "HP %d" % current_hp
+	if _rage_bar != null:
+		_rage_bar.value = clampf(current_rage, 0.0, 100.0)
+		_rage_tag.text = "RAGE %d" % roundi(current_rage)
+	if _magic_bar != null:
+		_magic_bar.value = clampf(mana, 0.0, 100.0)
+		_magic_tag.text = "MAGIC %d" % roundi(mana)
 	if _spell_button != null:
 		_spell_button.disabled = school.is_empty()
 		_spell_button.text = "MAGIC" if school.is_empty() else spell_text
+
 
 func show_notice(message: String, color: Color = Color(1.0, 0.83, 0.33)) -> void:
 	if _notice == null:

@@ -46,26 +46,45 @@ func _process(delta: float) -> void:
 func _build_environment() -> void:
 	var world := WorldEnvironment.new()
 	var environment := Environment.new()
-	environment.background_mode = Environment.BG_COLOR
-	environment.background_color = Color(0.035, 0.047, 0.066)
+	var sky_material := ProceduralSkyMaterial.new()
+	sky_material.sky_top_color = Color(0.035, 0.050, 0.095)
+	sky_material.sky_horizon_color = Color(0.42, 0.20, 0.15)
+	sky_material.ground_bottom_color = Color(0.025, 0.032, 0.042)
+	sky_material.ground_horizon_color = Color(0.16, 0.11, 0.105)
+	sky_material.sky_curve = 0.38
+	var sky := Sky.new()
+	sky.sky_material = sky_material
+	environment.background_mode = Environment.BG_SKY
+	environment.sky = sky
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	environment.ambient_light_color = Color(0.45, 0.50, 0.57)
-	environment.ambient_light_energy = 0.68
+	environment.ambient_light_color = Color(0.43, 0.39, 0.40)
+	environment.ambient_light_energy = 0.62
 	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	environment.fog_enabled = true
+	environment.fog_light_color = Color(0.23, 0.15, 0.14)
+	environment.fog_light_energy = 0.7
+	environment.fog_depth_begin = 13.0
+	environment.fog_depth_end = 58.0
+	environment.fog_density = 0.004
+	environment.fog_sun_scatter = 0.10
+	environment.glow_enabled = true
+	environment.glow_intensity = 0.28
+	environment.glow_bloom = 0.04
+	environment.glow_hdr_threshold = 0.88
 	world.environment = environment
 	add_child(world)
 	var sun := DirectionalLight3D.new()
-	sun.name = "LateDuskKeyLight"
-	sun.rotation_degrees = Vector3(-43.0, -34.0, 0.0)
-	sun.light_color = Color(1.0, 0.82, 0.66)
-	sun.light_energy = 1.35
+	sun.name = "ChemicalDuskKeyLight"
+	sun.rotation_degrees = Vector3(-39.0, -34.0, 0.0)
+	sun.light_color = Color(1.0, 0.72, 0.54)
+	sun.light_energy = 1.15
 	sun.shadow_enabled = true
-	sun.directional_shadow_max_distance = 34.0
+	sun.directional_shadow_max_distance = 32.0
 	add_child(sun)
 
 func _build_arena() -> void:
 	var ground := StaticBody3D.new()
-	ground.name = "CourtyardGround"
+	ground.name = "QuarantineCourtyardGround"
 	ground.collision_layer = 1
 	var ground_collision := CollisionShape3D.new()
 	var ground_shape := BoxShape3D.new()
@@ -77,26 +96,69 @@ func _build_arena() -> void:
 	var floor_mesh := PlaneMesh.new()
 	floor_mesh.size = Vector2(80.0, 80.0)
 	floor.mesh = floor_mesh
-	var floor_material := StandardMaterial3D.new()
-	floor_material.albedo_color = Color(0.19, 0.205, 0.22)
-	floor_material.roughness = 0.95
+	var floor_material := _material(Color(0.105, 0.118, 0.135), 0.96)
+	floor_material.metallic = 0.06
 	floor.material_override = floor_material
 	ground.add_child(floor)
 	add_child(ground)
-	var rust := _material(Color(0.28, 0.19, 0.15), 0.92)
-	var concrete := _material(Color(0.30, 0.32, 0.34), 0.90)
-	var warning := _material(Color(0.62, 0.28, 0.10), 0.82)
-	_add_arena_box("BrokenPillarA", Vector3(-6.8, 1.75, -4.8), Vector3(1.2, 3.5, 1.1), concrete, true)
-	_add_arena_box("BrokenPillarB", Vector3(6.4, 1.15, -9.0), Vector3(1.1, 2.3, 1.4), rust, true)
-	_add_arena_box("BrokenPillarC", Vector3(-7.4, 0.9, -13.0), Vector3(1.5, 1.8, 1.3), rust, true)
-	_add_arena_box("LowRuin", Vector3(7.3, 0.6, -2.0), Vector3(2.7, 1.2, 0.8), concrete, true)
-	for index in range(6):
-		var z := -1.0 - float(index) * 2.7
-		_add_arena_box("PaintedWarningStripe%d" % index, Vector3(0.0, 0.012, z), Vector3(9.0, 0.018, 0.055), warning, false)
-	for index in range(10):
-		var angle := TAU * float(index) / 10.0
-		var position := Vector3(cos(angle) * 16.0, 0.22, sin(angle) * 16.0 - 5.0)
-		_add_arena_box("Debris%d" % index, position, Vector3(0.45, 0.42, 0.65), rust if index % 2 == 0 else concrete, false, angle)
+
+	var concrete := _material(Color(0.24, 0.255, 0.27), 0.93)
+	var dark_concrete := _material(Color(0.075, 0.085, 0.10), 0.98)
+	var rust := _material(Color(0.29, 0.15, 0.10), 0.88)
+	var hazard := _material(Color(0.78, 0.32, 0.10), 0.74)
+	var glass := _material(Color(0.035, 0.065, 0.078), 0.26)
+	glass.metallic = 0.55
+
+	# Enclosed edges and a broken industrial skyline keep the combat space readable.
+	_add_arena_box("WestRetainingWall", Vector3(-20.0, 2.1, -8.0), Vector3(0.9, 4.2, 50.0), concrete, true)
+	_add_arena_box("EastRetainingWall", Vector3(20.0, 2.1, -8.0), Vector3(0.9, 4.2, 50.0), concrete, true)
+	_add_arena_box("NorthRetainingWall", Vector3(0.0, 2.1, -32.0), Vector3(40.0, 4.2, 0.9), concrete, true)
+	_add_arena_box("SouthRetainingWall", Vector3(0.0, 2.1, 24.0), Vector3(40.0, 4.2, 0.9), concrete, true)
+	_add_arena_box("WestSkylineRuins", Vector3(-12.5, 7.0, -37.0), Vector3(11.0, 14.0, 5.5), dark_concrete, false)
+	_add_arena_box("EastSkylineRuins", Vector3(12.0, 6.0, -38.0), Vector3(10.0, 12.0, 5.0), dark_concrete, false)
+	_add_arena_box("RearSkylineTower", Vector3(1.0, 9.0, -40.0), Vector3(5.5, 18.0, 4.0), dark_concrete, false)
+	for index in range(7):
+		var x := -16.0 + float(index) * 5.25
+		_add_arena_box("FacadeSupport%d" % index, Vector3(x, 4.15, -31.48), Vector3(0.28, 4.1, 0.16), rust if index % 2 == 0 else concrete, false)
+		if index < 6:
+			_add_arena_box("RuinedWindow%d" % index, Vector3(x + 2.55, 3.45 + float(index % 3) * 0.32, -31.46), Vector3(1.9, 1.25, 0.12), glass, false)
+
+	# Scuffed boundary rails, broken columns and painted fight-ring markings.
+	for side in [-1.0, 1.0]:
+		for index in range(9):
+			var rail_z := -27.0 + float(index) * 4.4
+			_add_arena_box("FencePost_%d_%d" % [int(side), index], Vector3(side * 16.5, 1.35, rail_z), Vector3(0.14, 2.7, 0.14), rust, false)
+		for rail_y in [0.42, 2.30]:
+			_add_arena_box("FenceRail_%d_%.1f" % [int(side), rail_y], Vector3(side * 16.5, rail_y, -9.4), Vector3(0.12, 0.12, 35.2), rust, false)
+
+	_add_arena_box("BrokenPillarA", Vector3(-7.4, 1.65, -4.8), Vector3(1.25, 3.3, 1.15), concrete, true)
+	_add_arena_box("BrokenPillarB", Vector3(7.3, 1.15, -10.8), Vector3(1.1, 2.3, 1.35), rust, true)
+	_add_arena_box("BrokenPillarC", Vector3(-8.4, 0.9, -17.0), Vector3(1.45, 1.8, 1.25), rust, true)
+	_add_arena_box("LowRuin", Vector3(8.5, 0.62, -3.0), Vector3(2.8, 1.24, 0.9), concrete, true)
+	_add_ground_ring("OuterHazardRing", Vector3(0.0, 0.035, -5.2), 6.72, 6.92, hazard)
+	_add_ground_ring("InnerScuffRing", Vector3(0.0, 0.040, -5.2), 6.42, 6.50, rust)
+	_add_ground_ring("CenterMark", Vector3(0.0, 0.045, -5.2), 1.65, 1.76, concrete)
+	_add_arena_box("CenterCross_NS", Vector3(0.0, 0.018, -5.2), Vector3(0.10, 0.018, 2.8), hazard, false)
+	_add_arena_box("CenterCross_EW", Vector3(0.0, 0.020, -5.2), Vector3(2.8, 0.018, 0.10), hazard, false)
+	for index in range(8):
+		var z := -1.0 - float(index) * 2.25
+		_add_arena_box("LaneHazardMark%d" % index, Vector3(0.0, 0.014, z), Vector3(7.6, 0.018, 0.045), hazard, false)
+
+	_add_barrel("ToxicDrumA", Vector3(-12.8, 0.58, -8.3), rust, hazard)
+	_add_barrel("ToxicDrumB", Vector3(12.7, 0.58, -11.4), dark_concrete, hazard)
+	_add_barrel("ToxicDrumC", Vector3(-13.0, 0.58, -20.2), dark_concrete, hazard)
+	_add_barrel("ToxicDrumD", Vector3(13.0, 0.58, -22.0), rust, hazard)
+	_add_quarantine_lamp(Vector3(-13.8, 4.0, -17.0), Color(1.0, 0.36, 0.16))
+	_add_quarantine_lamp(Vector3(13.8, 4.0, -17.0), Color(0.23, 0.60, 0.78))
+	_add_brazier(Vector3(-9.5, 0.0, -24.0), Color(1.0, 0.29, 0.08))
+	_add_brazier(Vector3(9.5, 0.0, -24.0), Color(1.0, 0.29, 0.08))
+
+	for index in range(14):
+		var angle := TAU * float(index) / 14.0
+		var radius := 9.2 + sin(float(index) * 1.7) * 1.4
+		var size := Vector3(0.35 + float(index % 3) * 0.12, 0.22 + float(index % 2) * 0.15, 0.48 + float(index % 4) * 0.08)
+		var at := Vector3(cos(angle) * radius, size.y * 0.5, sin(angle) * radius - 5.2)
+		_add_arena_box("CourtyardRubble%d" % index, at, size, rust if index % 2 == 0 else concrete, false, angle)
 
 func _add_arena_box(label: String, at: Vector3, dimensions: Vector3, material: Material, collidable: bool, yaw: float = 0.0) -> void:
 	var root: Node3D
@@ -107,7 +169,7 @@ func _add_arena_box(label: String, at: Vector3, dimensions: Vector3, material: M
 		var shape := BoxShape3D.new()
 		shape.size = dimensions
 		collision.shape = shape
-		collision.position.y = dimensions.y * 0.5 if at.y > dimensions.y * 0.5 else 0.0
+		collision.position = Vector3.ZERO
 		body.add_child(collision)
 		root = body
 	else:
@@ -122,6 +184,111 @@ func _add_arena_box(label: String, at: Vector3, dimensions: Vector3, material: M
 	mesh_instance.material_override = material
 	root.add_child(mesh_instance)
 	add_child(root)
+
+func _add_ground_ring(label: String, at: Vector3, inner_radius: float, outer_radius: float, material: Material) -> void:
+	var ring_instance := MeshInstance3D.new()
+	ring_instance.name = label
+	var ring_mesh := TorusMesh.new()
+	ring_mesh.inner_radius = inner_radius
+	ring_mesh.outer_radius = outer_radius
+	ring_mesh.rings = 36
+	ring_mesh.ring_segments = 8
+	ring_instance.mesh = ring_mesh
+	ring_instance.material_override = material
+	ring_instance.position = at
+	add_child(ring_instance)
+
+func _add_barrel(label: String, at: Vector3, body_material: Material, stripe_material: Material) -> void:
+	var drum := Node3D.new()
+	drum.name = label
+	drum.position = at
+	add_child(drum)
+	var cylinder := CylinderMesh.new()
+	cylinder.top_radius = 0.43
+	cylinder.bottom_radius = 0.48
+	cylinder.height = 1.16
+	cylinder.radial_segments = 12
+	var body := MeshInstance3D.new()
+	body.mesh = cylinder
+	body.material_override = body_material
+	drum.add_child(body)
+	var band_mesh := CylinderMesh.new()
+	band_mesh.top_radius = 0.487
+	band_mesh.bottom_radius = 0.487
+	band_mesh.height = 0.12
+	band_mesh.radial_segments = 12
+	var band := MeshInstance3D.new()
+	band.mesh = band_mesh
+	band.material_override = stripe_material
+	band.position.y = -0.18
+	drum.add_child(band)
+
+func _add_quarantine_lamp(at: Vector3, tint: Color) -> void:
+	var lamp := Node3D.new()
+	lamp.position = at
+	add_child(lamp)
+	var pole := MeshInstance3D.new()
+	var pole_mesh := BoxMesh.new()
+	pole_mesh.size = Vector3(0.16, 3.2, 0.16)
+	pole.mesh = pole_mesh
+	pole.position.y = -1.55
+	pole.material_override = _material(Color(0.12, 0.13, 0.15), 0.62)
+	lamp.add_child(pole)
+	var bulb := MeshInstance3D.new()
+	var bulb_mesh := SphereMesh.new()
+	bulb_mesh.radius = 0.20
+	bulb_mesh.height = 0.40
+	bulb.mesh = bulb_mesh
+	var bulb_material := StandardMaterial3D.new()
+	bulb_material.albedo_color = tint
+	bulb_material.emission_enabled = true
+	bulb_material.emission = tint
+	bulb_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	bulb.material_override = bulb_material
+	lamp.add_child(bulb)
+	var light := OmniLight3D.new()
+	light.light_color = tint
+	light.light_energy = 0.72
+	light.omni_range = 9.0
+	light.shadow_enabled = false
+	lamp.add_child(light)
+
+func _add_brazier(at: Vector3, flame_color: Color) -> void:
+	var brazier := Node3D.new()
+	brazier.position = at
+	add_child(brazier)
+	var base := MeshInstance3D.new()
+	var base_mesh := CylinderMesh.new()
+	base_mesh.top_radius = 0.25
+	base_mesh.bottom_radius = 0.34
+	base_mesh.height = 0.80
+	base_mesh.radial_segments = 8
+	base.mesh = base_mesh
+	base.position.y = 0.40
+	base.material_override = _material(Color(0.12, 0.12, 0.13), 0.78)
+	brazier.add_child(base)
+	var flame := MeshInstance3D.new()
+	var flame_mesh := CylinderMesh.new()
+	flame_mesh.top_radius = 0.025
+	flame_mesh.bottom_radius = 0.22
+	flame_mesh.height = 0.62
+	flame_mesh.radial_segments = 7
+	flame.mesh = flame_mesh
+	flame.position.y = 1.08
+	var flame_material := StandardMaterial3D.new()
+	flame_material.albedo_color = flame_color
+	flame_material.emission_enabled = true
+	flame_material.emission = flame_color
+	flame_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	flame.material_override = flame_material
+	brazier.add_child(flame)
+	var light := OmniLight3D.new()
+	light.position.y = 0.98
+	light.light_color = flame_color
+	light.light_energy = 0.82
+	light.omni_range = 8.0
+	light.shadow_enabled = false
+	brazier.add_child(light)
 
 func _build_camera() -> void:
 	camera_rig = Node3D.new()
@@ -166,11 +333,12 @@ func _spawn_enemy(kind: String, at: Vector3, boss_target: bool = false) -> void:
 	add_child(enemy)
 	var label := Label3D.new()
 	label.text = "BOSS" if enemy.is_boss else kind.to_upper()
-	label.position = Vector3(0.0, 2.35 if not enemy.is_boss else 3.05, 0.0)
+	label.position = Vector3(0.0, 2.85 if not enemy.is_boss else 3.35, 0.0)
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.font_size = 26 if enemy.is_boss else 20
-	label.modulate = Color(1.0, 0.44, 0.30) if enemy.is_boss else Color(0.86, 0.89, 0.80)
-	enemy.add_child(label)
+	label.font_size = 22 if enemy.is_boss else 17
+	label.outline_size = 6
+	label.modulate = Color(1.0, 0.48, 0.33) if enemy.is_boss else Color(0.88, 0.91, 0.82)
+	enemy.attach_status_label(label)
 
 func _on_hud_action(action: String) -> void:
 	match action:
