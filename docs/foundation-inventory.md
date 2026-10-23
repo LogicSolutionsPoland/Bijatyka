@@ -24,6 +24,7 @@
 
 ## Verification and constraints
 
-- GitHub Actions access was confirmed with a lightweight branch workflow on `ubuntu-24.04`, x86_64, Java 17.0.20.1. It succeeded; this confirms a compatible Linux runner, not unlimited Actions quota.
-- Godot is not installed in the local workspace. GitHub Actions will import the project, run the Godot test runner, smoke-run the main scene, and attempt Android ARM64 export.
-- Android device performance and APK installation have not been measured yet. Target device is not specified. Distance-based enemy animation, AI cadence, shadow, and visibility reductions are implemented; handset profiling remains a handoff item.
+- GitHub Actions access was confirmed with a lightweight validation workflow on a feature branch. It succeeded on an Ubuntu 24.04 x86_64 runner with Java 17.0.20.1; this confirms compatible runner access, not unlimited Actions quota.
+- The full foundation workflow passed on commit `70223bb921edd7bed5e0a3d0708633502eab9cdf`: 49 headless checks, project import, and playable-scene smoke run passed. Android ARM64 debug export and artifact publication also passed.
+- The Android artifact is `retribution-mark-of-sin-android-arm64`, approximately 31.8 MB, from Actions run `40019970976`. It is a debug package signed by the runner's debug keystore.
+- The initial blockout uses procedural geometry and generated visual effects. Distance-based enemy animation, AI cadence, shadow, and visibility reductions are implemented, but handset performance has not been profiled and APK installation has not been tested. No target Android device was specified.
