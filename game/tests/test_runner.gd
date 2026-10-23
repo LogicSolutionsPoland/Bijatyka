@@ -2,6 +2,7 @@ extends SceneTree
 
 const Rage := preload("res://scripts/rage_progression.gd")
 const Player := preload("res://scripts/player_controller.gd")
+const RightPunchBuilder := preload("res://scripts/right_punch_animation.gd")
 const Enemy := preload("res://scripts/enemy.gd")
 const Foundation := preload("res://scripts/foundation.gd")
 const Hud := preload("res://scripts/mobile_hud.gd")
@@ -20,6 +21,7 @@ func _run_all() -> void:
 	await _test_touch_stick_direction()
 	await _test_hud_aura_choices()
 	await _test_enemy_variant_health()
+	await _test_right_punch_animation()
 	await _test_manual_attack_and_hit_window()
 	await _test_magic_unlock_and_damage()
 	await _test_jump_and_enemy_interrupt_rules()
@@ -211,6 +213,32 @@ func _test_enemy_variant_health() -> void:
 		enemy.queue_free()
 	await process_frame
 
+func _test_right_punch_animation() -> void:
+	var player := Player.new() as FoundationPlayer
+	player.set_physics_process(false)
+	root.add_child(player)
+	await process_frame
+	_check(player._right_punch_animation_ready, "Thornbound rig receives the authored right-punch clip")
+	if not player._right_punch_animation_ready:
+		player.queue_free()
+		await process_frame
+		return
+	var clip := player._animation_player.get_animation(RightPunchBuilder.CLIP_PATH) as Animation
+	_check(clip != null and is_equal_approx(clip.length, 0.60), "right-punch clip spans the complete attack timeline")
+	if clip != null:
+		_check(clip.has_marker(&"contact") and is_equal_approx(clip.get_marker_time(&"contact"), 0.14), "right-punch contact marker matches the hit window")
+		var right_arm_track := -1
+		for track in range(clip.get_track_count()):
+			if str(clip.track_get_path(track)).ends_with(":RightUpperArm"):
+				right_arm_track = track
+				break
+		_check(right_arm_track >= 0 and clip.track_get_key_count(right_arm_track) == 8, "right upper arm uses eight authored pose keys")
+	var started := player.request_attack("punch", "right")
+	_check(started and player._animation_player.is_playing() and player._animation_player.current_animation == RightPunchBuilder.CLIP_PATH, "right-punch input plays the keyed clip")
+	_check(not player.request_attack("punch", "right") and player.attack_count == 1, "right-punch clip cannot queue a second attack")
+	player.queue_free()
+	await process_frame
+
 func _test_boss_damage_rule() -> void:
 	var player := Player.new() as FoundationPlayer
 	player.position = Vector3.ZERO
@@ -380,3 +408,4 @@ func _test_ten_button_controls() -> void:
 	arena.queue_free()
 	await process_frame
 	root.size = original_size
+
