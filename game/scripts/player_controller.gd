@@ -47,6 +47,7 @@ var _was_airborne := false
 var _animation_player: AnimationPlayer
 var _skeleton: Skeleton3D
 var _right_punch_animation_ready := false
+var _punch_animation_ready: Dictionary = {"left": false, "right": false}
 var _kick_animation_ready: Dictionary = {"left": false, "right": false}
 var _camera_yaw := 0.0
 var _burns: Array[Dictionary] = []
@@ -89,6 +90,10 @@ func _load_player_visual() -> void:
 			_animation_player = model.find_child("AnimationPlayer", true, false) as AnimationPlayer
 			_skeleton = model.find_child("Skeleton3D", true, false) as Skeleton3D
 			_right_punch_animation_ready = RIGHT_PUNCH_BUILDER.install(_animation_player, _skeleton, ATTACKS["punch"])
+			_punch_animation_ready = {
+				"left": _animation_player != null and _animation_player.has_animation(RIGHT_PUNCH_BUILDER.clip_path("left")),
+				"right": _right_punch_animation_ready
+			}
 			_kick_animation_ready = KICK_BUILDER.install(_animation_player, _skeleton, ATTACKS["kick"])
 			_set_locomotion_animation("Idle")
 	else:
@@ -425,8 +430,9 @@ func _update_attack_pose() -> void:
 func _authored_attack_clip_path() -> String:
 	if _animation_player == null:
 		return ""
-	if attack_kind == "punch" and attack_side == "right" and _right_punch_animation_ready:
-		return RIGHT_PUNCH_BUILDER.CLIP_PATH if _animation_player.has_animation(RIGHT_PUNCH_BUILDER.CLIP_PATH) else ""
+	if attack_kind == "punch" and bool(_punch_animation_ready.get(attack_side, false)):
+		var punch_path := RIGHT_PUNCH_BUILDER.clip_path(attack_side)
+		return punch_path if _animation_player.has_animation(punch_path) else ""
 	if attack_kind == "kick" and bool(_kick_animation_ready.get(attack_side, false)):
 		var kick_path := KICK_BUILDER.clip_path(attack_side)
 		return kick_path if _animation_player.has_animation(kick_path) else ""

@@ -46,7 +46,7 @@ Spells stay in their slots through normal RAGE decay and all slots lock again on
 Touch actions trigger once on finger-down. Holding or dragging a finger never queues another attack;
 independent fingers allow moving and attacking together. Combat input is blocked during aura selection.
 
-Each attack press starts exactly one action. The right punch and both left/right front kicks play keyed skeletal clips on the Thornbound rig. The punch contact marker matches its 0.14-second hit window; each kick contact marker matches its 0.23-second window. Left punches retain the procedural fallback pose. A held key never chains attacks.
+Each attack press starts exactly one action. Left and right punches and front kicks play mirrored keyed skeletal clips on the Thornbound rig, with chamber, contact, follow-through, and guarded recovery poses. Punch contact markers match the 0.14-second hit window; kick markers match the 0.23-second window. A procedural pose remains available when a rig is missing the needed bones. A held key never chains attacks.
 
 The camera follows behind the player from a close right-shoulder viewpoint. The character stays left of center while the open center of the screen looks down the combat lane. The spring arm retracts near walls and ignores the player's own collision body.
 
