@@ -130,10 +130,10 @@ static func _bone_eulers(kicking_leg: String, support_leg: String) -> Dictionary
             Vector3(0.012, 0.0, 0.0), Vector3.ZERO
         ],
         kicking_leg + "Thigh": [
-            Vector3.ZERO, Vector3(-0.30, 0.01 * mirror, -0.025 * mirror), Vector3(-0.86, 0.035 * mirror, -0.055 * mirror),
-            Vector3(-1.42, 0.06 * mirror, -0.075 * mirror), Vector3(-1.55, 0.055 * mirror, -0.07 * mirror),
-            Vector3(-1.35, 0.04 * mirror, -0.05 * mirror), Vector3(-0.98, 0.025 * mirror, -0.035 * mirror),
-            Vector3(-0.40, 0.01 * mirror, -0.015 * mirror), Vector3.ZERO
+            Vector3.ZERO, Vector3(0.30, 0.01 * mirror, -0.025 * mirror), Vector3(0.86, 0.035 * mirror, -0.055 * mirror),
+            Vector3(1.42, 0.06 * mirror, -0.075 * mirror), Vector3(1.55, 0.055 * mirror, -0.07 * mirror),
+            Vector3(1.35, 0.04 * mirror, -0.05 * mirror), Vector3(0.98, 0.025 * mirror, -0.035 * mirror),
+            Vector3(0.40, 0.01 * mirror, -0.015 * mirror), Vector3.ZERO
         ],
         kicking_leg + "Shin": [
             Vector3.ZERO, Vector3(0.30, 0.0, 0.0), Vector3(0.72, 0.0, 0.0),

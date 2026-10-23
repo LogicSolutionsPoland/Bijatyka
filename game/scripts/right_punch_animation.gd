@@ -135,16 +135,16 @@ static func _bone_eulers(side: String) -> Dictionary:
             Vector3.ZERO, Vector3.ZERO
         ],
         arm + "UpperArm": [
-            Vector3.ZERO, Vector3(-0.18, 0.0, 0.035 * mirror), Vector3(-0.82, 0.0, 0.10 * mirror),
-            Vector3(-1.36, 0.0, 0.12 * mirror), Vector3(-1.48, 0.0, 0.10 * mirror),
-            Vector3(-1.30, 0.0, 0.08 * mirror), Vector3(-0.82, 0.0, 0.04 * mirror),
-            Vector3(-0.30, 0.0, 0.02 * mirror), Vector3.ZERO
+            Vector3.ZERO, Vector3(0.18, 0.0, 0.035 * mirror), Vector3(0.82, 0.0, 0.10 * mirror),
+            Vector3(1.36, 0.0, 0.12 * mirror), Vector3(1.48, 0.0, 0.10 * mirror),
+            Vector3(1.30, 0.0, 0.08 * mirror), Vector3(0.82, 0.0, 0.04 * mirror),
+            Vector3(0.30, 0.0, 0.02 * mirror), Vector3.ZERO
         ],
         arm + "Forearm": [
-            Vector3.ZERO, Vector3(-0.30, 0.0, 0.0), Vector3(-0.92, 0.0, 0.0),
-            Vector3(-0.18, 0.0, 0.0), Vector3(-0.08, 0.0, 0.0),
-            Vector3(-0.16, 0.0, 0.0), Vector3(-0.45, 0.0, 0.0),
-            Vector3(-0.72, 0.0, 0.0), Vector3.ZERO
+            Vector3.ZERO, Vector3(0.30, 0.0, 0.0), Vector3(0.92, 0.0, 0.0),
+            Vector3(0.18, 0.0, 0.0), Vector3(0.08, 0.0, 0.0),
+            Vector3(0.16, 0.0, 0.0), Vector3(0.45, 0.0, 0.0),
+            Vector3(0.72, 0.0, 0.0), Vector3.ZERO
         ],
         arm + "Hand": [
             Vector3.ZERO, Vector3(0.0, 0.0, 0.02 * mirror), Vector3(0.0, 0.0, 0.04 * mirror),

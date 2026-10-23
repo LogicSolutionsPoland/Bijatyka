@@ -146,6 +146,23 @@ func _test_kick_animation() -> void:
 				break
 		_check(leg_track >= 0 and clip.track_get_key_count(leg_track) == 9, "%s kicking leg uses nine authored pose keys" % side)
 		_check(clip.has_marker(&"follow_through"), "%s kick marks its follow-through" % side)
+		player._animation_player.stop()
+		player._skeleton.reset_bone_poses()
+		player._skeleton.force_update_all_bone_transforms()
+		var side_name := "Left" if side == "left" else "Right"
+		var resting_foot: Variant = _get_test_bone_world_position(player._skeleton, [side_name + "Foot", side_name + "Ankle", side_name + "Shin"])
+		player._animation_player.play(clip_path, 0.0)
+		player._animation_player.seek(clip.get_marker_time(&"contact"), true)
+		player._skeleton.force_update_all_bone_transforms()
+		var striking_foot: Variant = _get_test_bone_world_position(player._skeleton, [side_name + "Foot", side_name + "Ankle", side_name + "Shin"])
+		if resting_foot != null and striking_foot != null:
+			var resting_foot_position: Vector3 = resting_foot
+			var striking_foot_position: Vector3 = striking_foot
+			var foot_front_step := (striking_foot_position - resting_foot_position).dot(-player.global_transform.basis.z)
+			print("KICK_FRONT_STEP_%s=%0.3f" % [side, foot_front_step])
+			_check(foot_front_step > 0.03, "%s kick drives the foot toward an enemy in front" % side)
+		else:
+			_check(false, "%s kick rig exposes a testable foot bone" % side)
 	var left_started := player.request_attack("kick", "left")
 	var left_path := KickAnimationBuilder.clip_path("left")
 	_check(left_started and player._animation_player.current_animation == left_path and player._animation_player.is_playing(), "left KICK plays its keyed clip")
@@ -259,6 +276,13 @@ func _test_enemy_variant_health() -> void:
 		enemy.queue_free()
 	await process_frame
 
+func _get_test_bone_world_position(skeleton: Skeleton3D, candidates: Array) -> Variant:
+	for candidate in candidates:
+		var bone_index := skeleton.find_bone(str(candidate))
+		if bone_index >= 0:
+			return skeleton.global_transform * skeleton.get_bone_global_pose(bone_index).origin
+	return null
+
 func _test_right_punch_animation() -> void:
 	var player := Player.new() as FoundationPlayer
 	player.set_physics_process(false)
@@ -287,6 +311,23 @@ func _test_right_punch_animation() -> void:
 				arm_track = track
 				break
 		_check(arm_track >= 0 and clip.track_get_key_count(arm_track) == 9, "%s striking arm uses nine authored pose keys" % side)
+		player._animation_player.stop()
+		player._skeleton.reset_bone_poses()
+		player._skeleton.force_update_all_bone_transforms()
+		var side_name := "Left" if side == "left" else "Right"
+		var resting_hand: Variant = _get_test_bone_world_position(player._skeleton, [side_name + "Hand", side_name + "Wrist", side_name + "Forearm"])
+		player._animation_player.play(clip_path, 0.0)
+		player._animation_player.seek(clip.get_marker_time(&"contact"), true)
+		player._skeleton.force_update_all_bone_transforms()
+		var striking_hand: Variant = _get_test_bone_world_position(player._skeleton, [side_name + "Hand", side_name + "Wrist", side_name + "Forearm"])
+		if resting_hand != null and striking_hand != null:
+			var resting_hand_position: Vector3 = resting_hand
+			var striking_hand_position: Vector3 = striking_hand
+			var hand_front_step := (striking_hand_position - resting_hand_position).dot(-player.global_transform.basis.z)
+			print("PUNCH_FRONT_STEP_%s=%0.3f" % [side, hand_front_step])
+			_check(hand_front_step > 0.02, "%s punch drives the hand toward an enemy in front" % side)
+		else:
+			_check(false, "%s punch rig exposes a testable hand bone" % side)
 	var started := player.request_attack("punch", "right")
 	_check(started and player._animation_player.is_playing() and player._animation_player.current_animation == RightPunchBuilder.CLIP_PATH, "right-punch input plays the keyed clip")
 	_check(not player.request_attack("punch", "right") and player.attack_count == 1, "right-punch clip cannot queue a second attack")
