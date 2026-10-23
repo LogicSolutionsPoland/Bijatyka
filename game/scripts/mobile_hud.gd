@@ -90,8 +90,11 @@ func _create_action_button(caption: String, action: String, at: Vector2, dimensi
 	pressed.bg_color = Color(0.38, 0.13, 0.10, 0.95)
 	button.add_theme_stylebox_override("pressed", pressed)
 	_root.add_child(button)
-	button.pressed.connect(func() -> void: action_requested.emit(action))
+	button.pressed.connect(_emit_action.bind(action))
 	return button
+
+func _emit_action(action: String) -> void:
+	action_requested.emit(action)
 
 func _build_notice() -> void:
 	_notice = Label.new()
@@ -195,11 +198,14 @@ func show_aura_selection(milestone: int) -> void:
 		button.process_mode = Node.PROCESS_MODE_ALWAYS
 		button.focus_mode = Control.FOCUS_NONE
 		column.add_child(button)
-		button.pressed.connect(func() -> void: aura_chosen.emit(aura_id))
+		button.pressed.connect(_emit_aura_choice.bind(aura_id))
 	_root.add_child(_selection_panel)
 	_selection_panel.size = _selection_panel.custom_minimum_size
 	_selection_panel.position = (_root.size - _selection_panel.size) * 0.5
 	_notice.visible = false
+
+func _emit_aura_choice(aura_id: String) -> void:
+	aura_chosen.emit(aura_id)
 
 func close_aura_selection() -> void:
 	if _selection_panel != null:

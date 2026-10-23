@@ -18,6 +18,7 @@ func _run_all() -> void:
 	_test_rage_rules()
 	_test_multiple_milestones_and_reset()
 	_test_touch_stick_direction()
+	await _test_hud_aura_choices()
 	await _test_manual_attack_and_hit_window()
 	await _test_magic_unlock_and_damage()
 	_test_jump_and_enemy_interrupt_rules()
@@ -85,6 +86,23 @@ func _test_touch_stick_direction() -> void:
 	stick._update_touch(Vector2(78.0, 78.0))
 	_check(stick.get_vector() == Vector2.ZERO, "centered virtual stick is neutral")
 	stick.queue_free()
+	await process_frame
+
+func _test_hud_aura_choices() -> void:
+	var hud := Hud.new() as FoundationHUD
+	root.add_child(hud)
+	await process_frame
+	hud.show_aura_selection(10)
+	var panel := hud._selection_panel as PanelContainer
+	var column := panel.get_child(0) as VBoxContainer
+	var selected: Array[String] = []
+	hud.aura_chosen.connect(func(aura_id: String) -> void: selected.append(aura_id))
+	var expected := ["light", "judgment", "fire", "shadow"]
+	for index in range(expected.size()):
+		var button := column.get_child(index + 2) as Button
+		button.pressed.emit()
+		_check(not selected.is_empty() and selected.back() == expected[index], "aura menu button emits its distinct selection")
+	hud.queue_free()
 	await process_frame
 
 func _test_manual_attack_and_hit_window() -> void:
