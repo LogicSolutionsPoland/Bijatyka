@@ -46,7 +46,7 @@ Spells stay in their slots through normal RAGE decay and all slots lock again on
 Touch actions trigger once on finger-down. Holding or dragging a finger never queues another attack;
 independent fingers allow moving and attacking together. Combat input is blocked during aura selection.
 
-Each attack press starts exactly one action. Punch and kick have separate timings, ranges, damage, and procedural rig poses. A held key never chains attacks.
+Each attack press starts exactly one action. The right punch plays a keyed eight-pose skeletal clip on the Thornbound rig, with its contact marker aligned to the 0.14-second hit window. Left punches and kicks keep their procedural poses. A held key never chains attacks.
 
 The camera follows behind the player from a close right-shoulder viewpoint. The character stays left of center while the open center of the screen looks down the combat lane. The spring arm retracts near walls and ignores the player's own collision body.
 
@@ -63,3 +63,4 @@ The camera follows behind the player from a close right-shoulder viewpoint. The 
 ## Android
 
 The project uses the source-confirmed Godot 4.7.2 Compatibility renderer, ETC2/ASTC texture import, and ARM64 as the intended Android architecture. The Android export preset and package build are validated in GitHub Actions. Device performance has not been measured yet; no Android hardware result is claimed.
+
