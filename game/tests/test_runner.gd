@@ -17,7 +17,9 @@ func _run_all() -> void:
 	_check(Foundation != null and Hud != null and TouchStickResource != null, "scene, HUD, and touch-control scripts compile")
 	_test_rage_rules()
 	_test_multiple_milestones_and_reset()
+	_test_touch_stick_direction()
 	await _test_manual_attack_and_hit_window()
+	await _test_magic_unlock_and_damage()
 	_test_jump_and_enemy_interrupt_rules()
 	_test_boss_damage_rule()
 	if failures.is_empty():
@@ -74,6 +76,17 @@ func _test_multiple_milestones_and_reset() -> void:
 	rage.reset_soul()
 	_check(rage.maximum_rage == 0.0 and rage.claimed_milestones.is_empty(), "new soul clears run peak and claimed milestones")
 
+func _test_touch_stick_direction() -> void:
+	var stick := TouchStickResource.new() as TouchStick
+	stick.size = Vector2(156.0, 156.0)
+	root.add_child(stick)
+	stick._update_touch(Vector2(78.0, 20.0))
+	_check(stick.get_vector().y < -0.5, "upward virtual-stick drag maps to forward movement")
+	stick._update_touch(Vector2(78.0, 78.0))
+	_check(stick.get_vector() == Vector2.ZERO, "centered virtual stick is neutral")
+	stick.queue_free()
+	await process_frame
+
 func _test_manual_attack_and_hit_window() -> void:
 	var player := Player.new() as FoundationPlayer
 	player.position = Vector3.ZERO
@@ -103,6 +116,31 @@ func _test_manual_attack_and_hit_window() -> void:
 	player._update_attack(0.24)
 	_check(target.hp == target.starting_health, "missed kick does not damage or build RAGE")
 	_check(player.rage.rage == rage_before_miss, "missed kick does not increase RAGE")
+	player.queue_free()
+	target.queue_free()
+	await process_frame
+
+func _test_magic_unlock_and_damage() -> void:
+	var player := Player.new() as FoundationPlayer
+	player.position = Vector3.ZERO
+	player.set_physics_process(false)
+	root.add_child(player)
+	var target := Enemy.new() as FoundationEnemy
+	target.configure("shambler")
+	target.position = Vector3(0.0, 0.0, -3.0)
+	target.set_physics_process(false)
+	root.add_child(target)
+	await process_frame
+	_check(player.rage.unlocked_spells.is_empty() and not player.cast_spell(), "new soul cannot cast a spell before an aura choice")
+	player.rage.gain_per_effective_hit = 10.0
+	_check(player.rage.record_effective_hit(1.0), "verified hit opens the first spell choice")
+	_check(player.rage.resolve_selection("fire") and player.current_spell == "fire", "aura choice unlocks its associated legacy spell")
+	var hp_before := target.hp
+	_check(player.cast_spell(), "unlocked legacy spell can be cast at a valid target")
+	_check(target.hp == hp_before - 20 and player.magic_energy == 85.0, "fire preserves direct damage and energy cost")
+	var rage_before_burn := player.rage.rage
+	player._update_burns(1.0)
+	_check(target.hp == hp_before - 24 and player.rage.rage == rage_before_burn, "fire burn damages over time without double-counting RAGE")
 	player.queue_free()
 	target.queue_free()
 	await process_frame
@@ -143,8 +181,9 @@ func _test_boss_damage_rule() -> void:
 	root.add_child(boss)
 	await process_frame
 	boss._player = player
-	boss._resolve_enemy_attack(2.0)
-	_check(player.health == player.MAX_HEALTH - 22, "boss attack may reduce player HP")
+	for _hit in range(5):
+		boss._resolve_enemy_attack(2.0)
+	_check(player.health == 0, "boss attacks can defeat the player")
 	player.queue_free()
 	boss.queue_free()
 	await process_frame

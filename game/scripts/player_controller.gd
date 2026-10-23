@@ -368,7 +368,10 @@ func _spawn_spell_burst(at: Vector3) -> void:
 	material.emission = SPELLS[current_spell].color
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	root.material_override = material
-	get_tree().current_scene.add_child(root)
+	var scene_root: Node = get_tree().current_scene
+	if scene_root == null:
+		scene_root = get_tree().root
+	scene_root.add_child(root)
 	root.global_position = at
 	var tween := create_tween()
 	tween.tween_property(root, "scale", Vector3.ONE * 2.8, 0.22)

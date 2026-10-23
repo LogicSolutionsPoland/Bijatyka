@@ -4,6 +4,7 @@ config_version=5
 
 [application]
 config/name="Retribution: Mark of Sin — Thornbound Trial"
+config/icon="res://assets/ui/retribution_mark.svg"
 run/main_scene="res://scenes/foundation.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 

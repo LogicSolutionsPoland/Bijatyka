@@ -39,7 +39,7 @@ func _update_touch(position: Vector2) -> void:
 	var offset := (position - size * 0.5) / radius
 	if offset.length() > 1.0:
 		offset = offset.normalized()
-	value = Vector2(offset.x, -offset.y)
+	value = Vector2(offset.x, offset.y)
 	if value.length() < deadzone:
 		value = Vector2.ZERO
 	queue_redraw()
