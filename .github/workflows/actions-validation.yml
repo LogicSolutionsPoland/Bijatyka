@@ -4,6 +4,7 @@ on:
     branches:
       - codex/retribution-godot-foundation
       - codex/over-shoulder-camera
+      - codex/no-melee-cooldown
   pull_request:
     branches:
       - main
