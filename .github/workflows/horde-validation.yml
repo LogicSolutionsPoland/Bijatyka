@@ -1,0 +1,43 @@
+name: Horde and visibility validation
+
+on:
+  push:
+    branches:
+      - codex/zombie-horde-30m
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v4
+
+      - name: Install Godot 4.7.2
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+
+      - name: Import Godot project and assets
+        run: |
+          set -o pipefail
+          godot --headless --editor --path game --import --quit 2>&1 | tee "$RUNNER_TEMP/godot-import.log"
+          if grep -E "SCRIPT ERROR:|ERROR: Failed to load" "$RUNNER_TEMP/godot-import.log"; then exit 1; fi
+
+      - name: Run gameplay checks
+        run: |
+          set -o pipefail
+          godot --headless --path game --script res://tests/test_runner.gd 2>&1 | tee "$RUNNER_TEMP/godot-tests.log"
+          grep -q "PASS: " "$RUNNER_TEMP/godot-tests.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/godot-tests.log"; then exit 1; fi
+
+      - name: Smoke-run the playable scene
+        run: |
+          set -o pipefail
+          godot --headless --path game --quit-after 150 2>&1 | tee "$RUNNER_TEMP/godot-smoke.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/godot-smoke.log"; then exit 1; fi
