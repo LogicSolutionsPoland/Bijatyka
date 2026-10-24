@@ -633,6 +633,7 @@ func _test_gamepad_controls() -> void:
 	_send_trigger(0.0)
 	_check(routed.size() == before_negative_rest + 1 and routed.back() == "kick_right" and player.attack_side == "right", "R2 works on controllers whose trigger rests at -1")
 	_send_trigger(-1.0)
+	hud._right_trigger_rest_values[0] = 0.0
 	for step in range(4):
 		player._update_attack(1.0)
 
