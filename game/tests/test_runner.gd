@@ -25,6 +25,7 @@ func _run_all() -> void:
 	await _test_jump_and_enemy_interrupt_rules()
 	await _test_boss_damage_rule()
 	await _test_ten_button_controls()
+	await _test_gamepad_controls()
 	if failures.is_empty():
 		print("PASS: %d foundation checks" % checks)
 		quit(0)
@@ -61,6 +62,26 @@ func _test_gamepad_input_map() -> void:
 					found = true
 					break
 		_check(found, "%s maps to the expected gamepad stick axis" % String(action))
+	var expected_buttons := {
+		&"pad_jump": JOY_BUTTON_A, &"pad_dash": JOY_BUTTON_B,
+		&"pad_punch_left": JOY_BUTTON_X, &"pad_punch_right": JOY_BUTTON_Y,
+		&"pad_kick_left": JOY_BUTTON_LEFT_SHOULDER, &"pad_kick_right": JOY_BUTTON_RIGHT_SHOULDER,
+		&"pad_spell_0": JOY_BUTTON_DPAD_UP, &"pad_spell_1": JOY_BUTTON_DPAD_RIGHT,
+		&"pad_spell_2": JOY_BUTTON_DPAD_DOWN, &"pad_spell_3": JOY_BUTTON_DPAD_LEFT
+	}
+	var routed_actions: Array[String] = []
+	for row in Hud.ACTION_ROWS:
+		for action: String in row:
+			routed_actions.append(action)
+	_check(expected_buttons.size() == routed_actions.size() and Hud.GAMEPAD_ACTIONS.size() == routed_actions.size(), "each touch action has exactly one gamepad binding")
+	for action: StringName in expected_buttons:
+		var events := InputMap.action_get_events(action)
+		_check(events.size() == 1 and events[0] is InputEventJoypadButton and (events[0] as InputEventJoypadButton).button_index == expected_buttons[action], "%s uses its SDL logical gamepad button" % action)
+		_check(routed_actions.has(Hud.GAMEPAD_ACTIONS.get(action, "")), "%s routes to an existing touch HUD action" % action)
+	var assigned_buttons := {}
+	for button in expected_buttons.values():
+		assigned_buttons[button] = true
+	_check(assigned_buttons.size() == 10 and not assigned_buttons.has(JOY_BUTTON_START) and not assigned_buttons.has(JOY_BUTTON_GUIDE), "ten distinct gameplay buttons leave system buttons unassigned")
 
 func _test_rage_rules() -> void:
 	var rage := Rage.new(10.0, 1.0, 100.0) as RageProgression
@@ -288,6 +309,13 @@ func _tap(button: Button, finger: int = 5) -> void:
 	_send_touch(at, finger, true)
 	_send_touch(at, finger, false)
 
+func _send_pad(button: int, down: bool) -> void:
+	var event := InputEventJoypadButton.new()
+	event.device = 0
+	event.button_index = button
+	event.pressed = down
+	root.push_input(event, true)
+
 func _test_ten_button_controls() -> void:
 	var original_size := root.size
 	root.size = Vector2i(1280, 720)
@@ -455,6 +483,140 @@ func _test_ten_button_controls() -> void:
 	for slot in range(4):
 		_check(hud._button_for_action("spell_%d" % slot).disabled and not player.cast_spell_slot(slot), "soul reset clears and locks every magic slot")
 	_check(not player.cast_spell_slot(-1) and not player.cast_spell_slot(4), "out-of-range magic slots cannot cast")
+	arena.queue_free()
+	await process_frame
+	root.size = original_size
+
+func _test_gamepad_controls() -> void:
+	var original_size := root.size
+	root.size = Vector2i(1280, 720)
+	var arena := Foundation.new()
+	root.add_child(arena)
+	var player: FoundationPlayer = arena.player
+	var hud: FoundationHUD = arena.hud
+	player.set_physics_process(false)
+	arena.set_process(false)
+	for enemy: Node in get_nodes_in_group("enemies"):
+		enemy.set_physics_process(false)
+	await process_frame
+	var routed: Array[String] = []
+	hud.action_requested.connect(func(action: String) -> void: routed.append(action))
+	var buttons := {
+		JOY_BUTTON_A: "jump", JOY_BUTTON_B: "dash",
+		JOY_BUTTON_X: "punch_left", JOY_BUTTON_Y: "punch_right",
+		JOY_BUTTON_LEFT_SHOULDER: "kick_left", JOY_BUTTON_RIGHT_SHOULDER: "kick_right",
+		JOY_BUTTON_DPAD_UP: "spell_0", JOY_BUTTON_DPAD_RIGHT: "spell_1",
+		JOY_BUTTON_DPAD_DOWN: "spell_2", JOY_BUTTON_DPAD_LEFT: "spell_3"
+	}
+	for button in buttons:
+		var before := routed.size()
+		var energy_before := player.magic_energy
+		_send_pad(button, true)
+		_check(routed.size() == before + 1 and routed.size() > 0 and routed.back() == buttons[button], "%s press reaches the touch HUD action path" % buttons[button])
+		_send_pad(button, false)
+		hud._process(0.4)
+		_check(routed.size() == before + 1, "%s release stops held input" % buttons[button])
+		if str(buttons[button]).begins_with("spell_"):
+			_check(player.magic_energy == energy_before, "locked %s spends no energy" % buttons[button])
+		if str(buttons[button]).begins_with("punch_") or str(buttons[button]).begins_with("kick_"):
+			_check(player.attack_kind == str(buttons[button]).get_slice("_", 0) or player._queued_attack_kind == str(buttons[button]).get_slice("_", 0), "%s uses the existing melee path" % buttons[button])
+			for step in range(4):
+				player._update_attack(1.0)
+
+	# Every melee button has one immediate strike and repeats at the touch cadence.
+	for button in [JOY_BUTTON_X, JOY_BUTTON_Y, JOY_BUTTON_LEFT_SHOULDER, JOY_BUTTON_RIGHT_SHOULDER]:
+		var before := routed.size()
+		var attacks_before := player.attack_count
+		_send_pad(button, true)
+		_send_pad(button, true)
+		_check(routed.size() == before + 1, "duplicate %s down event cannot double-strike" % buttons[button])
+		hud._process(0.19)
+		player._update_attack(0.19)
+		_check(routed.size() == before + 1, "%s has no early repeat" % buttons[button])
+		hud._process(0.01)
+		player._update_attack(0.01)
+		_check(routed.size() == before + 2, "%s repeats after 0.20 seconds" % buttons[button])
+		for repeat in range(3):
+			for frame in range(20):
+				hud._process(0.01)
+				player._update_attack(0.01)
+		_check(routed.size() == before + 5, "%s permits five attempts over the first 0.8 seconds" % buttons[button])
+		_send_pad(button, false)
+		for frame in range(20):
+			player._update_attack(0.01)
+		_check(player.attack_count == attacks_before + 5, "%s starts five distinct melee attempts" % buttons[button])
+		hud._process(0.2)
+		_check(routed.size() == before + 5, "%s stops repeating on release" % buttons[button])
+		for step in range(4):
+			player._update_attack(1.0)
+
+	for button in [JOY_BUTTON_A, JOY_BUTTON_B, JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_RIGHT, JOY_BUTTON_DPAD_DOWN, JOY_BUTTON_DPAD_LEFT]:
+		var before := routed.size()
+		_send_pad(button, true)
+		hud._process(1.0)
+		_send_pad(button, true)
+		_check(routed.size() == before + 1, "%s activates only once while held" % buttons[button])
+		_send_pad(button, false)
+		_send_pad(button, true)
+		_check(routed.size() == before + 2, "%s can activate on a new press" % buttons[button])
+		_send_pad(button, false)
+
+	player.rage.unlocked_spells.assign(["light"])
+	arena._refresh_hud()
+	var before_magic := player.magic_energy
+	_send_pad(JOY_BUTTON_DPAD_UP, true)
+	_send_pad(JOY_BUTTON_DPAD_UP, false)
+	_check(player.current_spell == "light" and player.magic_energy == before_magic - 20.0, "D-pad Up casts unlocked slot 1 via touch spell handler")
+	for button in [JOY_BUTTON_DPAD_RIGHT, JOY_BUTTON_DPAD_DOWN, JOY_BUTTON_DPAD_LEFT]:
+		var energy_before := player.magic_energy
+		_send_pad(button, true)
+		_send_pad(button, false)
+		_check(player.magic_energy == energy_before, "locked D-pad spell slot remains harmless")
+
+	Input.action_press(&"move_forward")
+	Input.action_press(&"move_right")
+	Input.action_press(&"camera_right")
+	Input.action_press(&"camera_up")
+	var yaw_before := arena._camera_yaw
+	var pitch_before := arena._camera_pitch
+	var before_combo := routed.size()
+	_send_pad(JOY_BUTTON_Y, true)
+	arena._update_gamepad_camera(0.1)
+	_check(player.move_input().x > 0.0 and player.move_input().y < 0.0, "left stick supports diagonal movement during an attack")
+	_check(arena._camera_yaw < yaw_before and arena._camera_pitch > pitch_before, "right stick simultaneously turns and tilts upward")
+	_check(routed.size() == before_combo + 1 and player.attack_side == "right", "both sticks and a melee press can operate together")
+	_send_pad(JOY_BUTTON_Y, false)
+	Input.action_release(&"move_forward")
+	Input.action_release(&"move_right")
+	Input.action_release(&"camera_right")
+	Input.action_release(&"camera_up")
+	_check(player.move_input() == Vector2.ZERO, "left stick release stops movement")
+	Input.action_press(&"camera_up")
+	arena._update_gamepad_camera(10.0)
+	_check(is_equal_approx(arena._camera_pitch, deg_to_rad(Foundation.CAMERA_MAX_PITCH_DEGREES)), "upward stick look obeys upper pitch clamp")
+	Input.action_release(&"camera_up")
+	Input.action_press(&"camera_down")
+	arena._update_gamepad_camera(10.0)
+	_check(is_equal_approx(arena._camera_pitch, deg_to_rad(Foundation.CAMERA_MIN_PITCH_DEGREES)), "downward stick look obeys lower pitch clamp")
+	Input.action_release(&"camera_down")
+
+	var before_menu := routed.size()
+	paused = true
+	hud.show_aura_selection(10)
+	_send_pad(JOY_BUTTON_X, true)
+	_send_pad(JOY_BUTTON_B, true)
+	hud._process(0.4)
+	arena._update_gamepad_camera(0.4)
+	_check(routed.size() == before_menu, "controller gameplay buttons cannot fire through an aura menu")
+	hud.close_aura_selection()
+	paused = false
+	hud._process(0.4)
+	_check(routed.size() == before_menu, "holding buttons across pause cannot trigger delayed gameplay")
+	_send_pad(JOY_BUTTON_X, false)
+	_send_pad(JOY_BUTTON_B, false)
+	_send_pad(JOY_BUTTON_X, true)
+	_check(routed.size() == before_menu + 1, "a fresh press after the menu resumes melee")
+	_send_pad(JOY_BUTTON_X, false)
 	arena.queue_free()
 	await process_frame
 	root.size = original_size

@@ -20,6 +20,15 @@ const ACTION_ROWS := [
 	["spell_2", "spell_3"],
 	["dash", "jump"]
 ]
+# InputMap translates SDL logical buttons; the values are the existing touch HUD
+# actions. Keep the two sources routed through action_requested.
+const GAMEPAD_ACTIONS := {
+	&"pad_jump": "jump", &"pad_dash": "dash",
+	&"pad_punch_left": "punch_left", &"pad_punch_right": "punch_right",
+	&"pad_kick_left": "kick_left", &"pad_kick_right": "kick_right",
+	&"pad_spell_0": "spell_0", &"pad_spell_1": "spell_1",
+	&"pad_spell_2": "spell_2", &"pad_spell_3": "spell_3"
+}
 const MELEE_HOLD_REPEAT_INTERVAL := 0.20
 const MELEE_TIMER_EPSILON := 0.0001
 
@@ -36,6 +45,7 @@ var _notice: Label
 var _action_buttons: Dictionary = {}
 var _pressed_pointers: Dictionary = {}
 var _held_melee_repeat_timers: Dictionary = {}
+var _held_gamepad_actions: Dictionary = {}
 var _gesture_modes: Dictionary = {}
 var _movement_pointer_id := NO_POINTER_ID
 var _movement_origin := Vector2.ZERO
@@ -46,6 +56,7 @@ var _layout_size := Vector2.ZERO
 func _ready() -> void:
 	add_to_group("mobile_controls")
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	Input.joy_connection_changed.connect(_on_joy_connection_changed)
 	_root = Control.new()
 	_root.name = "HudCanvas"
 	_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -61,7 +72,19 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if get_tree().paused or _selection_panel != null:
 		_held_melee_repeat_timers.clear()
+		# An input held across a menu must be released before it can act again.
+		for key in _held_gamepad_actions:
+			_held_gamepad_actions[key].blocked = true
 		return
+	for key in _held_gamepad_actions:
+		var held: Dictionary = _held_gamepad_actions[key]
+		if held.blocked or not _is_melee_action(held.action):
+			continue
+		var repeat_time := float(held.timer) - minf(delta, MELEE_HOLD_REPEAT_INTERVAL)
+		if repeat_time <= MELEE_TIMER_EPSILON:
+			_emit_action(held.action)
+			repeat_time += MELEE_HOLD_REPEAT_INTERVAL
+		held.timer = repeat_time
 	for raw_pointer_id in _pressed_pointers.keys():
 		var pointer_id := int(raw_pointer_id)
 		var button := _pressed_pointers[raw_pointer_id] as Button
@@ -211,7 +234,9 @@ func _emit_action(action: String) -> void:
 	action_requested.emit(action)
 
 func _input(event: InputEvent) -> void:
-	if event is InputEventScreenTouch:
+	if event is InputEventJoypadButton:
+		_handle_gamepad_button(event as InputEventJoypadButton)
+	elif event is InputEventScreenTouch:
 		var handled := false
 		if event.pressed and not event.canceled:
 			handled = _handle_pointer(event.index, event.position, true)
@@ -244,6 +269,30 @@ func _input(event: InputEvent) -> void:
 	elif event is InputEventMouseMotion:
 		if _update_gesture(MOUSE_POINTER_ID, event.position, event.relative):
 			get_viewport().set_input_as_handled()
+
+func _handle_gamepad_button(event: InputEventJoypadButton) -> void:
+	for input_action: StringName in GAMEPAD_ACTIONS:
+		if not event.is_action(input_action):
+			continue
+		var key := "%d:%s" % [event.device, String(input_action)]
+		if event.pressed:
+			if not _held_gamepad_actions.has(key):
+				var blocked := get_tree().paused or _selection_panel != null
+				var action: String = GAMEPAD_ACTIONS[input_action]
+				_held_gamepad_actions[key] = {"action": action, "timer": MELEE_HOLD_REPEAT_INTERVAL, "blocked": blocked}
+				if not blocked:
+					_emit_action(action)
+		else:
+			_held_gamepad_actions.erase(key)
+		get_viewport().set_input_as_handled()
+		return
+
+func _on_joy_connection_changed(device: int, connected: bool) -> void:
+	if connected:
+		return
+	for key in _held_gamepad_actions.keys():
+		if str(key).begins_with("%d:" % device):
+			_held_gamepad_actions.erase(key)
 
 func _start_gesture(pointer_id: int, screen_position: Vector2) -> bool:
 	if get_tree().paused or _selection_panel != null or _gesture_modes.has(pointer_id):
@@ -332,6 +381,7 @@ func _release_pointers() -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
 		_release_pointers()
+		_held_gamepad_actions.clear()
 
 func _build_notice() -> void:
 	_notice = Label.new()
@@ -404,6 +454,8 @@ func show_notice(message: String, color: Color = Color(1.0, 0.83, 0.33)) -> void
 
 func show_aura_selection(milestone: int) -> void:
 	_release_pointers()
+	for key in _held_gamepad_actions:
+		_held_gamepad_actions[key].blocked = true
 	if _selection_panel != null:
 		_selection_panel.queue_free()
 	_selection_panel = PanelContainer.new()
