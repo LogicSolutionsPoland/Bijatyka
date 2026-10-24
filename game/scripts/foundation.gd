@@ -5,6 +5,10 @@ const PLAYER_SCRIPT := preload("res://scripts/player_controller.gd")
 const ENEMY_SCRIPT := preload("res://scripts/enemy.gd")
 const HUD_SCRIPT := preload("res://scripts/mobile_hud.gd")
 const SHADOW_POLICY := preload("res://scripts/shadow_policy.gd")
+const RADIAL_GROUND_SHADER := preload("res://shaders/radial_ground.gdshader")
+const ZOMBIE_HORDE_SIZE := 20
+const ZOMBIE_SPAWN_DISTANCE := 50.0
+const VISIBILITY_RADIUS := 30.0
 # Reference: wide over-the-shoulder combat view, with Thornbound left of center
 # and enough distance to keep a group of enemies in frame.
 # Height is measured above the player's ground origin, not added to an existing camera offset.
@@ -29,6 +33,9 @@ var _camera_pitch := deg_to_rad(CAMERA_PITCH_DEGREES)
 var hud: FoundationHUD
 var _status_timer := 0.0
 var _pending_notice := ""
+var _visibility_timer := 0.0
+var _floor_material: ShaderMaterial
+var _boss_enemy: FoundationEnemy
 
 func _ready() -> void:
 	_build_environment()
@@ -61,6 +68,13 @@ func _process(delta: float) -> void:
 	if _status_timer >= 0.18:
 		_status_timer = 0.0
 		_refresh_hud(player.rage.rage, player.rage.maximum_rage, player.rage.condemnation_threshold())
+	_visibility_timer += delta
+	if _visibility_timer >= 0.12:
+		_visibility_timer = 0.0
+		_update_distance_visibility()
+		_update_boss_locator()
+	if _floor_material != null and player != null:
+		_floor_material.set_shader_parameter("player_position", player.global_position)
 
 func _build_environment() -> void:
 	var world := WorldEnvironment.new()
@@ -82,8 +96,8 @@ func _build_environment() -> void:
 	environment.fog_enabled = true
 	environment.fog_light_color = Color(0.23, 0.15, 0.14)
 	environment.fog_light_energy = 0.7
-	environment.fog_depth_begin = 13.0
-	environment.fog_depth_end = 58.0
+	environment.fog_depth_begin = 24.0
+	environment.fog_depth_end = VISIBILITY_RADIUS
 	environment.fog_density = 0.004
 	environment.fog_sun_scatter = 0.10
 	environment.glow_enabled = true
@@ -106,17 +120,20 @@ func _build_arena() -> void:
 	ground.collision_layer = 1
 	var ground_collision := CollisionShape3D.new()
 	var ground_shape := BoxShape3D.new()
-	ground_shape.size = Vector3(80.0, 0.35, 80.0)
+	ground_shape.size = Vector3(220.0, 0.35, 220.0)
 	ground_collision.shape = ground_shape
 	ground_collision.position.y = -0.18
 	ground.add_child(ground_collision)
 	var floor := MeshInstance3D.new()
 	var floor_mesh := PlaneMesh.new()
-	floor_mesh.size = Vector2(80.0, 80.0)
+	floor_mesh.size = Vector2(220.0, 220.0)
 	floor.mesh = floor_mesh
-	var floor_material := _material(Color(0.105, 0.118, 0.135), 0.96)
-	floor_material.metallic = 0.06
-	floor.material_override = floor_material
+	_floor_material = ShaderMaterial.new()
+	_floor_material.shader = RADIAL_GROUND_SHADER
+	_floor_material.set_shader_parameter("floor_color", Color(0.105, 0.118, 0.135))
+	_floor_material.set_shader_parameter("player_position", Vector3.ZERO)
+	floor.material_override = _floor_material
+	floor.add_to_group("radial_floor")
 	ground.add_child(floor)
 	add_child(ground)
 
@@ -128,10 +145,11 @@ func _build_arena() -> void:
 	glass.metallic = 0.55
 
 	# Enclosed edges and a broken industrial skyline keep the combat space readable.
-	_add_arena_box("WestRetainingWall", Vector3(-20.0, 2.1, -8.0), Vector3(0.9, 4.2, 50.0), concrete, true)
-	_add_arena_box("EastRetainingWall", Vector3(20.0, 2.1, -8.0), Vector3(0.9, 4.2, 50.0), concrete, true)
-	_add_arena_box("NorthRetainingWall", Vector3(0.0, 2.1, -32.0), Vector3(40.0, 4.2, 0.9), concrete, true)
-	_add_arena_box("SouthRetainingWall", Vector3(0.0, 2.1, 24.0), Vector3(40.0, 4.2, 0.9), concrete, true)
+	# Keep the encounter courtyard open so horde members can approach from 50 m.
+	_add_arena_box("WestWorldBoundary", Vector3(-100.0, 2.1, 0.0), Vector3(0.9, 4.2, 200.0), concrete, true)
+	_add_arena_box("EastWorldBoundary", Vector3(100.0, 2.1, 0.0), Vector3(0.9, 4.2, 200.0), concrete, true)
+	_add_arena_box("NorthWorldBoundary", Vector3(0.0, 2.1, -100.0), Vector3(200.0, 4.2, 0.9), concrete, true)
+	_add_arena_box("SouthWorldBoundary", Vector3(0.0, 2.1, 100.0), Vector3(200.0, 4.2, 0.9), concrete, true)
 	_add_arena_box("WestSkylineRuins", Vector3(-12.5, 7.0, -37.0), Vector3(11.0, 14.0, 5.5), dark_concrete, false)
 	_add_arena_box("EastSkylineRuins", Vector3(12.0, 6.0, -38.0), Vector3(10.0, 12.0, 5.0), dark_concrete, false)
 	_add_arena_box("RearSkylineTower", Vector3(1.0, 9.0, -40.0), Vector3(5.5, 18.0, 4.0), dark_concrete, false)
@@ -375,25 +393,34 @@ func _apply_camera_look(yaw_delta: float, pitch_delta: float) -> void:
 		player.set_camera_yaw(_camera_yaw)
 
 func _spawn_enemies() -> void:
-	_spawn_enemy("shambler", Vector3(-1.0, 0.05, -4.4))
-	_spawn_enemy("brute", Vector3(4.7, 0.05, -8.6))
-	_spawn_enemy("stalker", Vector3(-4.5, 0.05, -10.4))
+	# The same lightweight LOD1 zombie asset keeps the horde cheap on Android.
+	for index in range(ZOMBIE_HORDE_SIZE):
+		var angle := TAU * float(index) / float(ZOMBIE_HORDE_SIZE) + 0.12
+		_spawn_enemy("shambler", _horde_spawn_position(angle))
+	# Keep one boss in the original arena; the HUD locator can point to it when
+	# the player moves beyond the 30 m render radius.
 	_spawn_enemy("boss", Vector3(0.6, 0.05, -16.2), true)
+
+func _horde_spawn_position(angle: float) -> Vector3:
+	return player.global_position + Vector3(cos(angle) * ZOMBIE_SPAWN_DISTANCE, 0.0, sin(angle) * ZOMBIE_SPAWN_DISTANCE)
 
 func _spawn_enemy(kind: String, at: Vector3, boss_target: bool = false) -> void:
 	var enemy := ENEMY_SCRIPT.new() as FoundationEnemy
 	enemy.configure(kind, boss_target)
 	enemy.position = at
 	enemy.telegraph_started.connect(_on_enemy_telegraph)
+	enemy.defeated.connect(_on_enemy_defeated)
 	add_child(enemy)
-	var label := Label3D.new()
-	label.text = "BOSS" if enemy.is_boss else kind.to_upper()
-	label.position = Vector3(0.0, 2.85 if not enemy.is_boss else 3.35, 0.0)
-	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.font_size = 22 if enemy.is_boss else 17
-	label.outline_size = 6
-	label.modulate = Color(1.0, 0.48, 0.33) if enemy.is_boss else Color(0.88, 0.91, 0.82)
-	enemy.attach_status_label(label)
+	if enemy.is_boss:
+		_boss_enemy = enemy
+		var label := Label3D.new()
+		label.text = "BOSS"
+		label.position = Vector3(0.0, 3.35, 0.0)
+		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		label.font_size = 22
+		label.outline_size = 6
+		label.modulate = Color(1.0, 0.18, 0.12)
+		enemy.attach_status_label(label)
 
 func _on_hud_action(action: String) -> void:
 	if get_tree().paused:
@@ -434,6 +461,42 @@ func _on_condemned(_threshold: float, _maximum: float) -> void:
 
 func _on_enemy_telegraph(_enemy: Node, is_boss: bool) -> void:
 	hud.show_enemy_telegraph(is_boss)
+
+func _on_enemy_defeated(enemy: Node) -> void:
+	if enemy == _boss_enemy:
+		_boss_enemy = null
+		hud.hide_boss_marker()
+		return
+	_spawn_horde_replacement()
+
+func _spawn_horde_replacement() -> void:
+	await get_tree().create_timer(1.0).timeout
+	if not is_instance_valid(player):
+		return
+	_spawn_enemy("shambler", _horde_spawn_position(randf() * TAU))
+
+func _update_boss_locator() -> void:
+	if hud == null or not is_instance_valid(_boss_enemy) or _boss_enemy.hp <= 0:
+		if hud != null:
+			hud.hide_boss_marker()
+		return
+	var target := _boss_enemy.global_position + Vector3(0.0, 2.8, 0.0)
+	hud.update_boss_marker(camera.unproject_position(target), player.global_position.distance_to(_boss_enemy.global_position), camera.is_position_behind(target))
+
+func _update_distance_visibility() -> void:
+	if player == null:
+		return
+	_apply_distance_visibility(self)
+
+func _apply_distance_visibility(node: Node) -> void:
+	if node.is_in_group("radial_floor"):
+		node.visible = true
+	elif node is GeometryInstance3D or node is Label3D:
+		node.visible = node.global_position.distance_to(player.global_position) <= VISIBILITY_RADIUS
+	elif (node is OmniLight3D or node is SpotLight3D) and not node is DirectionalLight3D:
+		node.visible = node.global_position.distance_to(player.global_position) <= VISIBILITY_RADIUS
+	for child in node.get_children():
+		_apply_distance_visibility(child)
 
 func _refresh_hud(_a: float = 0.0, _b: float = 0.0, _c: float = 0.0) -> void:
 	if hud == null or player == null:
