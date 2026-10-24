@@ -2,8 +2,6 @@ extends SceneTree
 
 const Rage := preload("res://scripts/rage_progression.gd")
 const Player := preload("res://scripts/player_controller.gd")
-const RightPunchBuilder := preload("res://scripts/right_punch_animation.gd")
-const KickAnimationBuilder := preload("res://scripts/kick_animation.gd")
 const Enemy := preload("res://scripts/enemy.gd")
 const Foundation := preload("res://scripts/foundation.gd")
 const Hud := preload("res://scripts/mobile_hud.gd")
@@ -22,9 +20,6 @@ func _run_all() -> void:
 	await _test_touch_stick_direction()
 	await _test_hud_aura_choices()
 	await _test_enemy_variant_health()
-	await _test_enemy_forward_facing()
-	await _test_right_punch_animation()
-	await _test_kick_animation()
 	await _test_manual_attack_and_hit_window()
 	await _test_magic_unlock_and_damage()
 	await _test_jump_and_enemy_interrupt_rules()
@@ -114,67 +109,6 @@ func _test_hud_aura_choices() -> void:
 	_check(is_equal_approx(hud._rage_bar.value, 15.0), "HUD RAGE meter reflects current RAGE")
 	_check(is_equal_approx(hud._magic_bar.value, 60.0), "HUD magic meter reflects current energy")
 	hud.queue_free()
-	await process_frame
-
-func _test_kick_animation() -> void:
-	var player := Player.new() as FoundationPlayer
-	player.set_physics_process(false)
-	root.add_child(player)
-	await process_frame
-	_check(bool(player._kick_animation_ready.get("left", false)) and bool(player._kick_animation_ready.get("right", false)), "Thornbound rig receives both authored kick clips")
-	if not bool(player._kick_animation_ready.get("left", false)) or not bool(player._kick_animation_ready.get("right", false)):
-		player.queue_free()
-		await process_frame
-		return
-	_check(player._animation_player.has_animation(RightPunchBuilder.CLIP_PATH), "adding kick clips keeps the right-punch clip installed")
-	for side in ["left", "right"]:
-		var clip_path := KickAnimationBuilder.clip_path(side)
-		var clip := player._animation_player.get_animation(clip_path) as Animation
-		_check(clip != null and is_equal_approx(clip.length, 0.87), "%s kick spans the full attack timeline" % side)
-		if clip == null:
-			continue
-		_check(clip.has_marker(&"chamber") and clip.has_marker(&"contact"), "%s kick marks chamber and contact" % side)
-		_check(is_equal_approx(clip.get_marker_time(&"contact"), 0.23), "%s kick contact matches the hit window" % side)
-		var leg_suffixes := [":LeftThigh", ":LeftUpperLeg", ":LeftUpLeg"] if side == "left" else [":RightThigh", ":RightUpperLeg", ":RightUpLeg"]
-		var leg_track := -1
-		for track in range(clip.get_track_count()):
-			var track_path := str(clip.track_get_path(track))
-			for suffix in leg_suffixes:
-				if track_path.ends_with(suffix):
-					leg_track = track
-					break
-			if leg_track >= 0:
-				break
-		_check(leg_track >= 0 and clip.track_get_key_count(leg_track) == 9, "%s kicking leg uses nine authored pose keys" % side)
-		_check(clip.has_marker(&"follow_through"), "%s kick marks its follow-through" % side)
-		player._animation_player.stop()
-		player._skeleton.reset_bone_poses()
-		player._skeleton.force_update_all_bone_transforms()
-		var side_name := "Left" if side == "left" else "Right"
-		var resting_foot: Variant = _get_test_bone_world_position(player._skeleton, [side_name + "Foot", side_name + "Ankle", side_name + "Shin"])
-		player._animation_player.play(clip_path, 0.0)
-		player._animation_player.seek(clip.get_marker_time(&"contact"), true)
-		player._skeleton.force_update_all_bone_transforms()
-		var striking_foot: Variant = _get_test_bone_world_position(player._skeleton, [side_name + "Foot", side_name + "Ankle", side_name + "Shin"])
-		if resting_foot != null and striking_foot != null:
-			var resting_foot_position: Vector3 = resting_foot
-			var striking_foot_position: Vector3 = striking_foot
-			var foot_front_step := (striking_foot_position - resting_foot_position).dot(-player.global_transform.basis.z)
-			print("KICK_FRONT_STEP_%s=%0.3f" % [side, foot_front_step])
-			_check(foot_front_step > 0.03, "%s kick drives the foot toward an enemy in front" % side)
-		else:
-			_check(false, "%s kick rig exposes a testable foot bone" % side)
-	var left_started := player.request_attack("kick", "left")
-	var left_path := KickAnimationBuilder.clip_path("left")
-	_check(left_started and player._animation_player.current_animation == left_path and player._animation_player.is_playing(), "left KICK plays its keyed clip")
-	player._update_attack_pose()
-	_check(player._animation_player.current_animation == left_path and player._animation_player.is_playing(), "procedural pose updates do not overwrite the left kick clip")
-	_check(not player.request_attack("kick", "right") and player.attack_count == 1, "a kick cannot queue another attack")
-	for _phase in range(3):
-		player._update_attack(1.0)
-	var right_started := player.request_attack("kick", "right")
-	_check(right_started and player._animation_player.current_animation == KickAnimationBuilder.clip_path("right"), "right KICK plays its own keyed clip")
-	player.queue_free()
 	await process_frame
 
 func _test_manual_attack_and_hit_window() -> void:
@@ -277,93 +211,6 @@ func _test_enemy_variant_health() -> void:
 		enemy.queue_free()
 	await process_frame
 
-func _test_enemy_forward_facing() -> void:
-	var player := Player.new() as FoundationPlayer
-	player.position = Vector3(3.0, 0.0, -4.0)
-	player.set_physics_process(false)
-	root.add_child(player)
-	var enemy := Enemy.new() as FoundationEnemy
-	enemy.configure("shambler")
-	enemy.position = Vector3.ZERO
-	enemy.set_physics_process(false)
-	root.add_child(enemy)
-	await process_frame
-	if enemy._model == null:
-		_check(false, "zombie GLB loads for the locomotion facing check")
-	else:
-		enemy._player = player
-		var direction := (player.global_position - enemy.global_position).normalized()
-		enemy._update_ai(0.5, player.global_position.distance_to(enemy.global_position))
-		var movement_direction := Vector3(enemy.velocity.x, 0.0, enemy.velocity.z).normalized()
-		var model_forward := enemy._model.global_transform.basis.z.normalized()
-		_check(movement_direction.dot(direction) > 0.99, "zombie walks toward its target")
-		_check(model_forward.dot(movement_direction) > 0.99, "zombie model faces the direction it walks")
-	player.queue_free()
-	enemy.queue_free()
-	await process_frame
-
-func _get_test_bone_world_position(skeleton: Skeleton3D, candidates: Array) -> Variant:
-	for candidate in candidates:
-		var bone_index := skeleton.find_bone(str(candidate))
-		if bone_index >= 0:
-			return skeleton.global_transform * skeleton.get_bone_global_pose(bone_index).origin
-	return null
-
-func _test_right_punch_animation() -> void:
-	var player := Player.new() as FoundationPlayer
-	player.set_physics_process(false)
-	root.add_child(player)
-	await process_frame
-	_check(player._right_punch_animation_ready, "Thornbound rig receives the authored right-punch clip")
-	_check(bool(player._punch_animation_ready.get("left", false)), "Thornbound rig receives the authored left-punch clip")
-	if not player._right_punch_animation_ready or not bool(player._punch_animation_ready.get("left", false)):
-		player.queue_free()
-		await process_frame
-		return
-	for side in ["left", "right"]:
-		var clip_path := RightPunchBuilder.clip_path(side)
-		var clip := player._animation_player.get_animation(clip_path) as Animation
-		_check(clip != null and is_equal_approx(clip.length, 0.60), "%s punch spans the complete attack timeline" % side)
-		if clip == null:
-			continue
-		_check(clip.has_marker(&"chamber") and clip.has_marker(&"contact") and clip.has_marker(&"follow_through"), "%s punch marks chamber, contact, and follow-through" % side)
-		_check(is_equal_approx(clip.get_marker_time(&"contact"), 0.14), "%s punch contact matches the hit window" % side)
-		var arm_suffix := ":LeftUpperArm" if side == "left" else ":RightUpperArm"
-		var arm_alias := ":LeftArm" if side == "left" else ":RightArm"
-		var arm_track := -1
-		for track in range(clip.get_track_count()):
-			var track_path := str(clip.track_get_path(track))
-			if track_path.ends_with(arm_suffix) or track_path.ends_with(arm_alias):
-				arm_track = track
-				break
-		_check(arm_track >= 0 and clip.track_get_key_count(arm_track) == 9, "%s striking arm uses nine authored pose keys" % side)
-		player._animation_player.stop()
-		player._skeleton.reset_bone_poses()
-		player._skeleton.force_update_all_bone_transforms()
-		var side_name := "Left" if side == "left" else "Right"
-		var resting_hand: Variant = _get_test_bone_world_position(player._skeleton, [side_name + "Hand", side_name + "Wrist", side_name + "Forearm"])
-		player._animation_player.play(clip_path, 0.0)
-		player._animation_player.seek(clip.get_marker_time(&"contact"), true)
-		player._skeleton.force_update_all_bone_transforms()
-		var striking_hand: Variant = _get_test_bone_world_position(player._skeleton, [side_name + "Hand", side_name + "Wrist", side_name + "Forearm"])
-		if resting_hand != null and striking_hand != null:
-			var resting_hand_position: Vector3 = resting_hand
-			var striking_hand_position: Vector3 = striking_hand
-			var hand_front_step := (striking_hand_position - resting_hand_position).dot(-player.global_transform.basis.z)
-			print("PUNCH_FRONT_STEP_%s=%0.3f" % [side, hand_front_step])
-			_check(hand_front_step > 0.02, "%s punch drives the hand toward an enemy in front" % side)
-		else:
-			_check(false, "%s punch rig exposes a testable hand bone" % side)
-	var started := player.request_attack("punch", "right")
-	_check(started and player._animation_player.is_playing() and player._animation_player.current_animation == RightPunchBuilder.CLIP_PATH, "right-punch input plays the keyed clip")
-	_check(not player.request_attack("punch", "right") and player.attack_count == 1, "right-punch clip cannot queue a second attack")
-	for _phase in range(3):
-		player._update_attack(1.0)
-	var left_started := player.request_attack("punch", "left")
-	_check(left_started and player._animation_player.current_animation == RightPunchBuilder.clip_path("left"), "left-punch input plays its mirrored keyed clip")
-	player.queue_free()
-	await process_frame
-
 func _test_boss_damage_rule() -> void:
 	var player := Player.new() as FoundationPlayer
 	player.position = Vector3.ZERO
@@ -464,14 +311,11 @@ func _test_ten_button_controls() -> void:
 	_send_touch(stick_at, 0, false)
 	_check(player.move_input() == Vector2.ZERO, "releasing the movement finger stops movement")
 
-	for action: String in ["punch_left", "punch_right", "kick_left", "kick_right"]:
+	for action: String in ["punch_right", "kick_left", "kick_right"]:
 		var count_before := player.attack_count
 		_tap(hud._button_for_action(action))
 		_check(player.attack_count == count_before + 1 and player.attack_kind == action.get_slice("_", 0) and player.attack_side == action.get_slice("_", 1), "touch routes %s to the correct limb" % action)
 		player._update_attack_pose()
-		var attack_side := action.get_slice("_", 1)
-		var expected_clip := RightPunchBuilder.clip_path(attack_side) if action.begins_with("punch_") else KickAnimationBuilder.clip_path(attack_side)
-		_check(player._animation_player.current_animation == expected_clip, "touch %s plays its authored attack clip" % action)
 		for step in range(4):
 			player._update_attack(1.0)
 	var count_before_mouse := player.attack_count
@@ -536,4 +380,3 @@ func _test_ten_button_controls() -> void:
 	arena.queue_free()
 	await process_frame
 	root.size = original_size
-

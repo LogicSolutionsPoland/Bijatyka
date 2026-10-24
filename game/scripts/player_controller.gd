@@ -10,8 +10,7 @@ signal interrupted(duration: float)
 signal jump_impact(target: Node)
 
 const RAGE_SCRIPT := preload("res://scripts/rage_progression.gd")
-const RIGHT_PUNCH_BUILDER := preload("res://scripts/right_punch_animation.gd")
-const KICK_BUILDER := preload("res://scripts/kick_animation.gd")
+const FIGHT_ANIMATION_BUILDER := preload("res://scripts/fight_animation.gd")
 const PLAYER_MODEL_PATH := "res://assets/characters/thornbound/Retribution_Player_Thornbound_Warrior_MOBILE.glb"
 const GRAVITY := 24.0
 const MAX_HEALTH := 100
@@ -46,9 +45,7 @@ var jump_impact_armed := false
 var _was_airborne := false
 var _animation_player: AnimationPlayer
 var _skeleton: Skeleton3D
-var _right_punch_animation_ready := false
-var _punch_animation_ready: Dictionary = {"left": false, "right": false}
-var _kick_animation_ready: Dictionary = {"left": false, "right": false}
+var _fight_animations_ready := false
 var _camera_yaw := 0.0
 var _burns: Array[Dictionary] = []
 var _magic_hud_timer := 0.0
@@ -89,12 +86,7 @@ func _load_player_visual() -> void:
 			visual_root.add_child(model)
 			_animation_player = model.find_child("AnimationPlayer", true, false) as AnimationPlayer
 			_skeleton = model.find_child("Skeleton3D", true, false) as Skeleton3D
-			_right_punch_animation_ready = RIGHT_PUNCH_BUILDER.install(_animation_player, _skeleton, ATTACKS["punch"])
-			_punch_animation_ready = {
-				"left": _animation_player != null and _animation_player.has_animation(RIGHT_PUNCH_BUILDER.clip_path("left")),
-				"right": _right_punch_animation_ready
-			}
-			_kick_animation_ready = KICK_BUILDER.install(_animation_player, _skeleton, ATTACKS["kick"])
+			_fight_animations_ready = FIGHT_ANIMATION_BUILDER.install(_animation_player, _skeleton, ATTACKS)
 			_set_locomotion_animation("Idle")
 	else:
 		_add_debug_visual()
@@ -200,9 +192,8 @@ func request_attack(kind: String, side: String = "right") -> bool:
 	attack_count += 1
 	attack_started.emit(kind)
 	if _animation_player != null:
-		var clip_path := _authored_attack_clip_path()
-		if not clip_path.is_empty():
-			_animation_player.play(clip_path, 0.04)
+		if _fight_animations_ready:
+			_animation_player.play(FIGHT_ANIMATION_BUILDER.clip_path(kind, side), 0.04)
 		else:
 			_animation_player.stop()
 	return true
@@ -406,11 +397,7 @@ func _spawn_spell_burst(at: Vector3) -> void:
 	tween.tween_callback(root.queue_free)
 
 func _update_attack_pose() -> void:
-	if _skeleton == null:
-		return
-	if attack_phase == "ready":
-		return
-	if not _authored_attack_clip_path().is_empty():
+	if _skeleton == null or attack_phase == "ready" or _fight_animations_ready:
 		return
 	if _animation_player != null:
 		_animation_player.stop()
@@ -420,23 +407,12 @@ func _update_attack_pose() -> void:
 	var mirror := -1.0 if attack_side == "left" else 1.0
 	if attack_kind == "punch":
 		_set_bone_rotation("Chest", Vector3(-0.08, -0.18 * windup_blend * mirror, 0.03 * mirror))
-		_set_bone_rotation(limb + "UpperArm", Vector3(1.15 * windup_blend, 0.0, -0.15 * mirror))
-		_set_bone_rotation(limb + "Forearm", Vector3(0.70 * windup_blend, 0.0, 0.0))
+		_set_bone_rotation(limb + "UpperArm", Vector3(-1.15 * windup_blend, 0.0, -0.15 * mirror))
+		_set_bone_rotation(limb + "Forearm", Vector3(-0.70 * windup_blend, 0.0, 0.0))
 	else:
 		_set_bone_rotation("Chest", Vector3(-0.12, 0.04 * mirror, 0.0))
-		_set_bone_rotation(limb + "Thigh", Vector3(1.28 * windup_blend, 0.0, 0.0))
+		_set_bone_rotation(limb + "Thigh", Vector3(-1.28 * windup_blend, 0.0, 0.0))
 		_set_bone_rotation(limb + "Shin", Vector3(0.42 * windup_blend, 0.0, 0.0))
-
-func _authored_attack_clip_path() -> String:
-	if _animation_player == null:
-		return ""
-	if attack_kind == "punch" and bool(_punch_animation_ready.get(attack_side, false)):
-		var punch_path := RIGHT_PUNCH_BUILDER.clip_path(attack_side)
-		return punch_path if _animation_player.has_animation(punch_path) else ""
-	if attack_kind == "kick" and bool(_kick_animation_ready.get(attack_side, false)):
-		var kick_path := KICK_BUILDER.clip_path(attack_side)
-		return kick_path if _animation_player.has_animation(kick_path) else ""
-	return ""
 
 func _set_bone_rotation(bone_name: String, euler: Vector3) -> void:
 	var bone_index := _skeleton.find_bone(bone_name)
@@ -475,4 +451,3 @@ func _reset_at_safe_base() -> void:
 	_burns.clear()
 	rage.reset_soul()
 	health_changed.emit(health, MAX_HEALTH)
-

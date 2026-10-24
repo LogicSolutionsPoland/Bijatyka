@@ -6,6 +6,7 @@ signal attack_resolved(enemy: Node, hit: bool)
 signal defeated(enemy: Node)
 
 const ENEMY_MODEL_PATH := "res://assets/zombies/brutal_v2/Retribution_Zombie_01_Brutal_V2_RIGGED_LOD1.glb"
+const ENEMY_MODEL_YAW_OFFSET := PI
 const SHADOW_POLICY := preload("res://scripts/shadow_policy.gd")
 const GRAVITY := 24.0
 
@@ -90,13 +91,13 @@ func _apply_variant() -> void:
 func _build_visual() -> void:
 	_visual_root = Node3D.new()
 	_visual_root.name = "VisualRoot"
-	# The zombie GLB faces local +Z; enemy steering uses Godot's -Z forward convention.
-	_visual_root.rotation.y = PI
 	add_child(_visual_root)
 	if ResourceLoader.exists(ENEMY_MODEL_PATH):
 		var packed := load(ENEMY_MODEL_PATH) as PackedScene
 		if packed != null:
 			_model = packed.instantiate()
+			# The imported zombie rig faces +Z; enemy movement and targeting use -Z as forward.
+			_model.rotation.y += ENEMY_MODEL_YAW_OFFSET
 			_visual_root.add_child(_model)
 			if is_boss:
 				_model.scale = Vector3.ONE * 1.38
