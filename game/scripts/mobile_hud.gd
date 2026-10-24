@@ -48,6 +48,7 @@ var _action_buttons: Dictionary = {}
 var _pressed_pointers: Dictionary = {}
 var _held_melee_repeat_timers: Dictionary = {}
 var _held_gamepad_actions: Dictionary = {}
+var _right_trigger_rest_values: Dictionary = {}
 var _gesture_modes: Dictionary = {}
 var _movement_pointer_id := NO_POINTER_ID
 var _movement_origin := Vector2.ZERO
@@ -59,6 +60,7 @@ func _ready() -> void:
 	add_to_group("mobile_controls")
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	Input.joy_connection_changed.connect(_on_joy_connection_changed)
+	_capture_right_trigger_rest_values()
 	_root = Control.new()
 	_root.name = "HudCanvas"
 	_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -72,6 +74,7 @@ func _ready() -> void:
 	_layout()
 
 func _process(delta: float) -> void:
+	_poll_right_trigger_axes()
 	if get_tree().paused or _selection_panel != null:
 		_held_melee_repeat_timers.clear()
 		# An input held across a menu must be released before it can act again.
@@ -274,6 +277,26 @@ func _input(event: InputEvent) -> void:
 		if _update_gesture(MOUSE_POINTER_ID, event.position, event.relative):
 			get_viewport().set_input_as_handled()
 
+func _capture_right_trigger_rest_values() -> void:
+	for device: int in Input.get_connected_joypads():
+		_right_trigger_rest_values[device] = Input.get_joy_axis(device, JOY_AXIS_TRIGGER_RIGHT)
+
+func _poll_right_trigger_axes() -> void:
+	for device: int in Input.get_connected_joypads():
+		if not _right_trigger_rest_values.has(device):
+			_right_trigger_rest_values[device] = Input.get_joy_axis(device, JOY_AXIS_TRIGGER_RIGHT)
+		_update_right_trigger(device, Input.get_joy_axis(device, JOY_AXIS_TRIGGER_RIGHT))
+
+func _update_right_trigger(device: int, axis_value: float) -> void:
+	if not _right_trigger_rest_values.has(device):
+		_right_trigger_rest_values[device] = 0.0
+	var rest_value := float(_right_trigger_rest_values[device])
+	var pull_strength := clampf(absf(axis_value - rest_value), 0.0, 1.0)
+	if pull_strength >= TRIGGER_PRESS_THRESHOLD:
+		_set_gamepad_action(&"pad_kick_right", device, true)
+	elif pull_strength <= TRIGGER_RELEASE_THRESHOLD:
+		_set_gamepad_action(&"pad_kick_right", device, false)
+
 func _handle_gamepad_button(event: InputEventJoypadButton) -> void:
 	for input_action: StringName in GAMEPAD_ACTIONS:
 		if input_action == &"pad_kick_right" or not event.is_action(input_action):
@@ -285,10 +308,7 @@ func _handle_gamepad_button(event: InputEventJoypadButton) -> void:
 func _handle_gamepad_motion(event: InputEventJoypadMotion) -> void:
 	if event.axis != JOY_AXIS_TRIGGER_RIGHT:
 		return
-	if event.axis_value >= TRIGGER_PRESS_THRESHOLD:
-		_set_gamepad_action(&"pad_kick_right", event.device, true)
-	elif event.axis_value <= TRIGGER_RELEASE_THRESHOLD:
-		_set_gamepad_action(&"pad_kick_right", event.device, false)
+	_update_right_trigger(event.device, event.axis_value)
 	get_viewport().set_input_as_handled()
 
 func _set_gamepad_action(input_action: StringName, device: int, pressed: bool) -> void:
@@ -305,7 +325,9 @@ func _set_gamepad_action(input_action: StringName, device: int, pressed: bool) -
 
 func _on_joy_connection_changed(device: int, connected: bool) -> void:
 	if connected:
+		_right_trigger_rest_values[device] = Input.get_joy_axis(device, JOY_AXIS_TRIGGER_RIGHT)
 		return
+	_right_trigger_rest_values.erase(device)
 	for key in _held_gamepad_actions.keys():
 		if str(key).begins_with("%d:" % device):
 			_held_gamepad_actions.erase(key)
