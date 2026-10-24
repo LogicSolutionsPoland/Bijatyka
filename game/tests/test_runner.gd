@@ -73,8 +73,10 @@ func _test_gamepad_input_map() -> void:
 	for row in Hud.ACTION_ROWS:
 		for action: String in row:
 			routed_actions.append(action)
-	_check(expected_buttons.size() == routed_actions.size() - 1 and Hud.GAMEPAD_ACTIONS.size() == routed_actions.size(), "touch keeps ten actions while right kick awaits its controller button")
-	_check(InputMap.action_get_events(&"pad_kick_right").is_empty(), "unassigned right kick cannot fire together with R1 left punch")
+	_check(expected_buttons.size() == routed_actions.size() - 1 and Hud.GAMEPAD_ACTIONS.size() == routed_actions.size(), "ten touch actions include nine button mappings and the R2 trigger")
+	var trigger_events := InputMap.action_get_events(&"pad_kick_right")
+	_check(trigger_events.size() == 1 and trigger_events[0] is InputEventJoypadMotion and (trigger_events[0] as InputEventJoypadMotion).axis == JOY_AXIS_TRIGGER_RIGHT and is_equal_approx((trigger_events[0] as InputEventJoypadMotion).axis_value, 1.0), "R2 / RT maps to the right trigger axis")
+	_check(Hud.GAMEPAD_ACTIONS.get(&"pad_kick_right", "") == "kick_right", "R2 routes to the right touch kick")
 	for action: StringName in expected_buttons:
 		var events := InputMap.action_get_events(action)
 		var actual: Array[int] = []
@@ -325,6 +327,13 @@ func _send_pad(button: int, down: bool) -> void:
 	event.pressed = down
 	root.push_input(event, true)
 
+func _send_trigger(amount: float, device: int = 0) -> void:
+	var event := InputEventJoypadMotion.new()
+	event.device = device
+	event.axis = JOY_AXIS_TRIGGER_RIGHT
+	event.axis_value = amount
+	root.push_input(event, true)
+
 func _test_ten_button_controls() -> void:
 	var original_size := root.size
 	root.size = Vector2i(1280, 720)
@@ -566,6 +575,37 @@ func _test_gamepad_controls() -> void:
 		for step in range(4):
 			player._update_attack(1.0)
 
+	var before_trigger := routed.size()
+	var attacks_before_trigger := player.attack_count
+	_send_trigger(0.4)
+	_check(routed.size() == before_trigger, "partial R2 pull below threshold does not kick")
+	_send_trigger(0.7)
+	_check(routed.size() == before_trigger + 1 and routed.back() == "kick_right" and player.attack_kind == "kick" and player.attack_side == "right", "R2 starts one right kick")
+	_send_trigger(0.45)
+	_send_trigger(0.8)
+	_check(routed.size() == before_trigger + 1, "R2 trigger noise cannot double-strike")
+	hud._process(0.19)
+	player._update_attack(0.19)
+	_check(routed.size() == before_trigger + 1, "held R2 has no early repeat")
+	hud._process(0.01)
+	player._update_attack(0.01)
+	_check(routed.size() == before_trigger + 2, "held R2 repeats after 0.20 seconds")
+	for repeat in range(3):
+		for frame in range(20):
+			hud._process(0.01)
+			player._update_attack(0.01)
+	_check(routed.size() == before_trigger + 5 and player.attack_count == attacks_before_trigger + 5, "held R2 permits five distinct right-kick attempts over 0.8 seconds")
+	_send_trigger(0.0)
+	hud._process(0.4)
+	_check(routed.size() == before_trigger + 5, "releasing R2 stops repeats")
+	for step in range(4):
+		player._update_attack(1.0)
+	_send_trigger(0.8)
+	_check(routed.size() == before_trigger + 6, "R2 makes a new kick after release and press")
+	_send_trigger(0.0)
+	for step in range(4):
+		player._update_attack(1.0)
+
 	for button in [JOY_BUTTON_A, JOY_BUTTON_B, JOY_BUTTON_X, JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_RIGHT, JOY_BUTTON_DPAD_DOWN, JOY_BUTTON_DPAD_LEFT]:
 		var before := routed.size()
 		_send_pad(button, true)
@@ -627,6 +667,7 @@ func _test_gamepad_controls() -> void:
 	hud.show_aura_selection(10)
 	_send_pad(JOY_BUTTON_Y, true)
 	_send_pad(JOY_BUTTON_X, true)
+	_send_trigger(0.8)
 	hud._process(0.4)
 	arena._update_gamepad_camera(0.4)
 	_check(routed.size() == before_menu, "controller gameplay buttons cannot fire through an aura menu")
@@ -636,9 +677,13 @@ func _test_gamepad_controls() -> void:
 	_check(routed.size() == before_menu, "holding buttons across pause cannot trigger delayed gameplay")
 	_send_pad(JOY_BUTTON_Y, false)
 	_send_pad(JOY_BUTTON_X, false)
+	_send_trigger(0.0)
 	_send_pad(JOY_BUTTON_Y, true)
 	_check(routed.size() == before_menu + 1, "a fresh press after the menu resumes melee")
 	_send_pad(JOY_BUTTON_Y, false)
+	_send_trigger(0.8)
+	_check(routed.size() == before_menu + 2 and routed.back() == "kick_right", "R2 requires a new press after the menu")
+	_send_trigger(0.0)
 	arena.queue_free()
 	await process_frame
 	root.size = original_size

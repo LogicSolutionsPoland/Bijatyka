@@ -20,8 +20,8 @@ const ACTION_ROWS := [
 	["spell_2", "spell_3"],
 	["dash", "jump"]
 ]
-# InputMap translates SDL logical buttons; the values are the existing touch HUD
-# actions. Keep the two sources routed through action_requested.
+# InputMap translates logical buttons and the R2 / RT trigger axis into the
+# existing touch HUD actions. Keep both sources routed through action_requested.
 const GAMEPAD_ACTIONS := {
 	&"pad_jump": "jump", &"pad_dash": "dash",
 	&"pad_punch_left": "punch_left", &"pad_punch_right": "punch_right",
@@ -31,6 +31,8 @@ const GAMEPAD_ACTIONS := {
 }
 const MELEE_HOLD_REPEAT_INTERVAL := 0.20
 const MELEE_TIMER_EPSILON := 0.0001
+const TRIGGER_PRESS_THRESHOLD := 0.55
+const TRIGGER_RELEASE_THRESHOLD := 0.35
 
 var _root: Control
 var _status_panel: PanelContainer
@@ -234,7 +236,9 @@ func _emit_action(action: String) -> void:
 	action_requested.emit(action)
 
 func _input(event: InputEvent) -> void:
-	if event is InputEventJoypadButton:
+	if event is InputEventJoypadMotion:
+		_handle_gamepad_motion(event as InputEventJoypadMotion)
+	elif event is InputEventJoypadButton:
 		_handle_gamepad_button(event as InputEventJoypadButton)
 	elif event is InputEventScreenTouch:
 		var handled := false
@@ -272,20 +276,32 @@ func _input(event: InputEvent) -> void:
 
 func _handle_gamepad_button(event: InputEventJoypadButton) -> void:
 	for input_action: StringName in GAMEPAD_ACTIONS:
-		if not event.is_action(input_action):
+		if input_action == &"pad_kick_right" or not event.is_action(input_action):
 			continue
-		var key := "%d:%s" % [event.device, String(input_action)]
-		if event.pressed:
-			if not _held_gamepad_actions.has(key):
-				var blocked := get_tree().paused or _selection_panel != null
-				var action: String = GAMEPAD_ACTIONS[input_action]
-				_held_gamepad_actions[key] = {"action": action, "timer": MELEE_HOLD_REPEAT_INTERVAL, "blocked": blocked}
-				if not blocked:
-					_emit_action(action)
-		else:
-			_held_gamepad_actions.erase(key)
+		_set_gamepad_action(input_action, event.device, event.pressed)
 		get_viewport().set_input_as_handled()
 		return
+
+func _handle_gamepad_motion(event: InputEventJoypadMotion) -> void:
+	if event.axis != JOY_AXIS_TRIGGER_RIGHT:
+		return
+	if event.axis_value >= TRIGGER_PRESS_THRESHOLD:
+		_set_gamepad_action(&"pad_kick_right", event.device, true)
+	elif event.axis_value <= TRIGGER_RELEASE_THRESHOLD:
+		_set_gamepad_action(&"pad_kick_right", event.device, false)
+	get_viewport().set_input_as_handled()
+
+func _set_gamepad_action(input_action: StringName, device: int, pressed: bool) -> void:
+	var key := "%d:%s" % [device, String(input_action)]
+	if pressed:
+		if not _held_gamepad_actions.has(key):
+			var blocked := get_tree().paused or _selection_panel != null
+			var action: String = GAMEPAD_ACTIONS[input_action]
+			_held_gamepad_actions[key] = {"action": action, "timer": MELEE_HOLD_REPEAT_INTERVAL, "blocked": blocked}
+			if not blocked:
+				_emit_action(action)
+	else:
+		_held_gamepad_actions.erase(key)
 
 func _on_joy_connection_changed(device: int, connected: bool) -> void:
 	if connected:

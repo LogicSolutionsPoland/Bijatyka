@@ -24,13 +24,13 @@ godot --headless --path game --script res://tests/test_runner.gd
 | Move | WASD / arrows | Left stick | Drag on left half |
 | Camera | Drag on right half | Right stick | Swipe on right half |
 | Left / right punch | J (right) | RB / R1, Y / Triangle | Left / right PUNCH |
-| Left / right kick | K (right) | LB / L1, Unassigned | Left / right KICK |
+| Left / right kick | K (right) | LB / L1, RT / R2 | Left / right KICK |
 | Jump | Space | A / Cross | JUMP |
 | Dash | Shift | B / Circle or X / Square | DASH |
 | Magic slots 1 / 2 / 3 / 4 | L casts selected spell | D-pad Up / Right / Down / Left | Four direct MAGIC slots |
 | Cycle unlocked spells | U | — | Use the desired MAGIC slot directly |
 
-Xbox X / PlayStation Square performs dash; B / Circle also performs dash until its new action is chosen. RB / R1 performs left punch. Controller right kick is temporarily unassigned, while touch right kick remains available.
+Xbox X / PlayStation Square performs dash; B / Circle also performs dash until its new action is chosen. RB / R1 performs left punch, and the RT / R2 trigger performs right kick. The trigger uses press and release thresholds so a tap attacks once and a hold repeats at the melee cadence.
 
 The touch buttons form two columns at the screen edges, in this exact order:
 
@@ -42,7 +42,7 @@ The touch buttons form two columns at the screen edges, in this exact order:
 | MAGIC (slot 3) | MAGIC (slot 4) |
 | DASH | JUMP |
 
-There is no on-screen analog stick: dragging on the left half moves, while swiping on the right half rotates the camera. The gamepad left stick moves and the right stick rotates the camera. Its buttons use Godot's logical SDL mappings and feed the same HUD action signal as touch.
+There is no on-screen analog stick: dragging on the left half moves, while swiping on the right half rotates the camera. The gamepad left stick moves and the right stick rotates the camera. Its buttons and trigger use Godot's logical mappings and feed the same HUD action signal as touch.
 Magic slots fill in the order distinct spells are unlocked through aura choices.
 All four stay visible while locked; unlocked slots show the spell name below MAGIC.
 Spells stay in their slots through normal RAGE decay and all slots lock again on a soul reset.
