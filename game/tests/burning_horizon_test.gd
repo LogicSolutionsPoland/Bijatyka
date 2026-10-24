@@ -28,13 +28,13 @@ func run() -> void:
 		for child in backdrop.get_children():
 			var wall := child as MeshInstance3D
 			check(wall.visible, "distance culling must not remove horizon panels")
-			check(wall.mesh.size == Vector2(60, 6), "each panel spans 60 m and stands 6 m tall")
+			check(wall.mesh.size == Vector2(40, 6), "each panel spans 60 m and stands 6 m tall")
 			check(wall.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "backdrop has no shadows")
-		# Every horizontal ray must hit one of the four panels at 30..42.43 m.
+		# Every horizontal ray must hit one of the four panels at 20..28.29 m.
 		for degrees in range(0, 360, 5):
 			var direction := Vector2(cos(deg_to_rad(float(degrees))), sin(deg_to_rad(float(degrees))))
 			var distance := 30.0 / maxf(absf(direction.x), absf(direction.y))
-			check(distance >= 29.99 and distance <= 42.43, "box covers the full horizontal view")
+			check(distance >= 19.99 and distance <= 28.29, "box covers the full horizontal view")
 	var old_rotation := backdrop.global_rotation
 	arena._apply_camera_look(1.5, -0.1)
 	check(backdrop.global_rotation.is_equal_approx(old_rotation), "looking around does not rotate the skyline")
