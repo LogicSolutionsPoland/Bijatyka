@@ -19,6 +19,7 @@ const DASH_DISTANCE := 15.0
 const DASH_DURATION := 0.30
 const TARGET_MELEE_HITS_PER_SECOND := 5.0
 const TARGET_MELEE_CYCLE_SECONDS := 1.0 / TARGET_MELEE_HITS_PER_SECOND
+const MELEE_TIMER_EPSILON := 0.0001
 const ATTACKS := {
 	"punch": {"windup": 0.10, "active": TARGET_MELEE_CYCLE_SECONDS - 0.10, "recovery": 0.34, "range": 1.55, "damage": 18, "cone": 0.42},
 	"kick": {"windup": 0.12, "active": TARGET_MELEE_CYCLE_SECONDS - 0.12, "recovery": 0.48, "range": 2.15, "damage": 28, "cone": 0.30}
@@ -155,7 +156,7 @@ func _read_desktop_input(delta: float) -> void:
 			_desktop_attack_repeat_timers[input_action] = TARGET_MELEE_CYCLE_SECONDS
 		elif Input.is_action_pressed(input_action):
 			var repeat_time := float(_desktop_attack_repeat_timers.get(input_action, TARGET_MELEE_CYCLE_SECONDS)) - delta
-			if repeat_time <= 0.0:
+			if repeat_time <= MELEE_TIMER_EPSILON:
 				request_attack(kind)
 				repeat_time += TARGET_MELEE_CYCLE_SECONDS
 			_desktop_attack_repeat_timers[input_action] = repeat_time
@@ -253,7 +254,7 @@ func _update_attack(delta: float) -> void:
 		return
 	var remaining_time := maxf(0.0, delta)
 	while attack_phase != "ready":
-		if remaining_time < attack_phase_time:
+		if remaining_time + MELEE_TIMER_EPSILON < attack_phase_time:
 			attack_phase_time -= remaining_time
 			return
 		remaining_time = maxf(0.0, remaining_time - attack_phase_time)
