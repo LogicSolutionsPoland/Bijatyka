@@ -13,6 +13,9 @@ const CAMERA_SHOULDER_OFFSET := 0.75
 const CAMERA_PITCH_DEGREES := -6.0
 const CAMERA_YAW_RADIANS_PER_PIXEL := 0.006
 const CAMERA_PITCH_RADIANS_PER_PIXEL := 0.004
+const GAMEPAD_LOOK_DEADZONE := 0.12
+const CAMERA_GAMEPAD_YAW_RADIANS_PER_SECOND := 2.4
+const CAMERA_GAMEPAD_PITCH_RADIANS_PER_SECOND := 1.8
 const CAMERA_MIN_PITCH_DEGREES := -28.0
 const CAMERA_MAX_PITCH_DEGREES := 18.0
 
@@ -51,6 +54,7 @@ func _process(delta: float) -> void:
 		return
 	var target_position := player.global_position + Vector3(0.0, CAMERA_PIVOT_HEIGHT, 0.0)
 	camera_rig.global_position = camera_rig.global_position.lerp(target_position, 1.0 - exp(-delta * 7.5))
+	_update_gamepad_camera(delta)
 	player.set_camera_yaw(_camera_yaw)
 	_status_timer += delta
 	if _status_timer >= 0.18:
@@ -339,9 +343,26 @@ func _build_hud() -> void:
 	add_child(hud)
 
 func _on_camera_dragged(relative: Vector2) -> void:
-	_camera_yaw = wrapf(_camera_yaw - relative.x * CAMERA_YAW_RADIANS_PER_PIXEL, -PI, PI)
+	_apply_camera_look(
+		-relative.x * CAMERA_YAW_RADIANS_PER_PIXEL,
+		-relative.y * CAMERA_PITCH_RADIANS_PER_PIXEL
+	)
+
+func _update_gamepad_camera(delta: float) -> void:
+	if get_tree().paused or (hud != null and hud._selection_panel != null):
+		return
+	var look := Input.get_vector("camera_left", "camera_right", "camera_up", "camera_down")
+	if look.length() < GAMEPAD_LOOK_DEADZONE:
+		return
+	_apply_camera_look(
+		-look.x * CAMERA_GAMEPAD_YAW_RADIANS_PER_SECOND * delta,
+		-look.y * CAMERA_GAMEPAD_PITCH_RADIANS_PER_SECOND * delta
+	)
+
+func _apply_camera_look(yaw_delta: float, pitch_delta: float) -> void:
+	_camera_yaw = wrapf(_camera_yaw + yaw_delta, -PI, PI)
 	_camera_pitch = clampf(
-		_camera_pitch - relative.y * CAMERA_PITCH_RADIANS_PER_PIXEL,
+		_camera_pitch + pitch_delta,
 		deg_to_rad(CAMERA_MIN_PITCH_DEGREES),
 		deg_to_rad(CAMERA_MAX_PITCH_DEGREES)
 	)

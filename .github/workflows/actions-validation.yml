@@ -6,6 +6,7 @@ on:
       - codex/over-shoulder-camera
       - codex/no-melee-cooldown
       - codex/rapid-melee-five-per-second
+      - codex/gamepad-integration
   pull_request:
     branches:
       - main
