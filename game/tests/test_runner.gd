@@ -322,7 +322,6 @@ func _test_ten_button_controls() -> void:
 		_tap(locked)
 	_check(emitted.is_empty() and player.magic_energy == 100.0, "locked magic taps cannot cast or spend energy")
 
-	hud.camera_dragged.connect(arena._on_camera_dragged)
 	var movement_at := Vector2(420, 500)
 	_send_touch(movement_at, 0, true)
 	_send_drag(movement_at + Vector2(0, -96), 0, Vector2(0, -96))
