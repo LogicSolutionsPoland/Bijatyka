@@ -350,16 +350,26 @@ func cast_spell() -> bool:
 		return false
 	if not rage.unlocked_spells.has(current_spell):
 		current_spell = rage.unlocked_spells[0]
-	var spec: Dictionary = SPELLS[current_spell]
+	return _cast_spell(current_spell)
+
+func cast_blast() -> bool:
+	if rage.current_soul_condemned or not rage.unlocked_spells.has("fire"):
+		return false
+	return _cast_spell("fire")
+
+func _cast_spell(school: String) -> bool:
+	if rage.current_soul_condemned or not rage.unlocked_spells.has(school):
+		return false
+	var spec: Dictionary = SPELLS[school]
 	if magic_energy < float(spec.cost):
 		return false
 	var target: FoundationEnemy = null
-	if current_spell != "light":
+	if school != "light":
 		target = _find_target(float(spec.range), 0.25)
 		if target == null:
 			return false
 	magic_energy -= float(spec.cost)
-	match current_spell:
+	match school:
 		"light":
 			health = mini(MAX_HEALTH, health + 30)
 			health_changed.emit(health, MAX_HEALTH)
@@ -379,7 +389,7 @@ func cast_spell() -> bool:
 			health = mini(MAX_HEALTH, health + roundi(float(damage) * 0.3))
 			health_changed.emit(health, MAX_HEALTH)
 	if target != null:
-		_spawn_spell_burst(target.global_position + Vector3(0.0, 1.0, 0.0))
+		_spawn_spell_burst(target.global_position + Vector3(0.0, 1.0, 0.0), school)
 	magic_changed.emit(magic_energy, MAX_MAGIC, current_spell)
 	return true
 
@@ -528,7 +538,7 @@ func _spawn_attack_impact(at: Vector3, kind: String) -> void:
 	tween.parallel().tween_property(material, "albedo_color:a", 0.0, 0.18)
 	tween.tween_callback(impact.queue_free)
 
-func _spawn_spell_burst(at: Vector3) -> void:
+func _spawn_spell_burst(at: Vector3, school: String = "") -> void:
 	var root := MeshInstance3D.new()
 	root.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var sphere := SphereMesh.new()
@@ -536,9 +546,11 @@ func _spawn_spell_burst(at: Vector3) -> void:
 	sphere.height = 0.56
 	root.mesh = sphere
 	var material := StandardMaterial3D.new()
-	material.albedo_color = SPELLS[current_spell].color
+	var effect_school: String = school if not school.is_empty() else current_spell
+	var spell_color: Color = SPELLS[effect_school].color
+	material.albedo_color = spell_color
 	material.emission_enabled = true
-	material.emission = SPELLS[current_spell].color
+	material.emission = spell_color
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	root.material_override = material
 	var scene_root: Node = get_tree().current_scene

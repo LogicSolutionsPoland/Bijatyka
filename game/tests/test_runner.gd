@@ -64,7 +64,7 @@ func _test_gamepad_input_map() -> void:
 		_check(found, "%s maps to the expected gamepad stick axis" % String(action))
 	var expected_buttons := {
 		&"pad_jump": [JOY_BUTTON_A], &"pad_dash": [JOY_BUTTON_X], &"pad_cast_spell": [JOY_BUTTON_B],
-		&"pad_punch_left": [JOY_BUTTON_RIGHT_SHOULDER], &"pad_punch_right": [JOY_BUTTON_Y],
+		&"pad_punch_left": [JOY_BUTTON_RIGHT_SHOULDER], &"pad_blast": [JOY_BUTTON_Y],
 		&"pad_kick_left": [JOY_BUTTON_LEFT_SHOULDER],
 		&"pad_spell_0": [JOY_BUTTON_DPAD_UP], &"pad_spell_1": [JOY_BUTTON_DPAD_RIGHT],
 		&"pad_spell_2": [JOY_BUTTON_DPAD_DOWN], &"pad_spell_3": [JOY_BUTTON_DPAD_LEFT]
@@ -73,7 +73,7 @@ func _test_gamepad_input_map() -> void:
 	for row in Hud.ACTION_ROWS:
 		for action: String in row:
 			routed_actions.append(action)
-	_check(expected_buttons.size() == routed_actions.size() and Hud.GAMEPAD_ACTIONS.size() == routed_actions.size() + 1, "ten touch actions plus selected magic use buttons and the R2 trigger")
+	_check(expected_buttons.size() == routed_actions.size() and Hud.GAMEPAD_ACTIONS.size() == routed_actions.size() + 1, "gamepad includes all digital controls plus direct magic and Blast actions")
 	var trigger_events := InputMap.action_get_events(&"pad_kick_right")
 	_check(trigger_events.size() == 1 and trigger_events[0] is InputEventJoypadMotion and (trigger_events[0] as InputEventJoypadMotion).axis == JOY_AXIS_TRIGGER_RIGHT and is_equal_approx((trigger_events[0] as InputEventJoypadMotion).axis_value, 1.0), "R2 / RT maps to the right trigger axis")
 	_check(Hud.GAMEPAD_ACTIONS.get(&"pad_kick_right", "") == "kick_right", "R2 routes to the right touch kick")
@@ -89,6 +89,8 @@ func _test_gamepad_input_map() -> void:
 		_check(actual == expected and events.size() == expected.size(), "%s uses its assigned SDL logical gamepad buttons" % action)
 		if action == &"pad_cast_spell":
 			_check(Hud.GAMEPAD_ACTIONS[action] == "cast_spell", "B casts the selected unlocked spell")
+		elif action == &"pad_blast":
+			_check(Hud.GAMEPAD_ACTIONS[action] == "blast", "Y triggers Blast")
 		else:
 			_check(routed_actions.has(Hud.GAMEPAD_ACTIONS.get(action, "")), "%s routes to an existing touch HUD action" % action)
 	var assigned_buttons := {}
@@ -227,7 +229,7 @@ func _test_magic_unlock_and_damage() -> void:
 	target.set_physics_process(false)
 	root.add_child(target)
 	await process_frame
-	_check(player.rage.unlocked_spells.is_empty() and not player.cast_spell(), "new soul cannot cast a spell before an aura choice")
+	_check(player.rage.unlocked_spells.is_empty() and not player.cast_spell() and not player.cast_blast(), "new soul cannot cast magic or Blast before an aura choice")
 	player.rage.gain_per_effective_hit = 10.0
 	_check(player.rage.record_effective_hit(1.0), "verified hit opens the first spell choice")
 	_check(player.rage.resolve_selection("fire") and player.current_spell == "fire", "aura choice unlocks its associated legacy spell")
@@ -237,6 +239,12 @@ func _test_magic_unlock_and_damage() -> void:
 	var rage_before_burn := player.rage.rage
 	player._update_burns(1.0)
 	_check(target.hp == hp_before - 24 and player.rage.rage == rage_before_burn, "fire burn damages over time without double-counting RAGE")
+	player.rage.unlocked_spells.append("light")
+	player.current_spell = "light"
+	var blast_hp_before := target.hp
+	var blast_magic_before := player.magic_energy
+	_check(player.cast_blast(), "unlocked Fire school can cast Blast directly")
+	_check(target.hp == blast_hp_before - 20 and player.magic_energy == blast_magic_before - 15 and player.current_spell == "light", "Blast uses Fire damage and cost without changing the selected spell")
 	player.queue_free()
 	target.queue_free()
 	await process_frame
@@ -524,7 +532,7 @@ func _test_gamepad_controls() -> void:
 	hud.action_requested.connect(func(action: String) -> void: routed.append(action))
 	var buttons := {
 		JOY_BUTTON_A: "jump", JOY_BUTTON_B: "cast_spell",
-		JOY_BUTTON_X: "dash", JOY_BUTTON_Y: "punch_right",
+		JOY_BUTTON_X: "dash", JOY_BUTTON_Y: "blast",
 		JOY_BUTTON_LEFT_SHOULDER: "kick_left", JOY_BUTTON_RIGHT_SHOULDER: "punch_left",
 		JOY_BUTTON_DPAD_UP: "spell_0", JOY_BUTTON_DPAD_RIGHT: "spell_1",
 		JOY_BUTTON_DPAD_DOWN: "spell_2", JOY_BUTTON_DPAD_LEFT: "spell_3"
@@ -537,7 +545,7 @@ func _test_gamepad_controls() -> void:
 		_send_pad(button, false)
 		hud._process(0.4)
 		_check(routed.size() == before + 1, "%s release stops held input" % buttons[button])
-		if str(buttons[button]).begins_with("spell_") or buttons[button] == "cast_spell":
+		if str(buttons[button]).begins_with("spell_") or buttons[button] == "cast_spell" or buttons[button] == "blast":
 			_check(player.magic_energy == energy_before, "locked %s spends no energy" % buttons[button])
 		if str(buttons[button]).begins_with("punch_") or str(buttons[button]).begins_with("kick_"):
 			_check(player.attack_kind == str(buttons[button]).get_slice("_", 0) or player._queued_attack_kind == str(buttons[button]).get_slice("_", 0), "%s uses the existing melee path" % buttons[button])
@@ -558,7 +566,7 @@ func _test_gamepad_controls() -> void:
 		player._update_attack(1.0)
 
 	# Every melee button has one immediate strike and repeats at the touch cadence.
-	for button in [JOY_BUTTON_Y, JOY_BUTTON_LEFT_SHOULDER, JOY_BUTTON_RIGHT_SHOULDER]:
+	for button in [JOY_BUTTON_LEFT_SHOULDER, JOY_BUTTON_RIGHT_SHOULDER]:
 		var before := routed.size()
 		var attacks_before := player.attack_count
 		_send_pad(button, true)
@@ -615,7 +623,7 @@ func _test_gamepad_controls() -> void:
 	for step in range(4):
 		player._update_attack(1.0)
 
-	for button in [JOY_BUTTON_A, JOY_BUTTON_B, JOY_BUTTON_X, JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_RIGHT, JOY_BUTTON_DPAD_DOWN, JOY_BUTTON_DPAD_LEFT]:
+	for button in [JOY_BUTTON_A, JOY_BUTTON_B, JOY_BUTTON_X, JOY_BUTTON_Y, JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_RIGHT, JOY_BUTTON_DPAD_DOWN, JOY_BUTTON_DPAD_LEFT]:
 		var before := routed.size()
 		_send_pad(button, true)
 		hud._process(1.0)
@@ -649,6 +657,18 @@ func _test_gamepad_controls() -> void:
 		_send_pad(button, false)
 		_check(player.magic_energy == energy_before, "locked D-pad spell slot remains harmless")
 
+	player.rage.unlocked_spells.assign(["light", "fire"])
+	arena._refresh_hud()
+	var blast_target := get_nodes_in_group("enemies")[0] as FoundationEnemy
+	var blast_hp_before := blast_target.hp
+	var blast_energy_before := player.magic_energy
+	var blast_routes_before := routed.size()
+	_send_pad(JOY_BUTTON_Y, true)
+	hud._process(0.4)
+	_check(routed.size() == blast_routes_before + 1 and routed.back() == "blast", "Xbox Y routes once to Blast")
+	_check(blast_target.hp == blast_hp_before - 20 and player.magic_energy == blast_energy_before - 15 and player.current_spell == "light", "Xbox Y casts Fire Blast without changing the selected B spell")
+	_send_pad(JOY_BUTTON_Y, false)
+
 	Input.action_press(&"move_forward")
 	Input.action_press(&"move_right")
 	Input.action_press(&"camera_right")
@@ -656,12 +676,12 @@ func _test_gamepad_controls() -> void:
 	var yaw_before := arena._camera_yaw
 	var pitch_before := arena._camera_pitch
 	var before_combo := routed.size()
-	_send_pad(JOY_BUTTON_Y, true)
+	_send_pad(JOY_BUTTON_RIGHT_SHOULDER, true)
 	arena._update_gamepad_camera(0.1)
 	_check(player.move_input().x > 0.0 and player.move_input().y < 0.0, "left stick supports diagonal movement during an attack")
 	_check(arena._camera_yaw < yaw_before and arena._camera_pitch > pitch_before, "right stick simultaneously turns and tilts upward")
-	_check(routed.size() == before_combo + 1 and player.attack_side == "right", "both sticks and a melee press can operate together")
-	_send_pad(JOY_BUTTON_Y, false)
+	_check(routed.size() == before_combo + 1 and player.attack_side == "left", "both sticks and an R1 punch can operate together")
+	_send_pad(JOY_BUTTON_RIGHT_SHOULDER, false)
 	Input.action_release(&"move_forward")
 	Input.action_release(&"move_right")
 	Input.action_release(&"camera_right")
@@ -693,7 +713,7 @@ func _test_gamepad_controls() -> void:
 	_send_pad(JOY_BUTTON_X, false)
 	_send_trigger(0.0)
 	_send_pad(JOY_BUTTON_Y, true)
-	_check(routed.size() == before_menu + 1, "a fresh press after the menu resumes melee")
+	_check(routed.size() == before_menu + 1 and routed.back() == "blast", "a fresh Y press after the menu activates Blast")
 	_send_pad(JOY_BUTTON_Y, false)
 	_send_trigger(0.8)
 	_check(routed.size() == before_menu + 2 and routed.back() == "kick_right", "R2 requires a new press after the menu")

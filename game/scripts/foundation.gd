@@ -405,6 +405,7 @@ func _on_hud_action(action: String) -> void:
 		"jump": player.try_jump()
 		"dash": player.try_dash()
 		"cast_spell": player.cast_spell()
+		"blast": player.cast_blast()
 		"spell_0", "spell_1", "spell_2", "spell_3": player.cast_spell_slot(int(action.get_slice("_", 1)))
 
 func _on_aura_chosen(aura_id: String) -> void:

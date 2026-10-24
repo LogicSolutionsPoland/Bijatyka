@@ -23,15 +23,17 @@ godot --headless --path game --script res://tests/test_runner.gd
 |---|---|---|---|
 | Move | WASD / arrows | Left stick | Drag on left half |
 | Camera | Drag on right half | Right stick | Swipe on right half |
-| Left / right punch | J (right) | RB / R1, Y / Triangle | Left / right PUNCH |
+| Left punch | — | RB / R1 | Left PUNCH |
+| Right punch | J | — | Right PUNCH |
 | Left / right kick | K (right) | LB / L1, RT / R2 | Left / right KICK |
+| Blast | — | Y / Triangle (Fire school) | — |
 | Jump | Space | A / Cross | JUMP |
 | Dash | Shift | X / Square | DASH |
 | Cast selected spell | L | B / Circle | Use the selected MAGIC slot |
 | Magic slots 1 / 2 / 3 / 4 | — | D-pad Up / Right / Down / Left | Four direct MAGIC slots |
 | Cycle unlocked spells | U | — | Use the desired MAGIC slot directly |
 
-Xbox X / PlayStation Square performs dash, while B / Circle casts the selected unlocked spell. D-pad directions cast and select their corresponding spell slots. RB / R1 performs left punch, and the RT / R2 trigger performs right kick. The trigger uses press and release thresholds so a tap attacks once and a hold repeats at the melee cadence.
+Xbox X / PlayStation Square performs dash, while B / Circle casts the selected unlocked spell. D-pad directions cast and select their corresponding spell slots. RB / R1 performs left punch, and the RT / R2 trigger performs right kick. Y / Triangle casts Blast directly after the Fire aura is unlocked; it costs 15 magic, deals 20 fire damage, and applies the existing burn effect without changing the selected B spell. The trigger uses press and release thresholds so a tap attacks once and a hold repeats at the melee cadence.
 
 The touch buttons form two columns at the screen edges, in this exact order:
 
