@@ -1,7 +1,8 @@
 shader_type spatial;
-render_mode unshaded, cull_disabled, fog_disabled;
+render_mode unshaded, cull_disabled, fog_disabled, depth_draw_never;
 
-// One shared material, no textures, lights, transparency or particle systems.
+// First detail boundary: translucent so enemies beyond 20 m remain readable.
+// One shared material; no textures, lights or particle systems.
 float hash(float p) { return fract(sin(p * 127.1) * 43758.5453); }
 
 void fragment() {
@@ -25,8 +26,10 @@ void fragment() {
 	float windows = step(0.65, fract(x * 145.0)) * step(0.72, fract(y * 25.0)) * building;
 	color += vec3(0.65, 0.12, 0.008) * windows * edge;
 	color = mix(color, vec3(1.0, 0.22 + flame_wave, 0.015), flame * edge * 0.8);
-	// Identical opaque haze at every panel edge and base hides the box seams.
+	// Fade the panel borders into the existing world haze.
 	color = mix(haze, color, smoothstep(0.0, 0.18, y));
 	color = mix(color, sky, smoothstep(0.8, 1.0, y));
 	ALBEDO = color;
+	float vertical_fade = smoothstep(0.0, 0.12, y) * (1.0 - smoothstep(0.65, 1.0, y));
+	ALPHA = clamp(0.16 + building * 0.22 + flame * 0.20 + smoke * 0.06, 0.0, 0.60) * edge * vertical_fade;
 }
