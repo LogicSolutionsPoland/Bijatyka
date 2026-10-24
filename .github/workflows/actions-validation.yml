@@ -8,6 +8,7 @@ on:
       - codex/rapid-melee-five-per-second
       - codex/gamepad-integration
       - codex/burning-horizon
+      - codex/endless-invasion-40
   pull_request:
     branches:
       - main
