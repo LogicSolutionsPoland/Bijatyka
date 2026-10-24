@@ -2,16 +2,11 @@ extends RefCounted
 class_name FightAnimationBuilder
 
 const LIBRARY_NAME := &"thornbound_combat"
-const GUARD_CLIP_NAME := &"guard_stance"
-const GUARD_CLIP_PATH := &"thornbound_combat/guard_stance"
 const ATTACK_SIDES := ["left", "right"]
 const ATTACK_KINDS := ["punch", "kick"]
 
 static func clip_path(kind: String, side: String) -> StringName:
     return StringName("%s/%s_%s" % [String(LIBRARY_NAME), side, kind])
-
-static func guard_clip_path() -> StringName:
-    return GUARD_CLIP_PATH
 
 static func install(animation_player: AnimationPlayer, skeleton: Skeleton3D, attack_profiles: Dictionary) -> bool:
     if animation_player == null or skeleton == null:
@@ -26,11 +21,6 @@ static func install(animation_player: AnimationPlayer, skeleton: Skeleton3D, att
             return false
 
     var library := AnimationLibrary.new()
-    var guard_animation := _build_guard_animation(skeleton, animation_root.get_path_to(skeleton))
-    if guard_animation.get_track_count() < 5:
-        return false
-    if library.add_animation(GUARD_CLIP_NAME, guard_animation) != OK:
-        return false
     for kind: String in ATTACK_KINDS:
         var profile: Dictionary = attack_profiles.get(kind, {})
         if profile.is_empty():
@@ -47,45 +37,11 @@ static func install(animation_player: AnimationPlayer, skeleton: Skeleton3D, att
         animation_player.remove_animation_library(LIBRARY_NAME)
     if animation_player.add_animation_library(LIBRARY_NAME, library) != OK:
         return false
-    if not animation_player.has_animation(guard_clip_path()):
-        return false
     for kind: String in ATTACK_KINDS:
         for side: String in ATTACK_SIDES:
             if not animation_player.has_animation(clip_path(kind, side)):
                 return false
     return true
-
-static func _build_guard_animation(skeleton: Skeleton3D, skeleton_path: NodePath) -> Animation:
-    var animation := Animation.new()
-    animation.length = 1.6
-    animation.step = 1.0 / 60.0
-    animation.loop_mode = Animation.LOOP_LINEAR
-    var key_times := [0.0, 0.4, 0.8, 1.2, 1.6]
-    var poses: Dictionary = {
-        "Hips": [Vector3(0.015, 0.0, 0.0), Vector3(0.018, 0.0, 0.0), Vector3(0.015, 0.0, 0.0), Vector3(0.012, 0.0, 0.0), Vector3(0.015, 0.0, 0.0)],
-        "Spine": [Vector3(-0.025, 0.0, 0.0), Vector3(-0.032, 0.0, 0.0), Vector3(-0.025, 0.0, 0.0), Vector3(-0.018, 0.0, 0.0), Vector3(-0.025, 0.0, 0.0)],
-        "Chest": [Vector3(-0.065, 0.0, 0.0), Vector3(-0.085, 0.0, 0.0), Vector3(-0.065, 0.0, 0.0), Vector3(-0.050, 0.0, 0.0), Vector3(-0.065, 0.0, 0.0)],
-        "LeftUpperArm": [Vector3(-0.56, 0.0, -0.15), Vector3(-0.58, 0.0, -0.15), Vector3(-0.56, 0.0, -0.15), Vector3(-0.54, 0.0, -0.15), Vector3(-0.56, 0.0, -0.15)],
-        "RightUpperArm": [Vector3(-0.56, 0.0, 0.15), Vector3(-0.58, 0.0, 0.15), Vector3(-0.56, 0.0, 0.15), Vector3(-0.54, 0.0, 0.15), Vector3(-0.56, 0.0, 0.15)],
-        "LeftForearm": [Vector3(-0.96, 0.0, 0.0), Vector3(-0.99, 0.0, 0.0), Vector3(-0.96, 0.0, 0.0), Vector3(-0.93, 0.0, 0.0), Vector3(-0.96, 0.0, 0.0)],
-        "RightForearm": [Vector3(-0.96, 0.0, 0.0), Vector3(-0.99, 0.0, 0.0), Vector3(-0.96, 0.0, 0.0), Vector3(-0.93, 0.0, 0.0), Vector3(-0.96, 0.0, 0.0)],
-        "LeftHand": [Vector3(-0.08, 0.0, 0.0), Vector3(-0.09, 0.0, 0.0), Vector3(-0.08, 0.0, 0.0), Vector3(-0.07, 0.0, 0.0), Vector3(-0.08, 0.0, 0.0)],
-        "RightHand": [Vector3(-0.08, 0.0, 0.0), Vector3(-0.09, 0.0, 0.0), Vector3(-0.08, 0.0, 0.0), Vector3(-0.07, 0.0, 0.0), Vector3(-0.08, 0.0, 0.0)]
-    }
-    for raw_bone_name in poses.keys():
-        var bone_name := String(raw_bone_name)
-        var bone_index := skeleton.find_bone(bone_name)
-        if bone_index < 0:
-            continue
-        var rest_rotation := skeleton.get_bone_rest(bone_index).basis.get_rotation_quaternion()
-        var track := animation.add_track(Animation.TYPE_ROTATION_3D)
-        animation.track_set_path(track, NodePath("%s:%s" % [str(skeleton_path), bone_name]))
-        animation.track_set_interpolation_type(track, Animation.INTERPOLATION_CUBIC)
-        var eulers: Array = poses[bone_name]
-        for key_index in range(mini(key_times.size(), eulers.size())):
-            var local_rotation := (rest_rotation * Quaternion.from_euler(eulers[key_index])).normalized()
-            animation.rotation_track_insert_key(track, float(key_times[key_index]), local_rotation)
-    return animation
 
 static func _build_animation(skeleton: Skeleton3D, skeleton_path: NodePath, kind: String, side: String, profile: Dictionary) -> Animation:
     var windup := float(profile.get("windup", 0.18))
