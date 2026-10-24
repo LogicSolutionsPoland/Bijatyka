@@ -15,6 +15,7 @@ const ACTION_ROWS := [
 	["spell_2", "spell_3"],
 	["dash", "jump"]
 ]
+const MELEE_HOLD_REPEAT_INTERVAL := 0.20
 
 var _root: Control
 var _stick: TouchStick
@@ -28,6 +29,7 @@ var _magic_tag: Label
 var _notice: Label
 var _action_buttons: Dictionary = {}
 var _pressed_pointers: Dictionary = {}
+var _held_melee_repeat_timers: Dictionary = {}
 var _selection_panel: PanelContainer
 var _layout_size := Vector2.ZERO
 
@@ -45,6 +47,30 @@ func _ready() -> void:
 	_build_notice()
 	_root.resized.connect(_layout)
 	_layout()
+
+func _process(delta: float) -> void:
+	if get_tree().paused or _selection_panel != null:
+		_held_melee_repeat_timers.clear()
+		return
+	for raw_pointer_id in _pressed_pointers.keys():
+		var pointer_id := int(raw_pointer_id)
+		var button := _pressed_pointers[raw_pointer_id] as Button
+		if button == null or not is_instance_valid(button) or button.disabled:
+			_held_melee_repeat_timers.erase(pointer_id)
+			continue
+		var action := str(button.get_meta("action", ""))
+		if not _is_melee_action(action):
+			_held_melee_repeat_timers.erase(pointer_id)
+			continue
+		var repeat_time := float(_held_melee_repeat_timers.get(pointer_id, MELEE_HOLD_REPEAT_INTERVAL))
+		repeat_time -= minf(delta, MELEE_HOLD_REPEAT_INTERVAL)
+		if repeat_time <= 0.0:
+			_emit_action(action)
+			repeat_time += MELEE_HOLD_REPEAT_INTERVAL
+		_held_melee_repeat_timers[pointer_id] = repeat_time
+
+func _is_melee_action(action: String) -> bool:
+	return action.begins_with("punch_") or action.begins_with("kick_")
 
 func get_move_vector() -> Vector2:
 	return _stick.get_vector() if _stick != null else Vector2.ZERO
@@ -188,6 +214,7 @@ func _handle_pointer(pointer_id: int, screen_position: Vector2, pressed: bool) -
 			return false
 		var released_button: Button = _pressed_pointers[pointer_id]
 		_pressed_pointers.erase(pointer_id)
+		_held_melee_repeat_timers.erase(pointer_id)
 		released_button.set_pressed_no_signal(_pressed_pointers.values().has(released_button))
 		return true
 	if _pressed_pointers.has(pointer_id):
@@ -200,7 +227,10 @@ func _handle_pointer(pointer_id: int, screen_position: Vector2, pressed: bool) -
 			if not button.disabled:
 				_pressed_pointers[pointer_id] = button
 				button.set_pressed_no_signal(true)
-				_emit_action(str(button.get_meta("action")))
+				var action := str(button.get_meta("action"))
+				if _is_melee_action(action):
+					_held_melee_repeat_timers[pointer_id] = MELEE_HOLD_REPEAT_INTERVAL
+				_emit_action(action)
 			return true
 	return false
 
@@ -208,6 +238,7 @@ func _release_pointers() -> void:
 	for button: Button in _pressed_pointers.values():
 		button.set_pressed_no_signal(false)
 	_pressed_pointers.clear()
+	_held_melee_repeat_timers.clear()
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
