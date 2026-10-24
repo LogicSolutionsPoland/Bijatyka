@@ -14,6 +14,7 @@ func _initialize() -> void:
 
 func _run_all() -> void:
 	_check(Foundation != null and Hud != null, "scene and swipe-control scripts compile")
+	_test_gamepad_input_map()
 	_test_rage_rules()
 	_test_multiple_milestones_and_reset()
 	await _test_hud_aura_choices()
@@ -37,6 +38,29 @@ func _check(condition: bool, description: String) -> void:
 	checks += 1
 	if not condition:
 		failures.append(description)
+
+func _test_gamepad_input_map() -> void:
+	var expected_axes := {
+		"move_left": [JOY_AXIS_LEFT_X, -1.0],
+		"move_right": [JOY_AXIS_LEFT_X, 1.0],
+		"move_forward": [JOY_AXIS_LEFT_Y, -1.0],
+		"move_back": [JOY_AXIS_LEFT_Y, 1.0],
+		"camera_left": [JOY_AXIS_RIGHT_X, -1.0],
+		"camera_right": [JOY_AXIS_RIGHT_X, 1.0],
+		"camera_up": [JOY_AXIS_RIGHT_Y, -1.0],
+		"camera_down": [JOY_AXIS_RIGHT_Y, 1.0]
+	}
+	for raw_action in expected_axes.keys():
+		var action := StringName(raw_action)
+		var expected: Array = expected_axes[raw_action]
+		var found := false
+		for input_event: InputEvent in InputMap.action_get_events(action):
+			if input_event is InputEventJoypadMotion:
+				var motion := input_event as InputEventJoypadMotion
+				if motion.axis == int(expected[0]) and is_equal_approx(motion.axis_value, float(expected[1])):
+					found = true
+					break
+		_check(found, "%s maps to the expected gamepad stick axis" % String(action))
 
 func _test_rage_rules() -> void:
 	var rage := Rage.new(10.0, 1.0, 100.0) as RageProgression
@@ -333,6 +357,16 @@ func _test_ten_button_controls() -> void:
 	_check(arena._camera_yaw < yaw_before_swipe, "right-side swipe rotates the over-shoulder camera")
 	_check(arena._camera_pitch > deg_to_rad(Foundation.CAMERA_PITCH_DEGREES), "vertical swipe tilts the camera upward")
 	_check(player.move_input().y < -0.5, "camera swipe does not steal the movement finger")
+	var yaw_before_pad := arena._camera_yaw
+	Input.action_press(&"camera_right")
+	arena._update_gamepad_camera(0.25)
+	Input.action_release(&"camera_right")
+	_check(arena._camera_yaw < yaw_before_pad, "right gamepad stick rotates the over-shoulder camera")
+	var pitch_before_pad := arena._camera_pitch
+	Input.action_press(&"camera_up")
+	arena._update_gamepad_camera(0.25)
+	Input.action_release(&"camera_up")
+	_check(arena._camera_pitch > pitch_before_pad, "right gamepad stick tilts the camera upward")
 	var yaw_after_swipe := arena._camera_yaw
 	player.rotation.y = 1.1
 	arena._process(0.016)
