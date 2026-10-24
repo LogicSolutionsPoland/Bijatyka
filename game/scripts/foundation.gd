@@ -5,10 +5,12 @@ const PLAYER_SCRIPT := preload("res://scripts/player_controller.gd")
 const ENEMY_SCRIPT := preload("res://scripts/enemy.gd")
 const HUD_SCRIPT := preload("res://scripts/mobile_hud.gd")
 const SHADOW_POLICY := preload("res://scripts/shadow_policy.gd")
-const CAMERA_PIVOT_HEIGHT := 1.35
-const CAMERA_FOLLOW_DISTANCE := 2.45
-const CAMERA_SHOULDER_OFFSET := 0.68
-const CAMERA_PITCH_DEGREES := -7.0
+# Reference: close, right-shoulder third-person view, with Thornbound left of center.
+# Height is measured above the player's ground origin, not added to an existing camera offset.
+const CAMERA_PIVOT_HEIGHT := 1.55
+const CAMERA_FOLLOW_DISTANCE := 2.35
+const CAMERA_SHOULDER_OFFSET := 0.75
+const CAMERA_PITCH_DEGREES := -6.0
 
 var player: FoundationPlayer
 var camera_rig: Node3D
@@ -306,7 +308,8 @@ func _build_camera() -> void:
 	arm.margin = 0.15
 	arm.collision_mask = 1
 	arm.add_excluded_object(player.get_rid())
-	# Shift the viewpoint right so Thornbound occupies the left side of the frame.
+	# Offset the camera to the player's right to keep Thornbound in the left third
+	# of the screen while the forward combat lane stays open near the center.
 	arm.position.x = CAMERA_SHOULDER_OFFSET
 	arm.rotation_degrees.x = CAMERA_PITCH_DEGREES
 	camera_rig.add_child(arm)
