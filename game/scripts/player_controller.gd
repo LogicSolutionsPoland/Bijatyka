@@ -230,6 +230,7 @@ func _resolve_attack() -> void:
 	if dealt > 0:
 		rage.record_effective_hit(float(dealt))
 		attack_connected.emit(attack_kind, target)
+		_spawn_attack_impact(target.global_position + Vector3(0.0, 1.0, 0.0), attack_kind)
 
 func try_jump() -> bool:
 	if not is_on_floor() or rage.current_soul_condemned:
@@ -373,6 +374,49 @@ func _find_target(max_range: float, min_facing_dot: float) -> FoundationEnemy:
 		chosen = candidate
 	return chosen
 
+func _spawn_attack_impact(at: Vector3, kind: String) -> void:
+	var impact := Node3D.new()
+	impact.name = "CombatImpact"
+	impact.add_to_group("attack_impact_fx")
+	var scene_root: Node = get_tree().current_scene
+	if scene_root == null:
+		scene_root = get_tree().root
+	scene_root.add_child(impact)
+	impact.global_position = at
+
+	var color := Color(1.0, 0.74, 0.30) if kind == "punch" else Color(1.0, 0.38, 0.12)
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.emission_enabled = true
+	material.emission = color
+	material.emission_energy_multiplier = 2.2
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+
+	var flash := MeshInstance3D.new()
+	var sphere := SphereMesh.new()
+	sphere.radius = 0.20
+	sphere.height = 0.40
+	flash.mesh = sphere
+	flash.material_override = material
+	impact.add_child(flash)
+	for spark_index in range(6):
+		var spark := MeshInstance3D.new()
+		var shard := BoxMesh.new()
+		shard.size = Vector3(0.055, 0.055, 0.30)
+		spark.mesh = shard
+		spark.material_override = material
+		var angle := TAU * float(spark_index) / 6.0
+		spark.position = Vector3(cos(angle) * 0.15, sin(angle) * 0.15, 0.0)
+		spark.rotation.y = angle
+		impact.add_child(spark)
+
+	impact.scale = Vector3.ONE * 0.72
+	var tween := create_tween()
+	tween.tween_property(impact, "scale", Vector3.ONE * 1.8, 0.24).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tween.parallel().tween_property(material, "albedo_color:a", 0.0, 0.24)
+	tween.tween_callback(impact.queue_free)
+
 func _spawn_spell_burst(at: Vector3) -> void:
 	var root := MeshInstance3D.new()
 	root.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -420,8 +464,15 @@ func _set_bone_rotation(bone_name: String, euler: Vector3) -> void:
 		_skeleton.set_bone_pose_rotation(bone_index, Quaternion.from_euler(euler))
 
 func _set_locomotion_animation(animation_name: String) -> void:
-	if _animation_player != null and _animation_player.has_animation(animation_name):
-		_animation_player.play(animation_name)
+	if _animation_player == null:
+		return
+	var selected_animation := StringName(animation_name)
+	if animation_name == "Idle" and _fight_animations_ready:
+		selected_animation = FIGHT_ANIMATION_BUILDER.guard_clip_path()
+	if not _animation_player.has_animation(selected_animation):
+		return
+	if _animation_player.current_animation != selected_animation or not _animation_player.is_playing():
+		_animation_player.play(selected_animation, 0.10)
 
 func _update_locomotion_animation() -> void:
 	if _animation_player == null or attack_phase != "ready":
