@@ -22,6 +22,7 @@ func _run_all() -> void:
 	await _test_touch_stick_direction()
 	await _test_hud_aura_choices()
 	await _test_enemy_variant_health()
+	await _test_enemy_forward_facing()
 	await _test_right_punch_animation()
 	await _test_kick_animation()
 	await _test_manual_attack_and_hit_window()
@@ -274,6 +275,31 @@ func _test_enemy_variant_health() -> void:
 		_check(enemy.hp == expected and enemy.starting_health == expected, "%s starts at its configured health" % enemy.enemy_variant)
 	for enemy in spawned:
 		enemy.queue_free()
+	await process_frame
+
+func _test_enemy_forward_facing() -> void:
+	var player := Player.new() as FoundationPlayer
+	player.position = Vector3(3.0, 0.0, -4.0)
+	player.set_physics_process(false)
+	root.add_child(player)
+	var enemy := Enemy.new() as FoundationEnemy
+	enemy.configure("shambler")
+	enemy.position = Vector3.ZERO
+	enemy.set_physics_process(false)
+	root.add_child(enemy)
+	await process_frame
+	if enemy._model == null:
+		_check(false, "zombie GLB loads for the locomotion facing check")
+	else:
+		enemy._player = player
+		var direction := (player.global_position - enemy.global_position).normalized()
+		enemy._update_ai(0.5, player.global_position.distance_to(enemy.global_position))
+		var movement_direction := Vector3(enemy.velocity.x, 0.0, enemy.velocity.z).normalized()
+		var model_forward := enemy._model.global_transform.basis.z.normalized()
+		_check(movement_direction.dot(direction) > 0.99, "zombie walks toward its target")
+		_check(model_forward.dot(movement_direction) > 0.99, "zombie model faces the direction it walks")
+	player.queue_free()
+	enemy.queue_free()
 	await process_frame
 
 func _get_test_bone_world_position(skeleton: Skeleton3D, candidates: Array) -> Variant:

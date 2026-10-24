@@ -90,6 +90,8 @@ func _apply_variant() -> void:
 func _build_visual() -> void:
 	_visual_root = Node3D.new()
 	_visual_root.name = "VisualRoot"
+	# The zombie GLB faces local +Z; enemy steering uses Godot's -Z forward convention.
+	_visual_root.rotation.y = PI
 	add_child(_visual_root)
 	if ResourceLoader.exists(ENEMY_MODEL_PATH):
 		var packed := load(ENEMY_MODEL_PATH) as PackedScene
