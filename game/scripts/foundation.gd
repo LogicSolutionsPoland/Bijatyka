@@ -48,6 +48,8 @@ func _ready() -> void:
 	_build_camera()
 	_build_hud()
 	_spawn_enemies()
+	_update_distance_visibility()
+	_floor_material.set_shader_parameter("player_position", player.global_position)
 	SHADOW_POLICY.disable_in_tree(self)
 	player.rage.rage_changed.connect(_refresh_hud)
 	player.rage.selection_pending.connect(_on_selection_pending)
@@ -402,7 +404,12 @@ func _spawn_enemies() -> void:
 	_spawn_enemy("boss", Vector3(0.6, 0.05, -16.2), true)
 
 func _horde_spawn_position(angle: float) -> Vector3:
-	return player.global_position + Vector3(cos(angle) * ZOMBIE_SPAWN_DISTANCE, 0.0, sin(angle) * ZOMBIE_SPAWN_DISTANCE)
+	var spawn := player.global_position + Vector3(cos(angle) * ZOMBIE_SPAWN_DISTANCE, 0.0, sin(angle) * ZOMBIE_SPAWN_DISTANCE)
+	if absf(spawn.x) > 94.0 or absf(spawn.z) > 94.0:
+		var inward := Vector2(-player.global_position.x, -player.global_position.z).normalized()
+		if inward.length_squared() > 0.01:
+			spawn = player.global_position + Vector3(inward.x * ZOMBIE_SPAWN_DISTANCE, 0.0, inward.y * ZOMBIE_SPAWN_DISTANCE)
+	return spawn
 
 func _spawn_enemy(kind: String, at: Vector3, boss_target: bool = false) -> void:
 	var enemy := ENEMY_SCRIPT.new() as FoundationEnemy
@@ -493,7 +500,7 @@ func _apply_distance_visibility(node: Node) -> void:
 		node.visible = true
 	elif node is GeometryInstance3D or node is Label3D:
 		node.visible = node.global_position.distance_to(player.global_position) <= VISIBILITY_RADIUS
-	elif (node is OmniLight3D or node is SpotLight3D) and not node is DirectionalLight3D:
+	elif node is OmniLight3D or node is SpotLight3D:
 		node.visible = node.global_position.distance_to(player.global_position) <= VISIBILITY_RADIUS
 	for child in node.get_children():
 		_apply_distance_visibility(child)
