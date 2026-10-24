@@ -37,6 +37,9 @@ var attack_kind := ""
 var attack_side := "right"
 var attack_phase_time := 0.0
 var attack_count := 0
+var _queued_attack_kind := ""
+var _queued_attack_side := ""
+var _attack_recovery_locked := false
 var movement_slow_time := 0.0
 var movement_slow_factor := 1.0
 var dash_time := 0.0
@@ -177,18 +180,33 @@ func _update_movement(delta: float) -> void:
 		var target_yaw := atan2(-direction.x, -direction.z)
 		rotation.y = lerp_angle(rotation.y, target_yaw, minf(1.0, delta * 16.0))
 	var speed := 4.8 * movement_slow_factor
-	if attack_phase != "ready":
-		speed *= 0.48
 	velocity.x = direction.x * speed
 	velocity.z = direction.z * speed
 
 func request_attack(kind: String, side: String = "right") -> bool:
-	if attack_phase != "ready" or not ATTACKS.has(kind) or side not in ["left", "right"] or rage.current_soul_condemned:
+	if not ATTACKS.has(kind) or side not in ["left", "right"] or rage.current_soul_condemned:
 		return false
+	if attack_phase == "windup" or attack_phase == "active":
+		_queue_attack(kind, side)
+		return true
+	if attack_phase == "recovery":
+		if _attack_recovery_locked:
+			_queue_attack(kind, side)
+			return true
+		_finish_attack()
+	_start_attack(kind, side)
+	return true
+
+func _queue_attack(kind: String, side: String) -> void:
+	_queued_attack_kind = kind
+	_queued_attack_side = side
+
+func _start_attack(kind: String, side: String) -> void:
 	attack_kind = kind
 	attack_side = side
 	attack_phase = "windup"
 	attack_phase_time = float(ATTACKS[kind].windup)
+	_attack_recovery_locked = false
 	attack_count += 1
 	attack_started.emit(kind)
 	_spawn_attack_sweep(kind, side)
@@ -197,7 +215,26 @@ func request_attack(kind: String, side: String = "right") -> bool:
 			_animation_player.play(FIGHT_ANIMATION_BUILDER.clip_path(kind, side), 0.04)
 		else:
 			_animation_player.stop()
+
+func _start_queued_attack() -> bool:
+	if _queued_attack_kind.is_empty():
+		return false
+	var next_kind := _queued_attack_kind
+	var next_side := _queued_attack_side
+	_queued_attack_kind = ""
+	_queued_attack_side = ""
+	_finish_attack()
+	_start_attack(next_kind, next_side)
 	return true
+
+func _finish_attack() -> void:
+	var finished := attack_kind
+	attack_phase = "ready"
+	attack_kind = ""
+	attack_phase_time = 0.0
+	_attack_recovery_locked = false
+	if not finished.is_empty():
+		attack_finished.emit(finished)
 
 func _update_attack(delta: float) -> void:
 	if attack_phase == "ready":
@@ -211,14 +248,13 @@ func _update_attack(delta: float) -> void:
 			_resolve_attack()
 			attack_phase_time = float(ATTACKS[attack_kind].active)
 		"active":
-			attack_phase = "recovery"
-			attack_phase_time = float(ATTACKS[attack_kind].recovery)
+			if not _start_queued_attack():
+				attack_phase = "recovery"
+				attack_phase_time = float(ATTACKS[attack_kind].recovery)
+				_attack_recovery_locked = false
 		"recovery":
-			var finished := attack_kind
-			attack_phase = "ready"
-			attack_kind = ""
-			attack_phase_time = 0.0
-			attack_finished.emit(finished)
+			if not _start_queued_attack():
+				_finish_attack()
 
 func _resolve_attack() -> void:
 	var profile: Dictionary = ATTACKS[attack_kind]
@@ -269,6 +305,7 @@ func interrupt_by_zombie(slow_seconds: float = 0.7, recovery_penalty: float = 0.
 	if attack_phase != "ready":
 		attack_phase = "recovery"
 		attack_phase_time = maxf(attack_phase_time, recovery_penalty)
+		_attack_recovery_locked = true
 	interrupted.emit(slow_seconds)
 
 func take_boss_damage(amount: int) -> void:
@@ -549,6 +586,9 @@ func _reset_at_safe_base() -> void:
 	attack_phase = "ready"
 	attack_kind = ""
 	attack_phase_time = 0.0
+	_queued_attack_kind = ""
+	_queued_attack_side = ""
+	_attack_recovery_locked = false
 	_burns.clear()
 	rage.reset_soul()
 	health_changed.emit(health, MAX_HEALTH)
