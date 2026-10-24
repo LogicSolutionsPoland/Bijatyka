@@ -7,6 +7,7 @@ on:
       - codex/no-melee-cooldown
       - codex/rapid-melee-five-per-second
       - codex/gamepad-integration
+      - codex/burning-horizon
   pull_request:
     branches:
       - main
