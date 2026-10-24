@@ -5,6 +5,7 @@ on:
       - codex/retribution-godot-foundation
       - codex/over-shoulder-camera
       - codex/no-melee-cooldown
+      - codex/rapid-melee-five-per-second
   pull_request:
     branches:
       - main
