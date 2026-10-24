@@ -17,9 +17,11 @@ const MAX_HEALTH := 100
 const MAX_MAGIC := 100.0
 const DASH_DISTANCE := 15.0
 const DASH_DURATION := 0.30
+const TARGET_MELEE_HITS_PER_SECOND := 5.0
+const TARGET_MELEE_CYCLE_SECONDS := 1.0 / TARGET_MELEE_HITS_PER_SECOND
 const ATTACKS := {
-	"punch": {"windup": 0.14, "active": 0.12, "recovery": 0.34, "range": 1.55, "damage": 18, "cone": 0.42},
-	"kick": {"windup": 0.23, "active": 0.16, "recovery": 0.48, "range": 2.15, "damage": 28, "cone": 0.30}
+	"punch": {"windup": 0.10, "active": TARGET_MELEE_CYCLE_SECONDS - 0.10, "recovery": 0.34, "range": 1.55, "damage": 18, "cone": 0.42},
+	"kick": {"windup": 0.12, "active": TARGET_MELEE_CYCLE_SECONDS - 0.12, "recovery": 0.48, "range": 2.15, "damage": 28, "cone": 0.30}
 }
 const SPELLS := {
 	"light": {"cost": 20.0, "range": 8.0, "color": Color(1.0, 0.84, 0.32)},
@@ -52,6 +54,7 @@ var _fight_animations_ready := false
 var _camera_yaw := 0.0
 var _burns: Array[Dictionary] = []
 var _magic_hud_timer := 0.0
+var _desktop_attack_repeat_timers: Dictionary = {}
 var safe_base_position := Vector3.ZERO
 
 @onready var visual_root: Node3D = get_node_or_null("VisualRoot")
@@ -109,7 +112,7 @@ func _add_debug_visual() -> void:
 func _physics_process(delta: float) -> void:
 	if rage.current_soul_condemned:
 		return
-	_read_desktop_input()
+	_read_desktop_input(delta)
 	_update_attack(delta)
 	_update_burns(delta)
 	magic_energy = minf(MAX_MAGIC, magic_energy + 5.0 * delta)
@@ -144,11 +147,20 @@ func _physics_process(delta: float) -> void:
 		_magic_hud_timer = 0.0
 		magic_changed.emit(magic_energy, MAX_MAGIC, current_spell)
 
-func _read_desktop_input() -> void:
-	if Input.is_action_just_pressed("attack_punch"):
-		request_attack("punch")
-	if Input.is_action_just_pressed("attack_kick"):
-		request_attack("kick")
+func _read_desktop_input(delta: float) -> void:
+	for input_action in [&"attack_punch", &"attack_kick"]:
+		var kind := "punch" if input_action == &"attack_punch" else "kick"
+		if Input.is_action_just_pressed(input_action):
+			request_attack(kind)
+			_desktop_attack_repeat_timers[input_action] = TARGET_MELEE_CYCLE_SECONDS
+		elif Input.is_action_pressed(input_action):
+			var repeat_time := float(_desktop_attack_repeat_timers.get(input_action, TARGET_MELEE_CYCLE_SECONDS)) - delta
+			if repeat_time <= 0.0:
+				request_attack(kind)
+				repeat_time += TARGET_MELEE_CYCLE_SECONDS
+			_desktop_attack_repeat_timers[input_action] = repeat_time
+		else:
+			_desktop_attack_repeat_timers.erase(input_action)
 	if Input.is_action_just_pressed("jump"):
 		try_jump()
 	if Input.is_action_just_pressed("dash"):
@@ -239,22 +251,37 @@ func _finish_attack() -> void:
 func _update_attack(delta: float) -> void:
 	if attack_phase == "ready":
 		return
-	attack_phase_time -= delta
-	if attack_phase_time > 0.0:
-		return
-	match attack_phase:
-		"windup":
-			attack_phase = "active"
-			_resolve_attack()
-			attack_phase_time = float(ATTACKS[attack_kind].active)
-		"active":
-			if not _start_queued_attack():
+	var remaining_time := maxf(0.0, delta)
+	while attack_phase != "ready":
+		if remaining_time < attack_phase_time:
+			attack_phase_time -= remaining_time
+			return
+		remaining_time = maxf(0.0, remaining_time - attack_phase_time)
+		attack_phase_time = 0.0
+		match attack_phase:
+			"windup":
+				attack_phase = "active"
+				_resolve_attack()
+				attack_phase_time = float(ATTACKS[attack_kind].active)
+			"active":
+				if _start_queued_attack():
+					if remaining_time <= 0.0:
+						return
+					continue
 				attack_phase = "recovery"
 				attack_phase_time = float(ATTACKS[attack_kind].recovery)
 				_attack_recovery_locked = false
-		"recovery":
-			if not _start_queued_attack():
+			"recovery":
+				if not _start_queued_attack():
+					_finish_attack()
+					return
+				if remaining_time <= 0.0:
+					return
+			_:
 				_finish_attack()
+				return
+		if remaining_time <= 0.0:
+			return
 
 func _resolve_attack() -> void:
 	var profile: Dictionary = ATTACKS[attack_kind]
@@ -458,9 +485,9 @@ func _spawn_attack_sweep(kind: String, side: String) -> void:
 	sweep.scale = Vector2.ONE * 0.62
 	sweep.modulate = Color(1.0, 1.0, 1.0, 0.96)
 	var tween := create_tween()
-	tween.tween_property(sweep, "scale", Vector2.ONE * 1.18, 0.52).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	tween.parallel().tween_property(sweep, "rotation", rotation_start + 0.78 * side_sign, 0.52)
-	tween.parallel().tween_property(sweep, "modulate:a", 0.0, 0.52)
+	tween.tween_property(sweep, "scale", Vector2.ONE * 1.18, 0.22).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tween.parallel().tween_property(sweep, "rotation", rotation_start + 0.78 * side_sign, 0.22)
+	tween.parallel().tween_property(sweep, "modulate:a", 0.0, 0.22)
 	tween.tween_callback(sweep_layer.queue_free)
 
 func _spawn_attack_impact(at: Vector3, kind: String) -> void:
@@ -502,8 +529,8 @@ func _spawn_attack_impact(at: Vector3, kind: String) -> void:
 
 	impact.scale = Vector3.ONE * 0.72
 	var tween := create_tween()
-	tween.tween_property(impact, "scale", Vector3.ONE * 2.0, 0.42).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	tween.parallel().tween_property(material, "albedo_color:a", 0.0, 0.42)
+	tween.tween_property(impact, "scale", Vector3.ONE * 2.0, 0.18).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tween.parallel().tween_property(material, "albedo_color:a", 0.0, 0.18)
 	tween.tween_callback(impact.queue_free)
 
 func _spawn_spell_burst(at: Vector3) -> void:
