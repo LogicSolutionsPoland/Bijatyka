@@ -191,6 +191,7 @@ func request_attack(kind: String, side: String = "right") -> bool:
 	attack_phase_time = float(ATTACKS[kind].windup)
 	attack_count += 1
 	attack_started.emit(kind)
+	_spawn_attack_sweep(kind, side)
 	if _animation_player != null:
 		if _fight_animations_ready:
 			_animation_player.play(FIGHT_ANIMATION_BUILDER.clip_path(kind, side), 0.04)
@@ -374,6 +375,57 @@ func _find_target(max_range: float, min_facing_dot: float) -> FoundationEnemy:
 		chosen = candidate
 	return chosen
 
+func _spawn_attack_sweep(kind: String, side: String) -> void:
+	var scene_root: Node = get_tree().current_scene
+	if scene_root == null:
+		scene_root = get_tree().root
+	var sweep_layer := CanvasLayer.new()
+	sweep_layer.layer = 12
+	scene_root.add_child(sweep_layer)
+
+	var sweep := Node2D.new()
+	sweep_layer.add_child(sweep)
+	var viewport_size := get_viewport().get_visible_rect().size
+	sweep.position = viewport_size * Vector2(0.50, 0.49)
+	sweep.z_index = 100
+
+	var radius := 168.0 if kind == "kick" else 122.0
+	var points := PackedVector2Array()
+	for point_index in range(25):
+		var progress := float(point_index) / 24.0
+		var angle := lerpf(-1.22, 1.22, progress)
+		points.append(Vector2(sin(angle) * radius, -cos(angle) * radius * 0.76))
+
+	var hot_color := Color(0.22, 0.76, 1.0, 0.96) if kind == "kick" else Color(1.0, 0.26, 0.045, 0.96)
+	var glow := Line2D.new()
+	glow.points = points
+	glow.width = 22.0 if kind == "kick" else 17.0
+	glow.default_color = hot_color
+	glow.antialiased = true
+	glow.begin_cap_mode = Line2D.LINE_CAP_ROUND
+	glow.end_cap_mode = Line2D.LINE_CAP_ROUND
+	sweep.add_child(glow)
+
+	var core := Line2D.new()
+	core.points = points
+	core.width = 5.0
+	core.default_color = Color(0.83, 0.96, 1.0, 1.0) if kind == "kick" else Color(1.0, 0.94, 0.72, 1.0)
+	core.antialiased = true
+	core.begin_cap_mode = Line2D.LINE_CAP_ROUND
+	core.end_cap_mode = Line2D.LINE_CAP_ROUND
+	sweep.add_child(core)
+
+	var side_sign := 1.0 if side == "right" else -1.0
+	var rotation_start := -0.28 * side_sign
+	sweep.rotation = rotation_start
+	sweep.scale = Vector2.ONE * 0.62
+	sweep.modulate = Color(1.0, 1.0, 1.0, 0.96)
+	var tween := create_tween()
+	tween.tween_property(sweep, "scale", Vector2.ONE * 1.18, 0.52).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tween.parallel().tween_property(sweep, "rotation", rotation_start + 0.78 * side_sign, 0.52)
+	tween.parallel().tween_property(sweep, "modulate:a", 0.0, 0.52)
+	tween.tween_callback(sweep_layer.queue_free)
+
 func _spawn_attack_impact(at: Vector3, kind: String) -> void:
 	var impact := Node3D.new()
 	impact.name = "CombatImpact"
@@ -400,21 +452,21 @@ func _spawn_attack_impact(at: Vector3, kind: String) -> void:
 	flash.mesh = sphere
 	flash.material_override = material
 	impact.add_child(flash)
-	for spark_index in range(6):
+	for spark_index in range(8):
 		var spark := MeshInstance3D.new()
 		var shard := BoxMesh.new()
 		shard.size = Vector3(0.055, 0.055, 0.30)
 		spark.mesh = shard
 		spark.material_override = material
-		var angle := TAU * float(spark_index) / 6.0
-		spark.position = Vector3(cos(angle) * 0.15, sin(angle) * 0.15, 0.0)
+		var angle := TAU * float(spark_index) / 8.0
+		spark.position = Vector3(cos(angle) * 0.18, sin(angle) * 0.18, 0.0)
 		spark.rotation.y = angle
 		impact.add_child(spark)
 
 	impact.scale = Vector3.ONE * 0.72
 	var tween := create_tween()
-	tween.tween_property(impact, "scale", Vector3.ONE * 1.8, 0.24).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	tween.parallel().tween_property(material, "albedo_color:a", 0.0, 0.24)
+	tween.tween_property(impact, "scale", Vector3.ONE * 2.0, 0.42).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tween.parallel().tween_property(material, "albedo_color:a", 0.0, 0.42)
 	tween.tween_callback(impact.queue_free)
 
 func _spawn_spell_burst(at: Vector3) -> void:
@@ -467,8 +519,6 @@ func _set_locomotion_animation(animation_name: String) -> void:
 	if _animation_player == null:
 		return
 	var selected_animation := StringName(animation_name)
-	if animation_name == "Idle" and _fight_animations_ready:
-		selected_animation = FIGHT_ANIMATION_BUILDER.guard_clip_path()
 	if not _animation_player.has_animation(selected_animation):
 		return
 	if _animation_player.current_animation != selected_animation or not _animation_player.is_playing():

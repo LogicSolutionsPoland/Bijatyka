@@ -46,7 +46,7 @@ Spells stay in their slots through normal RAGE decay and all slots lock again on
 Touch actions trigger once on finger-down. Holding or dragging a finger never queues another attack;
 independent fingers allow moving and attacking together. Combat input is blocked during aura selection.
 
-Each attack press starts exactly one action. The player has four timed, full-body skeletal clips: left and right punches, plus left and right kicks. Every clip includes a chamber, contact, follow-through, and guarded recovery; the contact marker matches that move's existing hit timing. The idle pose now loops a raised, breathing guard stance. Confirmed punch and kick hits create a short emissive impact burst at the target. A held key never chains attacks.
+Each attack press starts exactly one action. The player has four timed, full-body skeletal clips: left and right punches, plus left and right kicks. Every clip includes a chamber, contact, follow-through, and guarded recovery; the contact marker matches that move's existing hit timing. Punch and kick presses now play a bright, animated sweep across the center of the screen, so the move is visible even when it misses. A confirmed hit adds an expanding emissive burst at the target. The character keeps the model's imported idle animation between attacks. A held key never chains attacks.
 
 The imported Thornbound rig has no finger joints, so the existing hand meshes remain unchanged.
 
