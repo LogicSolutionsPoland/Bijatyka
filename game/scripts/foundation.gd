@@ -345,7 +345,7 @@ func _build_hud() -> void:
 func _on_camera_dragged(relative: Vector2) -> void:
 	_apply_camera_look(
 		-relative.x * CAMERA_YAW_RADIANS_PER_PIXEL,
-		-relative.y * -CAMERA_PITCH_RADIANS_PER_PIXEL
+		-relative.y * CAMERA_PITCH_RADIANS_PER_PIXEL
 	)
 
 func _update_gamepad_camera(delta: float) -> void:
