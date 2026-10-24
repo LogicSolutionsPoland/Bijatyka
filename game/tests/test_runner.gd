@@ -64,8 +64,8 @@ func _test_gamepad_input_map() -> void:
 		_check(found, "%s maps to the expected gamepad stick axis" % String(action))
 	var expected_buttons := {
 		&"pad_jump": [JOY_BUTTON_A], &"pad_dash": [JOY_BUTTON_B, JOY_BUTTON_X],
-		&"pad_punch_right": [JOY_BUTTON_Y],
-		&"pad_kick_left": [JOY_BUTTON_LEFT_SHOULDER], &"pad_kick_right": [JOY_BUTTON_RIGHT_SHOULDER],
+		&"pad_punch_left": [JOY_BUTTON_RIGHT_SHOULDER], &"pad_punch_right": [JOY_BUTTON_Y],
+		&"pad_kick_left": [JOY_BUTTON_LEFT_SHOULDER],
 		&"pad_spell_0": [JOY_BUTTON_DPAD_UP], &"pad_spell_1": [JOY_BUTTON_DPAD_RIGHT],
 		&"pad_spell_2": [JOY_BUTTON_DPAD_DOWN], &"pad_spell_3": [JOY_BUTTON_DPAD_LEFT]
 	}
@@ -73,8 +73,8 @@ func _test_gamepad_input_map() -> void:
 	for row in Hud.ACTION_ROWS:
 		for action: String in row:
 			routed_actions.append(action)
-	_check(expected_buttons.size() == routed_actions.size() - 1 and Hud.GAMEPAD_ACTIONS.size() == routed_actions.size(), "touch keeps ten actions while left punch awaits its controller button")
-	_check(InputMap.action_get_events(&"pad_punch_left").is_empty(), "unassigned left punch cannot fire together with X dash")
+	_check(expected_buttons.size() == routed_actions.size() - 1 and Hud.GAMEPAD_ACTIONS.size() == routed_actions.size(), "touch keeps ten actions while right kick awaits its controller button")
+	_check(InputMap.action_get_events(&"pad_kick_right").is_empty(), "unassigned right kick cannot fire together with R1 left punch")
 	for action: StringName in expected_buttons:
 		var events := InputMap.action_get_events(action)
 		var actual: Array[int] = []
@@ -513,7 +513,7 @@ func _test_gamepad_controls() -> void:
 	var buttons := {
 		JOY_BUTTON_A: "jump", JOY_BUTTON_B: "dash",
 		JOY_BUTTON_X: "dash", JOY_BUTTON_Y: "punch_right",
-		JOY_BUTTON_LEFT_SHOULDER: "kick_left", JOY_BUTTON_RIGHT_SHOULDER: "kick_right",
+		JOY_BUTTON_LEFT_SHOULDER: "kick_left", JOY_BUTTON_RIGHT_SHOULDER: "punch_left",
 		JOY_BUTTON_DPAD_UP: "spell_0", JOY_BUTTON_DPAD_RIGHT: "spell_1",
 		JOY_BUTTON_DPAD_DOWN: "spell_2", JOY_BUTTON_DPAD_LEFT: "spell_3"
 	}
@@ -531,6 +531,13 @@ func _test_gamepad_controls() -> void:
 			_check(player.attack_kind == str(buttons[button]).get_slice("_", 0) or player._queued_attack_kind == str(buttons[button]).get_slice("_", 0), "%s uses the existing melee path" % buttons[button])
 			for step in range(4):
 				player._update_attack(1.0)
+
+	var attacks_before_r1 := player.attack_count
+	_send_pad(JOY_BUTTON_RIGHT_SHOULDER, true)
+	_check(player.attack_count == attacks_before_r1 + 1 and player.attack_kind == "punch" and player.attack_side == "left", "R1 triggers left punch and not right kick")
+	_send_pad(JOY_BUTTON_RIGHT_SHOULDER, false)
+	for step in range(4):
+		player._update_attack(1.0)
 
 	# Every melee button has one immediate strike and repeats at the touch cadence.
 	for button in [JOY_BUTTON_Y, JOY_BUTTON_LEFT_SHOULDER, JOY_BUTTON_RIGHT_SHOULDER]:
