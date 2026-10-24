@@ -252,37 +252,31 @@ func _finish_attack() -> void:
 func _update_attack(delta: float) -> void:
 	if attack_phase == "ready":
 		return
-	var remaining_time := maxf(0.0, delta)
-	while attack_phase != "ready":
-		if remaining_time + MELEE_TIMER_EPSILON < attack_phase_time:
-			attack_phase_time -= remaining_time
-			return
-		remaining_time = maxf(0.0, remaining_time - attack_phase_time)
-		attack_phase_time = 0.0
-		match attack_phase:
-			"windup":
-				attack_phase = "active"
-				_resolve_attack()
-				attack_phase_time = float(ATTACKS[attack_kind].active)
-			"active":
-				if _start_queued_attack():
-					if remaining_time <= 0.0:
-						return
-					continue
+	var elapsed_time := maxf(0.0, delta)
+	if elapsed_time + MELEE_TIMER_EPSILON < attack_phase_time:
+		attack_phase_time -= elapsed_time
+		return
+	var overflow_time := maxf(0.0, elapsed_time - attack_phase_time)
+	attack_phase_time = 0.0
+	match attack_phase:
+		"windup":
+			attack_phase = "active"
+			_resolve_attack()
+			attack_phase_time = float(ATTACKS[attack_kind].active)
+		"active":
+			if not _start_queued_attack():
 				attack_phase = "recovery"
 				attack_phase_time = float(ATTACKS[attack_kind].recovery)
 				_attack_recovery_locked = false
-			"recovery":
-				if not _start_queued_attack():
-					_finish_attack()
-					return
-				if remaining_time <= 0.0:
-					return
-			_:
+		"recovery":
+			if not _start_queued_attack():
 				_finish_attack()
 				return
-		if remaining_time <= 0.0:
+		_:
+			_finish_attack()
 			return
+	if attack_phase != "ready":
+		attack_phase_time = maxf(0.0, attack_phase_time - overflow_time)
 
 func _resolve_attack() -> void:
 	var profile: Dictionary = ATTACKS[attack_kind]
