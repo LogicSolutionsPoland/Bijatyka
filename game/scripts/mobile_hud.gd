@@ -20,10 +20,10 @@ const ACTION_ROWS := [
 	["spell_2", "spell_3"],
 	["dash", "jump"]
 ]
-# InputMap translates logical buttons and the R2 / RT trigger axis into the
-# existing touch HUD actions. Keep both sources routed through action_requested.
+# InputMap translates logical buttons and the R2 / RT trigger axis. Controller
+# actions share the HUD signal with touch; B casts the selected spell directly.
 const GAMEPAD_ACTIONS := {
-	&"pad_jump": "jump", &"pad_dash": "dash",
+	&"pad_jump": "jump", &"pad_dash": "dash", &"pad_cast_spell": "cast_spell",
 	&"pad_punch_left": "punch_left", &"pad_punch_right": "punch_right",
 	&"pad_kick_left": "kick_left", &"pad_kick_right": "kick_right",
 	&"pad_spell_0": "spell_0", &"pad_spell_1": "spell_1",

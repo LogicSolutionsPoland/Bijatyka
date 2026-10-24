@@ -26,11 +26,12 @@ godot --headless --path game --script res://tests/test_runner.gd
 | Left / right punch | J (right) | RB / R1, Y / Triangle | Left / right PUNCH |
 | Left / right kick | K (right) | LB / L1, RT / R2 | Left / right KICK |
 | Jump | Space | A / Cross | JUMP |
-| Dash | Shift | B / Circle or X / Square | DASH |
-| Magic slots 1 / 2 / 3 / 4 | L casts selected spell | D-pad Up / Right / Down / Left | Four direct MAGIC slots |
+| Dash | Shift | X / Square | DASH |
+| Cast selected spell | L | B / Circle | Use the selected MAGIC slot |
+| Magic slots 1 / 2 / 3 / 4 | — | D-pad Up / Right / Down / Left | Four direct MAGIC slots |
 | Cycle unlocked spells | U | — | Use the desired MAGIC slot directly |
 
-Xbox X / PlayStation Square performs dash; B / Circle also performs dash until its new action is chosen. RB / R1 performs left punch, and the RT / R2 trigger performs right kick. The trigger uses press and release thresholds so a tap attacks once and a hold repeats at the melee cadence.
+Xbox X / PlayStation Square performs dash, while B / Circle casts the selected unlocked spell. D-pad directions cast and select their corresponding spell slots. RB / R1 performs left punch, and the RT / R2 trigger performs right kick. The trigger uses press and release thresholds so a tap attacks once and a hold repeats at the melee cadence.
 
 The touch buttons form two columns at the screen edges, in this exact order:
 

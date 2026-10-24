@@ -63,7 +63,7 @@ func _test_gamepad_input_map() -> void:
 					break
 		_check(found, "%s maps to the expected gamepad stick axis" % String(action))
 	var expected_buttons := {
-		&"pad_jump": [JOY_BUTTON_A], &"pad_dash": [JOY_BUTTON_B, JOY_BUTTON_X],
+		&"pad_jump": [JOY_BUTTON_A], &"pad_dash": [JOY_BUTTON_X], &"pad_cast_spell": [JOY_BUTTON_B],
 		&"pad_punch_left": [JOY_BUTTON_RIGHT_SHOULDER], &"pad_punch_right": [JOY_BUTTON_Y],
 		&"pad_kick_left": [JOY_BUTTON_LEFT_SHOULDER],
 		&"pad_spell_0": [JOY_BUTTON_DPAD_UP], &"pad_spell_1": [JOY_BUTTON_DPAD_RIGHT],
@@ -73,7 +73,7 @@ func _test_gamepad_input_map() -> void:
 	for row in Hud.ACTION_ROWS:
 		for action: String in row:
 			routed_actions.append(action)
-	_check(expected_buttons.size() == routed_actions.size() - 1 and Hud.GAMEPAD_ACTIONS.size() == routed_actions.size(), "ten touch actions include nine button mappings and the R2 trigger")
+	_check(expected_buttons.size() == routed_actions.size() and Hud.GAMEPAD_ACTIONS.size() == routed_actions.size() + 1, "ten touch actions plus selected magic use buttons and the R2 trigger")
 	var trigger_events := InputMap.action_get_events(&"pad_kick_right")
 	_check(trigger_events.size() == 1 and trigger_events[0] is InputEventJoypadMotion and (trigger_events[0] as InputEventJoypadMotion).axis == JOY_AXIS_TRIGGER_RIGHT and is_equal_approx((trigger_events[0] as InputEventJoypadMotion).axis_value, 1.0), "R2 / RT maps to the right trigger axis")
 	_check(Hud.GAMEPAD_ACTIONS.get(&"pad_kick_right", "") == "kick_right", "R2 routes to the right touch kick")
@@ -87,7 +87,10 @@ func _test_gamepad_input_map() -> void:
 		var expected: Array = expected_buttons[action].duplicate()
 		expected.sort()
 		_check(actual == expected and events.size() == expected.size(), "%s uses its assigned SDL logical gamepad buttons" % action)
-		_check(routed_actions.has(Hud.GAMEPAD_ACTIONS.get(action, "")), "%s routes to an existing touch HUD action" % action)
+		if action == &"pad_cast_spell":
+			_check(Hud.GAMEPAD_ACTIONS[action] == "cast_spell", "B casts the selected unlocked spell")
+		else:
+			_check(routed_actions.has(Hud.GAMEPAD_ACTIONS.get(action, "")), "%s routes to an existing touch HUD action" % action)
 	var assigned_buttons := {}
 	for buttons: Array in expected_buttons.values():
 		for button: int in buttons:
@@ -520,7 +523,7 @@ func _test_gamepad_controls() -> void:
 	var routed: Array[String] = []
 	hud.action_requested.connect(func(action: String) -> void: routed.append(action))
 	var buttons := {
-		JOY_BUTTON_A: "jump", JOY_BUTTON_B: "dash",
+		JOY_BUTTON_A: "jump", JOY_BUTTON_B: "cast_spell",
 		JOY_BUTTON_X: "dash", JOY_BUTTON_Y: "punch_right",
 		JOY_BUTTON_LEFT_SHOULDER: "kick_left", JOY_BUTTON_RIGHT_SHOULDER: "punch_left",
 		JOY_BUTTON_DPAD_UP: "spell_0", JOY_BUTTON_DPAD_RIGHT: "spell_1",
@@ -534,12 +537,18 @@ func _test_gamepad_controls() -> void:
 		_send_pad(button, false)
 		hud._process(0.4)
 		_check(routed.size() == before + 1, "%s release stops held input" % buttons[button])
-		if str(buttons[button]).begins_with("spell_"):
+		if str(buttons[button]).begins_with("spell_") or buttons[button] == "cast_spell":
 			_check(player.magic_energy == energy_before, "locked %s spends no energy" % buttons[button])
 		if str(buttons[button]).begins_with("punch_") or str(buttons[button]).begins_with("kick_"):
 			_check(player.attack_kind == str(buttons[button]).get_slice("_", 0) or player._queued_attack_kind == str(buttons[button]).get_slice("_", 0), "%s uses the existing melee path" % buttons[button])
 			for step in range(4):
 				player._update_attack(1.0)
+
+	player.dash_time = 0.0
+	var energy_before_locked_b := player.magic_energy
+	_send_pad(JOY_BUTTON_B, true)
+	_check(player.dash_time == 0.0 and player.magic_energy == energy_before_locked_b, "B cannot dash or spend energy while magic is locked")
+	_send_pad(JOY_BUTTON_B, false)
 
 	var attacks_before_r1 := player.attack_count
 	_send_pad(JOY_BUTTON_RIGHT_SHOULDER, true)
@@ -629,6 +638,11 @@ func _test_gamepad_controls() -> void:
 	_send_pad(JOY_BUTTON_DPAD_UP, true)
 	_send_pad(JOY_BUTTON_DPAD_UP, false)
 	_check(player.current_spell == "light" and player.magic_energy == before_magic - 20.0, "D-pad Up casts unlocked slot 1 via touch spell handler")
+	var before_selected_cast := player.magic_energy
+	_send_pad(JOY_BUTTON_B, true)
+	hud._process(0.4)
+	_check(player.current_spell == "light" and player.magic_energy == before_selected_cast - 20.0, "B casts the selected spell once while held")
+	_send_pad(JOY_BUTTON_B, false)
 	for button in [JOY_BUTTON_DPAD_RIGHT, JOY_BUTTON_DPAD_DOWN, JOY_BUTTON_DPAD_LEFT]:
 		var energy_before := player.magic_energy
 		_send_pad(button, true)
