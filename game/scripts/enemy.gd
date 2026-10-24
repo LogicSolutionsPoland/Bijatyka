@@ -9,6 +9,7 @@ const ENEMY_MODEL_PATH := "res://assets/zombies/brutal_v2/Retribution_Zombie_01_
 const ENEMY_MODEL_YAW_OFFSET := PI
 const SHADOW_POLICY := preload("res://scripts/shadow_policy.gd")
 const GRAVITY := 24.0
+const RENDER_RADIUS := 30.0
 
 @export_enum("shambler", "brute", "stalker", "boss") var enemy_variant := "shambler"
 @export var is_boss := false
@@ -106,7 +107,8 @@ func _build_visual() -> void:
 			elif enemy_variant == "stalker":
 				_model.scale = Vector3(0.91, 1.03, 0.91)
 			_animation_player = _model.find_child("AnimationPlayer", true, false) as AnimationPlayer
-			_apply_variant_overlay()
+			if is_boss:
+				_apply_variant_overlay()
 	if _model == null:
 		_build_debug_variant()
 	if is_boss or enemy_variant == "brute":
@@ -284,16 +286,20 @@ func _physics_process(delta: float) -> void:
 		return
 	var distance := global_position.distance_to(_player.global_position)
 	_set_distance_detail(distance)
-	if distance > 55.0:
+	if distance > 70.0:
 		velocity.x = 0.0
 		velocity.z = 0.0
 		move_and_slide()
 		return
 	_ai_accumulator += delta
-	if distance > 18.0:
-		_ai_interval = 0.28 if distance <= 35.0 else 0.65
-	else:
+	if is_boss:
 		_ai_interval = 0.0
+	elif distance > RENDER_RADIUS:
+		_ai_interval = 0.45
+	elif distance > 18.0:
+		_ai_interval = 0.18
+	else:
+		_ai_interval = 0.10
 	if _ai_accumulator < _ai_interval:
 		move_and_slide()
 		return
@@ -305,16 +311,16 @@ func _physics_process(delta: float) -> void:
 func _set_distance_detail(distance: float) -> void:
 	if _visual_root == null:
 		return
-	var band := 0 if distance <= 18.0 else (1 if distance <= 35.0 else (2 if distance <= 55.0 else 3))
+	var band := 0 if distance <= 18.0 else (1 if distance <= RENDER_RADIUS else 2)
 	if band == _lod_band:
 		return
 	_lod_band = band
-	_visual_root.visible = distance <= 55.0
+	_visual_root.visible = distance <= RENDER_RADIUS
 	if _animation_player != null:
 		if distance <= 18.0:
 			_animation_player.speed_scale = 1.0
-		elif distance <= 35.0:
-			_animation_player.speed_scale = 0.45
+		elif distance <= RENDER_RADIUS:
+			_animation_player.speed_scale = 0.55
 		else:
 			_animation_player.stop()
 
