@@ -123,8 +123,8 @@ func _physics_process(delta: float) -> void:
 			movement_slow_factor = 1.0
 	if dash_time > 0.0:
 		dash_time = maxf(0.0, dash_time - delta)
-		velocity.x = dash_direction.x * DASH_DISTANCE / DASH_DURATION
-		velocity.z = dash_direction.z * DASH_DISTANCE / DASH_DURATION
+		# Keep the vertical component so an upward-aimed dash can clear walls.
+		velocity = dash_direction * (DASH_DISTANCE / DASH_DURATION)
 	else:
 		_update_movement(delta)
 	if not is_on_floor():
@@ -310,12 +310,20 @@ func _resolve_jump_impact() -> void:
 		rage.record_effective_hit(float(dealt))
 		jump_impact.emit(target)
 
+func _camera_aim_direction() -> Vector3:
+	var aim_camera := get_tree().get_first_node_in_group("foundation_camera") as Camera3D
+	if aim_camera != null and is_instance_valid(aim_camera):
+		return -aim_camera.global_transform.basis.z.normalized()
+	return -global_transform.basis.z.normalized()
+
 func try_dash(direction: Vector3 = Vector3.ZERO) -> bool:
 	if dash_time > 0.0 or rage.current_soul_condemned:
 		return false
 	if direction.length_squared() < 0.01:
+		direction = _camera_aim_direction()
+	if direction.length_squared() < 0.01:
 		direction = -global_transform.basis.z
-	dash_direction = Vector3(direction.x, 0.0, direction.z).normalized()
+	dash_direction = direction.normalized()
 	if dash_direction.length_squared() < 0.01:
 		dash_direction = Vector3.FORWARD
 	dash_time = DASH_DURATION
