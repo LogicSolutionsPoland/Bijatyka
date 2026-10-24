@@ -3,6 +3,7 @@ extends Node3D
 const PLAYER_SCENE := preload("res://scenes/player.tscn")
 const PLAYER_SCRIPT := preload("res://scripts/player_controller.gd")
 const ENEMY_SCRIPT := preload("res://scripts/enemy.gd")
+const STATIC_HORDE_SCRIPT := preload("res://scripts/static_zombie_horde.gd")
 const HUD_SCRIPT := preload("res://scripts/mobile_hud.gd")
 const SHADOW_POLICY := preload("res://scripts/shadow_policy.gd")
 # Reference: wide over-the-shoulder combat view, with Thornbound left of center
@@ -33,6 +34,7 @@ var _pending_notice := ""
 func _ready() -> void:
 	_build_environment()
 	_build_arena()
+	_build_static_horde()
 	player = PLAYER_SCENE.instantiate() as FoundationPlayer
 	player.name = "ThornboundPlayer"
 	player.position = Vector3(0.0, 0.05, 3.2)
@@ -373,6 +375,11 @@ func _apply_camera_look(yaw_delta: float, pitch_delta: float) -> void:
 		camera_arm.rotation.x = _camera_pitch
 	if player != null:
 		player.set_camera_yaw(_camera_yaw)
+
+func _build_static_horde() -> void:
+	var horde := STATIC_HORDE_SCRIPT.new() as Node3D
+	horde.name = "StationaryZombieHorde"
+	add_child(horde)
 
 func _spawn_enemies() -> void:
 	_spawn_enemy("shambler", Vector3(-1.0, 0.05, -4.4))
