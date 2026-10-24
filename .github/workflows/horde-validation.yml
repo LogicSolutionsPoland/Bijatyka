@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - codex/zombie-horde-30m
+      - codex/endless-invasion-40
   workflow_dispatch:
 
 permissions:
