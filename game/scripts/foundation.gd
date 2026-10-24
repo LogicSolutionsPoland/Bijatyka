@@ -8,7 +8,7 @@ const ENEMY_SCRIPT := preload("res://scripts/enemy.gd")
 const HUD_SCRIPT := preload("res://scripts/mobile_hud.gd")
 const SHADOW_POLICY := preload("res://scripts/shadow_policy.gd")
 const RADIAL_GROUND_SHADER := preload("res://shaders/radial_ground.gdshader")
-const ZOMBIE_HORDE_SIZE := 20
+const ZOMBIE_HORDE_SIZE := 40
 const ZOMBIE_SPAWN_DISTANCE := 50.0
 const VISIBILITY_RADIUS := 30.0
 # Reference: wide over-the-shoulder combat view, with Thornbound left of center
