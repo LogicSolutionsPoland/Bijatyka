@@ -46,7 +46,11 @@ Spells stay in their slots through normal RAGE decay and all slots lock again on
 Touch actions trigger once on finger-down. Holding or dragging a finger never queues another attack;
 independent fingers allow moving and attacking together. Combat input is blocked during aura selection.
 
-Each attack press starts exactly one action. Punch and kick have separate timings, ranges, damage, and procedural rig poses. A held key never chains attacks.
+Each attack press starts exactly one action. The player has four timed, full-body skeletal clips: left and right punches, plus left and right kicks. Every clip includes a chamber, contact, follow-through, and guarded recovery; the contact marker matches that move's existing hit timing. A held key never chains attacks.
+
+The imported Thornbound rig has no finger joints, so the existing hand meshes remain unchanged.
+
+The zombie rig is turned to face the same forward direction used by its approach and attack logic.
 
 The camera follows behind the player from a close right-shoulder viewpoint. The character stays left of center while the open center of the screen looks down the combat lane. The spring arm retracts near walls and ignores the player's own collision body.
 

@@ -9,8 +9,8 @@
 
 ## Reused material
 
-- Player model: `Retribution_Player_Thornbound_Warrior_MOBILE.glb`, supplied user asset pack; 21-joint rig with `Idle`, `Walk`, `Sprint`, `Jump`, and `Sword_Slash` clips. Attack poses are procedural because there are no dedicated punch/kick clips in the pack.
-- Zombie model: `Retribution_Zombie_01_Brutal_V2_RIGGED_LOD1.glb`, source branch asset. Brute, stalker, and boss variants use the same authored zombie base with different scale, tint, silhouettes, attack timings, and stats.
+- Player model: `Retribution_Player_Thornbound_Warrior_MOBILE.glb`, supplied user asset pack; 21-joint rig with `Idle`, `Walk`, `Sprint`, `Jump`, and `Sword_Slash` clips. `game/scripts/fight_animation.gd` builds four timed skeletal clips for left/right punches and kicks, with contact markers aligned to the existing hit timings. The source rig has no finger joints.
+- Zombie model: `Retribution_Zombie_01_Brutal_V2_RIGGED_LOD1.glb`, source branch asset. Brute, stalker, and boss variants use the same authored zombie base with different scale, tint, silhouettes, attack timings, and stats. The imported rig's +Z front is rotated to match the AI's -Z approach direction.
 - No music is imported or played. The initial slice uses generated visual spell bursts and has no sound assets.
 
 ## Confirmed legacy mechanics and conflicts
