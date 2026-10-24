@@ -69,3 +69,5 @@ The camera follows behind the player from a close right-shoulder viewpoint. The 
 ## Android
 
 The project uses the source-confirmed Godot 4.7.2 Compatibility renderer, ETC2/ASTC texture import, and ARM64 as the intended Android architecture. The Android export preset and package build are validated in GitHub Actions. Device performance has not been measured yet; no Android hardware result is claimed.
+
+The test build uses the Bijatyka app name and package ID so it installs beside earlier Retribution foundation APKs signed with a different debug key.
