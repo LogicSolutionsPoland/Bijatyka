@@ -1,6 +1,7 @@
 extends Node3D
 
 const BURNING_HORIZON := preload("res://scripts/burning_horizon.gd")
+const GAME_MUSIC := preload("res://assets/audio/menu_music.mp3")
 const PLAYER_SCENE := preload("res://scenes/player.tscn")
 const PLAYER_SCRIPT := preload("res://scripts/player_controller.gd")
 const ENEMY_SCRIPT := preload("res://scripts/enemy.gd")
@@ -38,8 +39,10 @@ var _visibility_timer := 0.0
 var _floor_material: ShaderMaterial
 var _boss_enemy: FoundationEnemy
 var burning_horizon: Node3D
+var game_music_player: AudioStreamPlayer
 
 func _ready() -> void:
+	_start_game_music()
 	_build_environment()
 	_build_arena()
 	player = PLAYER_SCENE.instantiate() as FoundationPlayer
@@ -64,6 +67,16 @@ func _ready() -> void:
 	player.magic_changed.connect(func(_current: float, _maximum: float, _school: String) -> void: _refresh_hud())
 	_refresh_hud(player.rage.rage, player.rage.maximum_rage, player.rage.condemnation_threshold())
 	hud.show_notice("Thornbound awakens. Zombies interrupt; only bosses damage HP.")
+
+func _start_game_music() -> void:
+	game_music_player = AudioStreamPlayer.new()
+	game_music_player.name = "GameMusic"
+	var track := GAME_MUSIC.duplicate() as AudioStreamMP3
+	track.loop = true
+	game_music_player.stream = track
+	game_music_player.volume_db = -16.0
+	add_child(game_music_player)
+	game_music_player.play()
 
 func _process(delta: float) -> void:
 	if player == null or camera_rig == null:
