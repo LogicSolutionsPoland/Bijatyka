@@ -11,10 +11,17 @@ const CAMERA_PIVOT_HEIGHT := 1.55
 const CAMERA_FOLLOW_DISTANCE := 2.35
 const CAMERA_SHOULDER_OFFSET := 0.75
 const CAMERA_PITCH_DEGREES := -6.0
+const CAMERA_YAW_RADIANS_PER_PIXEL := 0.006
+const CAMERA_PITCH_RADIANS_PER_PIXEL := 0.004
+const CAMERA_MIN_PITCH_DEGREES := -28.0
+const CAMERA_MAX_PITCH_DEGREES := 18.0
 
 var player: FoundationPlayer
 var camera_rig: Node3D
+var camera_arm: SpringArm3D
 var camera: Camera3D
+var _camera_yaw := 0.0
+var _camera_pitch := deg_to_rad(CAMERA_PITCH_DEGREES)
 var hud: FoundationHUD
 var _status_timer := 0.0
 var _pending_notice := ""
@@ -44,8 +51,7 @@ func _process(delta: float) -> void:
 		return
 	var target_position := player.global_position + Vector3(0.0, CAMERA_PIVOT_HEIGHT, 0.0)
 	camera_rig.global_position = camera_rig.global_position.lerp(target_position, 1.0 - exp(-delta * 7.5))
-	camera_rig.rotation.y = lerp_angle(camera_rig.rotation.y, player.rotation.y, 1.0 - exp(-delta * 8.0))
-	player.set_camera_yaw(camera_rig.rotation.y)
+	player.set_camera_yaw(_camera_yaw)
 	_status_timer += delta
 	if _status_timer >= 0.18:
 		_status_timer = 0.0
@@ -301,18 +307,20 @@ func _build_camera() -> void:
 	camera_rig = Node3D.new()
 	camera_rig.name = "FollowCameraRig"
 	camera_rig.position = player.global_position + Vector3(0.0, CAMERA_PIVOT_HEIGHT, 0.0)
+	_camera_yaw = player.rotation.y
+	camera_rig.rotation.y = _camera_yaw
 	add_child(camera_rig)
-	var arm := SpringArm3D.new()
-	arm.name = "CollisionSpringArm"
-	arm.spring_length = CAMERA_FOLLOW_DISTANCE
-	arm.margin = 0.15
-	arm.collision_mask = 1
-	arm.add_excluded_object(player.get_rid())
+	camera_arm = SpringArm3D.new()
+	camera_arm.name = "CollisionSpringArm"
+	camera_arm.spring_length = CAMERA_FOLLOW_DISTANCE
+	camera_arm.margin = 0.15
+	camera_arm.collision_mask = 1
+	camera_arm.add_excluded_object(player.get_rid())
 	# Offset the camera to the player's right to keep Thornbound in the left third
 	# of the screen while the forward combat lane stays open near the center.
-	arm.position.x = CAMERA_SHOULDER_OFFSET
-	arm.rotation_degrees.x = CAMERA_PITCH_DEGREES
-	camera_rig.add_child(arm)
+	camera_arm.position.x = CAMERA_SHOULDER_OFFSET
+	camera_arm.rotation.x = _camera_pitch
+	camera_rig.add_child(camera_arm)
 	camera = Camera3D.new()
 	camera.name = "BehindPlayerCamera"
 	camera.fov = 60.0
@@ -320,14 +328,29 @@ func _build_camera() -> void:
 	camera.far = 140.0
 	camera.current = true
 	camera.add_to_group("foundation_camera")
-	arm.add_child(camera)
+	camera_arm.add_child(camera)
 
 func _build_hud() -> void:
 	hud = HUD_SCRIPT.new() as FoundationHUD
 	hud.name = "MobileCombatHUD"
 	hud.action_requested.connect(_on_hud_action)
 	hud.aura_chosen.connect(_on_aura_chosen)
+	hud.camera_dragged.connect(_on_camera_dragged)
 	add_child(hud)
+
+func _on_camera_dragged(relative: Vector2) -> void:
+	_camera_yaw = wrapf(_camera_yaw - relative.x * CAMERA_YAW_RADIANS_PER_PIXEL, -PI, PI)
+	_camera_pitch = clampf(
+		_camera_pitch - relative.y * CAMERA_PITCH_RADIANS_PER_PIXEL,
+		deg_to_rad(CAMERA_MIN_PITCH_DEGREES),
+		deg_to_rad(CAMERA_MAX_PITCH_DEGREES)
+	)
+	if camera_rig != null:
+		camera_rig.rotation.y = _camera_yaw
+	if camera_arm != null:
+		camera_arm.rotation.x = _camera_pitch
+	if player != null:
+		player.set_camera_yaw(_camera_yaw)
 
 func _spawn_enemies() -> void:
 	_spawn_enemy("shambler", Vector3(-1.0, 0.05, -4.4))

@@ -3,8 +3,13 @@ class_name FoundationHUD
 
 signal action_requested(action: String)
 signal aura_chosen(aura_id: String)
+signal camera_dragged(delta: Vector2)
 
-const TouchStickScript := preload("res://scripts/touch_stick.gd")
+const MOUSE_POINTER_ID := -2
+const NO_POINTER_ID := -1
+const MOVE_DRAG_MAX_DISTANCE := 96.0
+const MOVE_DRAG_DEADZONE := 0.12
+const CAMERA_GESTURE_SPLIT := 0.5
 const AURA_LABELS := {
 	"light": "LIGHT", "judgment": "JUDGMENT", "fire": "FIRE", "shadow": "SHADOW"
 }
@@ -15,9 +20,11 @@ const ACTION_ROWS := [
 	["spell_2", "spell_3"],
 	["dash", "jump"]
 ]
+const MELEE_HOLD_REPEAT_INTERVAL := 0.20
+const MELEE_TIMER_EPSILON := 0.0001
 
 var _root: Control
-var _stick: TouchStick
+var _status_panel: PanelContainer
 var _status: Label
 var _health_bar: ProgressBar
 var _rage_bar: ProgressBar
@@ -28,6 +35,11 @@ var _magic_tag: Label
 var _notice: Label
 var _action_buttons: Dictionary = {}
 var _pressed_pointers: Dictionary = {}
+var _held_melee_repeat_timers: Dictionary = {}
+var _gesture_modes: Dictionary = {}
+var _movement_pointer_id := NO_POINTER_ID
+var _movement_origin := Vector2.ZERO
+var _movement_position := Vector2.ZERO
 var _selection_panel: PanelContainer
 var _layout_size := Vector2.ZERO
 
@@ -46,11 +58,41 @@ func _ready() -> void:
 	_root.resized.connect(_layout)
 	_layout()
 
+func _process(delta: float) -> void:
+	if get_tree().paused or _selection_panel != null:
+		_held_melee_repeat_timers.clear()
+		return
+	for raw_pointer_id in _pressed_pointers.keys():
+		var pointer_id := int(raw_pointer_id)
+		var button := _pressed_pointers[raw_pointer_id] as Button
+		if button == null or not is_instance_valid(button) or button.disabled:
+			_held_melee_repeat_timers.erase(pointer_id)
+			continue
+		var action := str(button.get_meta("action", ""))
+		if not _is_melee_action(action):
+			_held_melee_repeat_timers.erase(pointer_id)
+			continue
+		var repeat_time := float(_held_melee_repeat_timers.get(pointer_id, MELEE_HOLD_REPEAT_INTERVAL))
+		repeat_time -= minf(delta, MELEE_HOLD_REPEAT_INTERVAL)
+		if repeat_time <= MELEE_TIMER_EPSILON:
+			_emit_action(action)
+			repeat_time += MELEE_HOLD_REPEAT_INTERVAL
+		_held_melee_repeat_timers[pointer_id] = repeat_time
+
+func _is_melee_action(action: String) -> bool:
+	return action.begins_with("punch_") or action.begins_with("kick_")
+
 func get_move_vector() -> Vector2:
-	return _stick.get_vector() if _stick != null else Vector2.ZERO
+	if _movement_pointer_id == NO_POINTER_ID:
+		return Vector2.ZERO
+	var movement := (_movement_position - _movement_origin) / MOVE_DRAG_MAX_DISTANCE
+	if movement.length() > 1.0:
+		movement = movement.normalized()
+	return Vector2.ZERO if movement.length() < MOVE_DRAG_DEADZONE else movement
 
 func _build_status() -> void:
 	var panel := PanelContainer.new()
+	_status_panel = panel
 	panel.name = "StatusPanel"
 	panel.position = Vector2(18.0, 16.0)
 	panel.custom_minimum_size = Vector2(332.0, 138.0)
@@ -120,10 +162,6 @@ func _create_meter_row(caption: String, fill_color: Color) -> Dictionary:
 
 
 func _build_controls() -> void:
-	_stick = TouchStickScript.new()
-	_stick.name = "MovementStick"
-	_stick.process_mode = Node.PROCESS_MODE_PAUSABLE
-	_root.add_child(_stick)
 	for row in ACTION_ROWS:
 		for action: String in row:
 			var caption := action.get_slice("_", 0).to_upper()
@@ -174,13 +212,86 @@ func _emit_action(action: String) -> void:
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
-		if _handle_pointer(event.index, event.position, event.pressed and not event.canceled):
+		var handled := false
+		if event.pressed and not event.canceled:
+			handled = _handle_pointer(event.index, event.position, true)
+			if not handled:
+				handled = _start_gesture(event.index, event.position)
+		else:
+			handled = _handle_pointer(event.index, event.position, false)
+			if _end_gesture(event.index):
+				handled = true
+		if handled:
+			get_viewport().set_input_as_handled()
+	elif event is InputEventScreenDrag:
+		if _update_gesture(event.index, event.position, event.relative):
 			get_viewport().set_input_as_handled()
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.device == InputEvent.DEVICE_ID_EMULATION:
 			return
-		if _handle_pointer(-1, event.position, event.pressed):
+		var pointer_id := MOUSE_POINTER_ID
+		var handled := false
+		if event.pressed:
+			handled = _handle_pointer(pointer_id, event.position, true)
+			if not handled:
+				handled = _start_gesture(pointer_id, event.position)
+		else:
+			handled = _handle_pointer(pointer_id, event.position, false)
+			if _end_gesture(pointer_id):
+				handled = true
+		if handled:
 			get_viewport().set_input_as_handled()
+	elif event is InputEventMouseMotion:
+		if _update_gesture(MOUSE_POINTER_ID, event.position, event.relative):
+			get_viewport().set_input_as_handled()
+
+func _start_gesture(pointer_id: int, screen_position: Vector2) -> bool:
+	if get_tree().paused or _selection_panel != null or _gesture_modes.has(pointer_id):
+		return false
+	if _is_over_status_panel(screen_position):
+		return false
+	var viewport_width := _root.size.x
+	if viewport_width <= 1.0:
+		return false
+	if screen_position.x < viewport_width * CAMERA_GESTURE_SPLIT:
+		if _movement_pointer_id != NO_POINTER_ID:
+			return false
+		_movement_pointer_id = pointer_id
+		_movement_origin = screen_position
+		_movement_position = screen_position
+		_gesture_modes[pointer_id] = "move"
+	else:
+		_gesture_modes[pointer_id] = "camera"
+	return true
+
+func _update_gesture(pointer_id: int, screen_position: Vector2, relative: Vector2) -> bool:
+	if not _gesture_modes.has(pointer_id):
+		return false
+	if get_tree().paused or _selection_panel != null:
+		return true
+	match str(_gesture_modes[pointer_id]):
+		"move":
+			_movement_position = screen_position
+		"camera":
+			camera_dragged.emit(relative)
+	return true
+
+func _end_gesture(pointer_id: int) -> bool:
+	if not _gesture_modes.has(pointer_id):
+		return false
+	var mode := str(_gesture_modes[pointer_id])
+	_gesture_modes.erase(pointer_id)
+	if mode == "move" and _movement_pointer_id == pointer_id:
+		_movement_pointer_id = NO_POINTER_ID
+		_movement_origin = Vector2.ZERO
+		_movement_position = Vector2.ZERO
+	return true
+
+func _is_over_status_panel(screen_position: Vector2) -> bool:
+	if _status_panel == null or not _status_panel.is_visible_in_tree():
+		return false
+	var local_position := _status_panel.get_global_transform_with_canvas().affine_inverse() * screen_position
+	return Rect2(Vector2.ZERO, _status_panel.size).has_point(local_position)
 
 func _handle_pointer(pointer_id: int, screen_position: Vector2, pressed: bool) -> bool:
 	if not pressed:
@@ -188,6 +299,7 @@ func _handle_pointer(pointer_id: int, screen_position: Vector2, pressed: bool) -
 			return false
 		var released_button: Button = _pressed_pointers[pointer_id]
 		_pressed_pointers.erase(pointer_id)
+		_held_melee_repeat_timers.erase(pointer_id)
 		released_button.set_pressed_no_signal(_pressed_pointers.values().has(released_button))
 		return true
 	if _pressed_pointers.has(pointer_id):
@@ -200,7 +312,10 @@ func _handle_pointer(pointer_id: int, screen_position: Vector2, pressed: bool) -
 			if not button.disabled:
 				_pressed_pointers[pointer_id] = button
 				button.set_pressed_no_signal(true)
-				_emit_action(str(button.get_meta("action")))
+				var action := str(button.get_meta("action"))
+				if _is_melee_action(action):
+					_held_melee_repeat_timers[pointer_id] = MELEE_HOLD_REPEAT_INTERVAL
+				_emit_action(action)
 			return true
 	return false
 
@@ -208,6 +323,11 @@ func _release_pointers() -> void:
 	for button: Button in _pressed_pointers.values():
 		button.set_pressed_no_signal(false)
 	_pressed_pointers.clear()
+	_held_melee_repeat_timers.clear()
+	_gesture_modes.clear()
+	_movement_pointer_id = NO_POINTER_ID
+	_movement_origin = Vector2.ZERO
+	_movement_position = Vector2.ZERO
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
@@ -240,11 +360,6 @@ func _layout() -> void:
 			button.add_theme_font_size_override("font_size", maxi(12, roundi(17.0 * scale_factor)))
 			button.size = dimensions
 			button.position = Vector2(margin if column == 0 else size.x - margin - dimensions.x, top + row_index * (dimensions.y + gap))
-	if _stick != null:
-		_stick.custom_minimum_size = Vector2(156.0, 156.0) * scale_factor
-		_stick.size = _stick.custom_minimum_size
-		_stick.radius = 68.0 * scale_factor
-		_stick.position = Vector2(margin + dimensions.x + gap, size.y - margin - _stick.size.y)
 	_notice.position = Vector2(size.x * 0.25, 28.0)
 	_notice.size = Vector2(size.x * 0.5, 52.0)
 	if _selection_panel != null:
