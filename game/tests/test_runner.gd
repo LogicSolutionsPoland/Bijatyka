@@ -628,6 +628,14 @@ func _test_gamepad_controls() -> void:
 	for step in range(4):
 		player._update_attack(1.0)
 
+	var before_negative_rest := routed.size()
+	hud._right_trigger_rest_values[0] = -1.0
+	_send_trigger(0.0)
+	_check(routed.size() == before_negative_rest + 1 and routed.back() == "kick_right" and player.attack_side == "right", "R2 works on controllers whose trigger rests at -1")
+	_send_trigger(-1.0)
+	for step in range(4):
+		player._update_attack(1.0)
+
 	for button in [JOY_BUTTON_A, JOY_BUTTON_B, JOY_BUTTON_X, JOY_BUTTON_Y, JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_RIGHT, JOY_BUTTON_DPAD_DOWN, JOY_BUTTON_DPAD_LEFT]:
 		var before := routed.size()
 		_send_pad(button, true)
