@@ -16,6 +16,7 @@ const ACTION_ROWS := [
 	["dash", "jump"]
 ]
 const MELEE_HOLD_REPEAT_INTERVAL := 0.20
+const MELEE_TIMER_EPSILON := 0.0001
 
 var _root: Control
 var _stick: TouchStick
@@ -64,7 +65,7 @@ func _process(delta: float) -> void:
 			continue
 		var repeat_time := float(_held_melee_repeat_timers.get(pointer_id, MELEE_HOLD_REPEAT_INTERVAL))
 		repeat_time -= minf(delta, MELEE_HOLD_REPEAT_INTERVAL)
-		if repeat_time <= 0.0:
+		if repeat_time <= MELEE_TIMER_EPSILON:
 			_emit_action(action)
 			repeat_time += MELEE_HOLD_REPEAT_INTERVAL
 		_held_melee_repeat_timers[pointer_id] = repeat_time
