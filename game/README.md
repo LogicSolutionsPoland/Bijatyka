@@ -54,7 +54,7 @@ The imported Thornbound rig has no finger joints, so the existing hand meshes re
 
 The zombie rig is turned to face the same forward direction used by its approach and attack logic.
 
-The camera follows behind the player from a close right-shoulder viewpoint. The character stays left of center while the open center of the screen looks down the combat lane. The spring arm retracts near walls and ignores the player's own collision body.
+The camera uses a close **Resident Evil 4-style right-shoulder viewpoint** matching the provided composition reference. The follow pivot sits **1.55 m** above the player's ground origin, with **2.35 m** spring-arm reach, **0.75 m** right shoulder offset, a **6° downward** pitch and **60°** vertical field of view. The character stays to the left of screen center while the open center looks down the forward combat lane. The camera smoothly follows facing direction, the spring arm retracts near walls, and it ignores the player's own collision body. Heights are absolute offsets from the player origin, not an extra 1.5 m on top of another pivot.
 
 ## Carried-forward rules and current scope
 
