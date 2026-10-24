@@ -44,6 +44,7 @@ var _health_tag: Label
 var _rage_tag: Label
 var _magic_tag: Label
 var _notice: Label
+var _boss_marker: Label
 var _action_buttons: Dictionary = {}
 var _pressed_pointers: Dictionary = {}
 var _held_melee_repeat_timers: Dictionary = {}
@@ -68,6 +69,7 @@ func _ready() -> void:
 	_build_status()
 	_build_controls()
 	_build_notice()
+	_build_boss_marker()
 	_root.resized.connect(_layout)
 	_layout()
 
@@ -408,6 +410,49 @@ func _build_notice() -> void:
 	_notice.visible = false
 	_root.add_child(_notice)
 
+func _build_boss_marker() -> void:
+	_boss_marker = Label.new()
+	_boss_marker.name = "BossLocator"
+	_boss_marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_boss_marker.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_boss_marker.add_theme_font_size_override("font_size", 24)
+	_boss_marker.add_theme_color_override("font_color", Color(1.0, 0.12, 0.08))
+	_boss_marker.add_theme_color_override("font_shadow_color", Color(0.10, 0.02, 0.02, 0.95))
+	_boss_marker.add_theme_constant_override("shadow_offset_x", 2)
+	_boss_marker.add_theme_constant_override("shadow_offset_y", 2)
+	_boss_marker.visible = false
+	_root.add_child(_boss_marker)
+
+func update_boss_marker(screen_position: Vector2, distance_m: float, is_behind: bool) -> void:
+	if _boss_marker == null or _root == null:
+		return
+	var bounds := _root.size
+	var center := bounds * 0.5
+	var inside := Rect2(Vector2(16.0, 16.0), bounds - Vector2(32.0, 32.0)).has_point(screen_position) and not is_behind
+	var marker_position := screen_position
+	var direction := screen_position - center
+	if not inside:
+		if is_behind:
+			direction = -direction
+		if direction.length_squared() < 1.0:
+			direction = Vector2(0.0, 1.0 if is_behind else -1.0)
+		var half := bounds * 0.5 - Vector2(120.0, 72.0)
+		var scale_x := half.x / maxf(0.001, absf(direction.x))
+		var scale_y := half.y / maxf(0.001, absf(direction.y))
+		marker_position = center + direction * minf(scale_x, scale_y)
+		marker_position.y = maxf(70.0, marker_position.y)
+	else:
+		marker_position += Vector2(0.0, -38.0)
+	var arrow := "→" if absf(direction.x) > absf(direction.y) and direction.x > 0.0 else ("←" if absf(direction.x) > absf(direction.y) else ("↓" if direction.y > 0.0 else "↑"))
+	_boss_marker.text = "%s  BOSS  %dm" % ["▼" if inside else arrow, roundi(distance_m)]
+	_boss_marker.size = Vector2(210.0, 44.0)
+	_boss_marker.position = marker_position - _boss_marker.size * 0.5
+	_boss_marker.visible = true
+
+func hide_boss_marker() -> void:
+	if _boss_marker != null:
+		_boss_marker.visible = false
+
 func _layout() -> void:
 	if _root == null:
 		return
@@ -428,6 +473,9 @@ func _layout() -> void:
 			button.position = Vector2(margin if column == 0 else size.x - margin - dimensions.x, top + row_index * (dimensions.y + gap))
 	_notice.position = Vector2(size.x * 0.25, 28.0)
 	_notice.size = Vector2(size.x * 0.5, 52.0)
+	if _boss_marker != null and not _boss_marker.visible:
+		_boss_marker.position = Vector2((size.x - 210.0 * scale_factor) * 0.5, 92.0 * scale_factor)
+		_boss_marker.size = Vector2(210.0 * scale_factor, 44.0 * scale_factor)
 	if _selection_panel != null:
 		_selection_panel.position = (size - _selection_panel.size) * 0.5
 
