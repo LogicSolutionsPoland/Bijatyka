@@ -665,6 +665,10 @@ func _test_gamepad_controls() -> void:
 	player.rage.unlocked_spells.assign(["light", "fire"])
 	arena._refresh_hud()
 	var blast_target := get_nodes_in_group("enemies")[0] as FoundationEnemy
+	# Horde members now spawn 50 m away; put this test target inside Blast range.
+	var blast_direction := -player.global_transform.basis.z
+	blast_direction.y = 0.0
+	blast_target.global_position = player.global_position + blast_direction.normalized() * 4.0
 	var blast_hp_before := blast_target.hp
 	var blast_energy_before := player.magic_energy
 	var blast_routes_before := routed.size()
