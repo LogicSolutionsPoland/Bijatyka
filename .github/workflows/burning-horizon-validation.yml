@@ -69,5 +69,5 @@ jobs:
       - name: Smoke-run the playable scene with real shader compilation
         run: |
           set -o pipefail
-          LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a godot --path game --rendering-method gl_compatibility --quit-after 150 2>&1 | tee "$RUNNER_TEMP/godot-smoke.log"
+          LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a godot --path game --rendering-method gl_compatibility --audio-driver Dummy --quit-after 150 2>&1 | tee "$RUNNER_TEMP/godot-smoke.log"
           if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/godot-smoke.log"; then exit 1; fi
