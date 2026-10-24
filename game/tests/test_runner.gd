@@ -21,6 +21,7 @@ func _run_all() -> void:
 	await _test_hud_aura_choices()
 	await _test_enemy_variant_health()
 	await _test_manual_attack_and_hit_window()
+	await _test_punch_animation_faces_forward()
 	await _test_magic_unlock_and_damage()
 	await _test_jump_and_enemy_interrupt_rules()
 	await _test_boss_damage_rule()
@@ -144,6 +145,29 @@ func _test_manual_attack_and_hit_window() -> void:
 	target.queue_free()
 	await process_frame
 
+func _test_punch_animation_faces_forward() -> void:
+	var player := Player.new() as FoundationPlayer
+	player.set_physics_process(false)
+	root.add_child(player)
+	await process_frame
+	_check(player._fight_animations_ready, "imported player rig accepts the authored fight clips")
+	if player._fight_animations_ready:
+		player.rotation.y = deg_to_rad(65.0)
+		for side in ["left", "right"]:
+			_check(player.request_attack("punch", side), "%s punch starts its authored clip" % side)
+			player._animation_player.advance(0.04)
+			player._animation_player.advance(float(Player.ATTACKS["punch"].windup) - 0.04)
+			var shoulder_index := player._skeleton.find_bone("%sUpperArm" % side.capitalize())
+			var wrist_index := player._skeleton.find_bone("%sHand" % side.capitalize())
+			var shoulder := player._skeleton.to_global(player._skeleton.get_bone_global_pose(shoulder_index).origin)
+			var wrist := player._skeleton.to_global(player._skeleton.get_bone_global_pose(wrist_index).origin)
+			var forward := -player.global_transform.basis.z
+			_check((wrist - shoulder).dot(forward) > 0.25, "%s fist extends in front of the player at contact" % side)
+			player.attack_phase = "ready"
+			player.attack_kind = ""
+	player.queue_free()
+	await process_frame
+
 func _test_magic_unlock_and_damage() -> void:
 	var player := Player.new() as FoundationPlayer
 	player.position = Vector3.ZERO
@@ -251,6 +275,16 @@ func _test_ten_button_controls() -> void:
 	root.add_child(arena)
 	var player: FoundationPlayer = arena.player
 	var hud: FoundationHUD = arena.hud
+	var shoulder_arm := arena.camera.get_parent() as SpringArm3D
+	_check(shoulder_arm != null, "close third-person camera uses a collision-aware shoulder spring arm")
+	if shoulder_arm != null:
+		_check(shoulder_arm.position.x > 0.0 and shoulder_arm.rotation_degrees.x < 0.0, "camera sits above and to the right of the player")
+		_check(is_equal_approx(arena.camera_rig.position.y - player.global_position.y, Foundation.CAMERA_PIVOT_HEIGHT), "camera follow rig maintains the intended eye-level height")
+		_check(is_equal_approx(shoulder_arm.spring_length, Foundation.CAMERA_FOLLOW_DISTANCE) and shoulder_arm.collision_mask == 1, "camera holds close distance and retracts near level geometry")
+		var horizontal_half_span := shoulder_arm.spring_length * tan(deg_to_rad(arena.camera.fov * 0.5)) * (float(root.size.x) / float(root.size.y))
+		var estimated_actor_x := 0.5 - shoulder_arm.position.x / (2.0 * horizontal_half_span)
+		_check(estimated_actor_x > 0.28 and estimated_actor_x < 0.43, "over-shoulder composition places the character left of screen center")
+		_check(arena.camera.current, "third-person camera is active")
 	player.set_physics_process(false)
 	arena.set_process(false)
 	for enemy: Node in get_nodes_in_group("enemies"):

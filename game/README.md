@@ -46,7 +46,15 @@ Spells stay in their slots through normal RAGE decay and all slots lock again on
 Touch actions trigger once on finger-down. Holding or dragging a finger never queues another attack;
 independent fingers allow moving and attacking together. Combat input is blocked during aura selection.
 
-Each attack press starts exactly one action. Punch and kick have separate timings, ranges, damage, and procedural rig poses. A held key never chains attacks.
+Each attack press starts exactly one action. The player has four timed, full-body skeletal clips: left and right punches, plus left and right kicks. Every clip includes a chamber, contact, follow-through, and guarded recovery; the contact marker matches that move's existing hit timing. Punch and kick presses now play a bright, animated sweep across the center of the screen, so the move is visible even when it misses. A confirmed hit adds an expanding emissive burst at the target. The character keeps the model's imported idle animation between attacks. A held key never chains attacks.
+
+Both punch clips extend the striking fist along the player's forward direction at contact, including after the player turns. The unanimated fallback punch pose uses the same direction. The headless rig check measures each wrist relative to its shoulder and player heading.
+
+The imported Thornbound rig has no finger joints, so the existing hand meshes remain unchanged.
+
+The zombie rig is turned to face the same forward direction used by its approach and attack logic.
+
+The camera uses a close **Resident Evil 4-style right-shoulder viewpoint** matching the provided composition reference. The follow pivot sits **1.55 m** above the player's ground origin, with **2.35 m** spring-arm reach, **0.75 m** right shoulder offset, a **6° downward** pitch and **60°** vertical field of view. The character stays to the left of screen center while the open center looks down the forward combat lane. The camera smoothly follows facing direction, the spring arm retracts near walls, and it ignores the player's own collision body. Heights are absolute offsets from the player origin, not an extra 1.5 m on top of another pivot.
 
 ## Carried-forward rules and current scope
 
@@ -61,3 +69,5 @@ Each attack press starts exactly one action. Punch and kick have separate timing
 ## Android
 
 The project uses the source-confirmed Godot 4.7.2 Compatibility renderer, ETC2/ASTC texture import, and ARM64 as the intended Android architecture. The Android export preset and package build are validated in GitHub Actions. Device performance has not been measured yet; no Android hardware result is claimed.
+
+The test build uses the Bijatyka app name and package ID so it installs beside earlier Retribution foundation APKs signed with a different debug key.

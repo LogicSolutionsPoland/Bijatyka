@@ -10,6 +10,7 @@ signal interrupted(duration: float)
 signal jump_impact(target: Node)
 
 const RAGE_SCRIPT := preload("res://scripts/rage_progression.gd")
+const FIGHT_ANIMATION_BUILDER := preload("res://scripts/fight_animation.gd")
 const PLAYER_MODEL_PATH := "res://assets/characters/thornbound/Retribution_Player_Thornbound_Warrior_MOBILE.glb"
 const GRAVITY := 24.0
 const MAX_HEALTH := 100
@@ -44,6 +45,7 @@ var jump_impact_armed := false
 var _was_airborne := false
 var _animation_player: AnimationPlayer
 var _skeleton: Skeleton3D
+var _fight_animations_ready := false
 var _camera_yaw := 0.0
 var _burns: Array[Dictionary] = []
 var _magic_hud_timer := 0.0
@@ -84,6 +86,7 @@ func _load_player_visual() -> void:
 			visual_root.add_child(model)
 			_animation_player = model.find_child("AnimationPlayer", true, false) as AnimationPlayer
 			_skeleton = model.find_child("Skeleton3D", true, false) as Skeleton3D
+			_fight_animations_ready = FIGHT_ANIMATION_BUILDER.install(_animation_player, _skeleton, ATTACKS)
 			_set_locomotion_animation("Idle")
 	else:
 		_add_debug_visual()
@@ -188,8 +191,12 @@ func request_attack(kind: String, side: String = "right") -> bool:
 	attack_phase_time = float(ATTACKS[kind].windup)
 	attack_count += 1
 	attack_started.emit(kind)
+	_spawn_attack_sweep(kind, side)
 	if _animation_player != null:
-		_animation_player.stop()
+		if _fight_animations_ready:
+			_animation_player.play(FIGHT_ANIMATION_BUILDER.clip_path(kind, side), 0.04)
+		else:
+			_animation_player.stop()
 	return true
 
 func _update_attack(delta: float) -> void:
@@ -224,6 +231,7 @@ func _resolve_attack() -> void:
 	if dealt > 0:
 		rage.record_effective_hit(float(dealt))
 		attack_connected.emit(attack_kind, target)
+		_spawn_attack_impact(target.global_position + Vector3(0.0, 1.0, 0.0), attack_kind)
 
 func try_jump() -> bool:
 	if not is_on_floor() or rage.current_soul_condemned:
@@ -367,6 +375,100 @@ func _find_target(max_range: float, min_facing_dot: float) -> FoundationEnemy:
 		chosen = candidate
 	return chosen
 
+func _spawn_attack_sweep(kind: String, side: String) -> void:
+	var scene_root: Node = get_tree().current_scene
+	if scene_root == null:
+		scene_root = get_tree().root
+	var sweep_layer := CanvasLayer.new()
+	sweep_layer.layer = 12
+	scene_root.add_child(sweep_layer)
+
+	var sweep := Node2D.new()
+	sweep_layer.add_child(sweep)
+	var viewport_size := get_viewport().get_visible_rect().size
+	sweep.position = viewport_size * Vector2(0.50, 0.49)
+	sweep.z_index = 100
+
+	var radius := 168.0 if kind == "kick" else 122.0
+	var points := PackedVector2Array()
+	for point_index in range(25):
+		var progress := float(point_index) / 24.0
+		var angle := lerpf(-1.22, 1.22, progress)
+		points.append(Vector2(sin(angle) * radius, -cos(angle) * radius * 0.76))
+
+	var hot_color := Color(0.22, 0.76, 1.0, 0.96) if kind == "kick" else Color(1.0, 0.26, 0.045, 0.96)
+	var glow := Line2D.new()
+	glow.points = points
+	glow.width = 22.0 if kind == "kick" else 17.0
+	glow.default_color = hot_color
+	glow.antialiased = true
+	glow.begin_cap_mode = Line2D.LINE_CAP_ROUND
+	glow.end_cap_mode = Line2D.LINE_CAP_ROUND
+	sweep.add_child(glow)
+
+	var core := Line2D.new()
+	core.points = points
+	core.width = 5.0
+	core.default_color = Color(0.83, 0.96, 1.0, 1.0) if kind == "kick" else Color(1.0, 0.94, 0.72, 1.0)
+	core.antialiased = true
+	core.begin_cap_mode = Line2D.LINE_CAP_ROUND
+	core.end_cap_mode = Line2D.LINE_CAP_ROUND
+	sweep.add_child(core)
+
+	var side_sign := 1.0 if side == "right" else -1.0
+	var rotation_start := -0.28 * side_sign
+	sweep.rotation = rotation_start
+	sweep.scale = Vector2.ONE * 0.62
+	sweep.modulate = Color(1.0, 1.0, 1.0, 0.96)
+	var tween := create_tween()
+	tween.tween_property(sweep, "scale", Vector2.ONE * 1.18, 0.52).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tween.parallel().tween_property(sweep, "rotation", rotation_start + 0.78 * side_sign, 0.52)
+	tween.parallel().tween_property(sweep, "modulate:a", 0.0, 0.52)
+	tween.tween_callback(sweep_layer.queue_free)
+
+func _spawn_attack_impact(at: Vector3, kind: String) -> void:
+	var impact := Node3D.new()
+	impact.name = "CombatImpact"
+	impact.add_to_group("attack_impact_fx")
+	var scene_root: Node = get_tree().current_scene
+	if scene_root == null:
+		scene_root = get_tree().root
+	scene_root.add_child(impact)
+	impact.global_position = at
+
+	var color := Color(1.0, 0.74, 0.30) if kind == "punch" else Color(1.0, 0.38, 0.12)
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.emission_enabled = true
+	material.emission = color
+	material.emission_energy_multiplier = 2.2
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+
+	var flash := MeshInstance3D.new()
+	var sphere := SphereMesh.new()
+	sphere.radius = 0.20
+	sphere.height = 0.40
+	flash.mesh = sphere
+	flash.material_override = material
+	impact.add_child(flash)
+	for spark_index in range(8):
+		var spark := MeshInstance3D.new()
+		var shard := BoxMesh.new()
+		shard.size = Vector3(0.055, 0.055, 0.30)
+		spark.mesh = shard
+		spark.material_override = material
+		var angle := TAU * float(spark_index) / 8.0
+		spark.position = Vector3(cos(angle) * 0.18, sin(angle) * 0.18, 0.0)
+		spark.rotation.y = angle
+		impact.add_child(spark)
+
+	impact.scale = Vector3.ONE * 0.72
+	var tween := create_tween()
+	tween.tween_property(impact, "scale", Vector3.ONE * 2.0, 0.42).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tween.parallel().tween_property(material, "albedo_color:a", 0.0, 0.42)
+	tween.tween_callback(impact.queue_free)
+
 func _spawn_spell_burst(at: Vector3) -> void:
 	var root := MeshInstance3D.new()
 	root.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -391,9 +493,7 @@ func _spawn_spell_burst(at: Vector3) -> void:
 	tween.tween_callback(root.queue_free)
 
 func _update_attack_pose() -> void:
-	if _skeleton == null:
-		return
-	if attack_phase == "ready":
+	if _skeleton == null or attack_phase == "ready" or _fight_animations_ready:
 		return
 	if _animation_player != null:
 		_animation_player.stop()
@@ -403,8 +503,8 @@ func _update_attack_pose() -> void:
 	var mirror := -1.0 if attack_side == "left" else 1.0
 	if attack_kind == "punch":
 		_set_bone_rotation("Chest", Vector3(-0.08, -0.18 * windup_blend * mirror, 0.03 * mirror))
-		_set_bone_rotation(limb + "UpperArm", Vector3(-1.15 * windup_blend, 0.0, -0.15 * mirror))
-		_set_bone_rotation(limb + "Forearm", Vector3(-0.70 * windup_blend, 0.0, 0.0))
+		_set_bone_rotation(limb + "UpperArm", Vector3(1.24 * windup_blend, 0.0, -0.15 * mirror))
+		_set_bone_rotation(limb + "Forearm", Vector3(0.30 * windup_blend, 0.0, 0.0))
 	else:
 		_set_bone_rotation("Chest", Vector3(-0.12, 0.04 * mirror, 0.0))
 		_set_bone_rotation(limb + "Thigh", Vector3(-1.28 * windup_blend, 0.0, 0.0))
@@ -416,8 +516,13 @@ func _set_bone_rotation(bone_name: String, euler: Vector3) -> void:
 		_skeleton.set_bone_pose_rotation(bone_index, Quaternion.from_euler(euler))
 
 func _set_locomotion_animation(animation_name: String) -> void:
-	if _animation_player != null and _animation_player.has_animation(animation_name):
-		_animation_player.play(animation_name)
+	if _animation_player == null:
+		return
+	var selected_animation := StringName(animation_name)
+	if not _animation_player.has_animation(selected_animation):
+		return
+	if _animation_player.current_animation != selected_animation or not _animation_player.is_playing():
+		_animation_player.play(selected_animation, 0.10)
 
 func _update_locomotion_animation() -> void:
 	if _animation_player == null or attack_phase != "ready":

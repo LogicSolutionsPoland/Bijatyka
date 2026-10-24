@@ -5,6 +5,12 @@ const PLAYER_SCRIPT := preload("res://scripts/player_controller.gd")
 const ENEMY_SCRIPT := preload("res://scripts/enemy.gd")
 const HUD_SCRIPT := preload("res://scripts/mobile_hud.gd")
 const SHADOW_POLICY := preload("res://scripts/shadow_policy.gd")
+# Reference: close, right-shoulder third-person view, with Thornbound left of center.
+# Height is measured above the player's ground origin, not added to an existing camera offset.
+const CAMERA_PIVOT_HEIGHT := 1.55
+const CAMERA_FOLLOW_DISTANCE := 2.35
+const CAMERA_SHOULDER_OFFSET := 0.75
+const CAMERA_PITCH_DEGREES := -6.0
 
 var player: FoundationPlayer
 var camera_rig: Node3D
@@ -36,7 +42,7 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if player == null or camera_rig == null:
 		return
-	var target_position := player.global_position + Vector3(0.0, 1.42, 0.0)
+	var target_position := player.global_position + Vector3(0.0, CAMERA_PIVOT_HEIGHT, 0.0)
 	camera_rig.global_position = camera_rig.global_position.lerp(target_position, 1.0 - exp(-delta * 7.5))
 	camera_rig.rotation.y = lerp_angle(camera_rig.rotation.y, player.rotation.y, 1.0 - exp(-delta * 8.0))
 	player.set_camera_yaw(camera_rig.rotation.y)
@@ -294,19 +300,22 @@ func _add_brazier(at: Vector3, flame_color: Color) -> void:
 func _build_camera() -> void:
 	camera_rig = Node3D.new()
 	camera_rig.name = "FollowCameraRig"
-	camera_rig.position = player.global_position + Vector3(0.0, 1.42, 0.0)
+	camera_rig.position = player.global_position + Vector3(0.0, CAMERA_PIVOT_HEIGHT, 0.0)
 	add_child(camera_rig)
 	var arm := SpringArm3D.new()
 	arm.name = "CollisionSpringArm"
-	arm.spring_length = 4.8
-	arm.margin = 0.22
+	arm.spring_length = CAMERA_FOLLOW_DISTANCE
+	arm.margin = 0.15
 	arm.collision_mask = 1
-	arm.position.x = 0.48
-	arm.rotation_degrees.x = -9.0
+	arm.add_excluded_object(player.get_rid())
+	# Offset the camera to the player's right to keep Thornbound in the left third
+	# of the screen while the forward combat lane stays open near the center.
+	arm.position.x = CAMERA_SHOULDER_OFFSET
+	arm.rotation_degrees.x = CAMERA_PITCH_DEGREES
 	camera_rig.add_child(arm)
 	camera = Camera3D.new()
 	camera.name = "BehindPlayerCamera"
-	camera.fov = 64.0
+	camera.fov = 60.0
 	camera.near = 0.08
 	camera.far = 140.0
 	camera.current = true

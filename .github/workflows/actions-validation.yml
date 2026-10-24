@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - codex/retribution-godot-foundation
+      - codex/over-shoulder-camera
   pull_request:
     branches:
       - main
