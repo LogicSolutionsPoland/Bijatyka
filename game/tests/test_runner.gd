@@ -124,14 +124,16 @@ func _test_manual_attack_and_hit_window() -> void:
 	root.add_child(target)
 	await process_frame
 	_check(player.request_attack("punch"), "punch press starts one attack")
-	_check(not player.request_attack("punch") and player.attack_count == 1, "second press during recovery cannot queue a combo")
+	_check(player.request_attack("kick") and player.attack_count == 1 and player._queued_attack_kind == "kick", "next input buffers during the current attack")
 	player._update_attack(0.15)
 	_check(target.hp < target.starting_health, "punch hit window detects an in-range enemy")
 	_check(player.rage.rage == 3.0, "only a confirmed positive hit increases RAGE")
-	for _frame in range(80):
+	player._update_attack(0.13)
+	_check(player.attack_kind == "kick" and player.attack_count == 2 and player.attack_phase == "windup", "buffered kick begins as soon as the punch hit window ends")
+	for _frame in range(100):
 		player._update_attack(0.01)
 	await process_frame
-	_check(player.request_attack("kick") and player.attack_count == 2, "a fresh kick press after recovery starts its own action")
+	_check(player.attack_phase == "ready" and player.request_attack("kick") and player.attack_count == 3, "a fresh kick starts immediately after the previous action finishes")
 	var rage_before_miss := player.rage.rage
 	target.hp = target.starting_health
 	player.attack_phase = "ready"
@@ -336,10 +338,10 @@ func _test_ten_button_controls() -> void:
 	_send_touch(punch_at, 1, true)
 	_check(player.attack_count == 1 and emitted.size() == 1, "holding one pointer does not repeat an action")
 	_tap(hud._button_for_action("punch_right"), 2)
-	_check(player.attack_count == 1 and player.attack_side == "left", "opposite punch cannot queue or change an active attack")
+	_check(player.attack_count == 1 and player.attack_side == "left" and player._queued_attack_kind == "punch" and player._queued_attack_side == "right", "opposite punch buffers without interrupting the active hit")
 	for step in range(4):
 		player._update_attack(1.0)
-	_check(player.attack_phase == "ready" and player.attack_count == 1, "held touch does not start another attack after recovery")
+	_check(player.attack_phase == "recovery" and player.attack_count == 2 and player.attack_kind == "punch" and player.attack_side == "right", "buffered opposite punch starts as soon as the first hit window ends")
 	_send_touch(Vector2(640, 360), 1, false, true)
 	_check(not left_punch.button_pressed, "canceled touch releases its button even outside its rectangle")
 	_send_touch(stick_at, 0, false)
