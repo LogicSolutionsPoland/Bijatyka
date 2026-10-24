@@ -5,12 +5,13 @@ const PLAYER_SCRIPT := preload("res://scripts/player_controller.gd")
 const ENEMY_SCRIPT := preload("res://scripts/enemy.gd")
 const HUD_SCRIPT := preload("res://scripts/mobile_hud.gd")
 const SHADOW_POLICY := preload("res://scripts/shadow_policy.gd")
-# Reference: close, right-shoulder third-person view, with Thornbound left of center.
+# Reference: wide over-the-shoulder combat view, with Thornbound left of center
+# and enough distance to keep a group of enemies in frame.
 # Height is measured above the player's ground origin, not added to an existing camera offset.
 const CAMERA_PIVOT_HEIGHT := 1.55
-const CAMERA_FOLLOW_DISTANCE := 2.35
-const CAMERA_SHOULDER_OFFSET := 0.75
-const CAMERA_PITCH_DEGREES := -6.0
+const CAMERA_FOLLOW_DISTANCE := 4.1
+const CAMERA_SHOULDER_OFFSET := 1.35
+const CAMERA_PITCH_DEGREES := 4.0
 const CAMERA_YAW_RADIANS_PER_PIXEL := 0.006
 const CAMERA_PITCH_RADIANS_PER_PIXEL := 0.004
 const GAMEPAD_LOOK_DEADZONE := 0.12
@@ -327,7 +328,7 @@ func _build_camera() -> void:
 	camera_rig.add_child(camera_arm)
 	camera = Camera3D.new()
 	camera.name = "BehindPlayerCamera"
-	camera.fov = 60.0
+	camera.fov = 66.0
 	camera.near = 0.08
 	camera.far = 140.0
 	camera.current = true
