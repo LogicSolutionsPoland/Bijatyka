@@ -5,7 +5,6 @@ const Player := preload("res://scripts/player_controller.gd")
 const Enemy := preload("res://scripts/enemy.gd")
 const Foundation := preload("res://scripts/foundation.gd")
 const Hud := preload("res://scripts/mobile_hud.gd")
-const TouchStickResource := preload("res://scripts/touch_stick.gd")
 
 var failures: Array[String] = []
 var checks := 0
@@ -14,10 +13,9 @@ func _initialize() -> void:
 	call_deferred("_run_all")
 
 func _run_all() -> void:
-	_check(Foundation != null and Hud != null and TouchStickResource != null, "scene, HUD, and touch-control scripts compile")
+	_check(Foundation != null and Hud != null, "scene and swipe-control scripts compile")
 	_test_rage_rules()
 	_test_multiple_milestones_and_reset()
-	await _test_touch_stick_direction()
 	await _test_hud_aura_choices()
 	await _test_enemy_variant_health()
 	await _test_manual_attack_and_hit_window()
@@ -79,17 +77,6 @@ func _test_multiple_milestones_and_reset() -> void:
 	_check(rage.aura_choices[10] == "light" and rage.aura_choices[90] == "light", "aura choices stay mapped to their milestone")
 	rage.reset_soul()
 	_check(rage.maximum_rage == 0.0 and rage.claimed_milestones.is_empty(), "new soul clears run peak and claimed milestones")
-
-func _test_touch_stick_direction() -> void:
-	var stick := TouchStickResource.new() as TouchStick
-	stick.size = Vector2(156.0, 156.0)
-	root.add_child(stick)
-	stick._update_touch(Vector2(78.0, 20.0))
-	_check(stick.get_vector().y < -0.5, "upward virtual-stick drag maps to forward movement")
-	stick._update_touch(Vector2(78.0, 78.0))
-	_check(stick.get_vector() == Vector2.ZERO, "centered virtual stick is neutral")
-	stick.queue_free()
-	await process_frame
 
 func _test_hud_aura_choices() -> void:
 	var hud := Hud.new() as FoundationHUD
@@ -265,6 +252,13 @@ func _send_touch(at: Vector2, finger: int, down: bool, canceled: bool = false) -
 	event.canceled = canceled
 	root.push_input(event, true)
 
+func _send_drag(to: Vector2, finger: int, relative: Vector2) -> void:
+	var event := InputEventScreenDrag.new()
+	event.position = to
+	event.relative = relative
+	event.index = finger
+	root.push_input(event, true)
+
 func _tap(button: Button, finger: int = 5) -> void:
 	var at := button.get_global_rect().get_center()
 	_send_touch(at, finger, true)
@@ -297,10 +291,11 @@ func _test_ten_button_controls() -> void:
 		["spell_0", "spell_1"], ["spell_2", "spell_3"], ["dash", "jump"]
 	]
 	_check(hud._action_buttons.size() == 10, "HUD has exactly the ten requested action buttons")
+	_check(hud.find_child("MovementStick", true, false) == null, "HUD removes the lower-left analog stick")
 	for viewport_size in [Vector2(1280, 720), Vector2(1600, 720), Vector2(960, 540)]:
 		hud._root.size = viewport_size
 		hud._layout()
-		var occupied: Array[Rect2] = [hud._stick.get_global_rect()]
+		var occupied: Array[Rect2] = []
 		var previous_y := -1.0
 		for row in expected_rows:
 			var left := hud._button_for_action(row[0])
@@ -315,7 +310,7 @@ func _test_ten_button_controls() -> void:
 				var rect := button.get_global_rect()
 				_check(Rect2(Vector2.ZERO, viewport_size).encloses(rect), "action stays inside the landscape viewport")
 				for other in occupied:
-					_check(not rect.intersects(other), "buttons and movement stick do not overlap")
+					_check(not rect.intersects(other), "action buttons do not overlap each other")
 				occupied.append(rect)
 	hud._root.size = Vector2(1280, 720)
 	hud._layout()
@@ -327,9 +322,23 @@ func _test_ten_button_controls() -> void:
 		_tap(locked)
 	_check(emitted.is_empty() and player.magic_energy == 100.0, "locked magic taps cannot cast or spend energy")
 
-	var stick_at := hud._stick.get_global_rect().get_center() - Vector2(0, 50)
-	_send_touch(stick_at, 0, true)
-	_check(player.move_input().y < -0.5, "real touch event moves the joystick forward")
+	hud.camera_dragged.connect(arena._on_camera_dragged)
+	var movement_at := Vector2(420, 500)
+	_send_touch(movement_at, 0, true)
+	_send_drag(movement_at + Vector2(0, -96), 0, Vector2(0, -96))
+	_check(player.move_input().y < -0.5, "left-side drag moves the player forward without a visible joystick")
+	var yaw_before_swipe := arena._camera_yaw
+	var camera_at := Vector2(900, 500)
+	_send_touch(camera_at, 3, true)
+	_send_drag(camera_at + Vector2(100, -50), 3, Vector2(100, -50))
+	_check(arena._camera_yaw < yaw_before_swipe, "right-side swipe rotates the over-shoulder camera")
+	_check(arena._camera_pitch > deg_to_rad(Foundation.CAMERA_PITCH_DEGREES), "vertical swipe tilts the camera upward")
+	_check(player.move_input().y < -0.5, "camera swipe does not steal the movement finger")
+	var yaw_after_swipe := arena._camera_yaw
+	player.rotation.y = 1.1
+	arena._process(0.016)
+	_check(is_equal_approx(arena.camera_rig.rotation.y, yaw_after_swipe), "camera swipe yaw stays independent from player facing")
+	_send_touch(camera_at + Vector2(100, -50), 3, false)
 	var left_punch := hud._button_for_action("punch_left")
 	var punch_at := left_punch.get_global_rect().get_center()
 	_send_touch(punch_at, 1, true)
@@ -344,8 +353,8 @@ func _test_ten_button_controls() -> void:
 	_check(player.attack_phase == "recovery" and player.attack_count == 2 and player.attack_kind == "punch" and player.attack_side == "right", "buffered opposite punch starts as soon as the first hit window ends")
 	_send_touch(Vector2(640, 360), 1, false, true)
 	_check(not left_punch.button_pressed, "canceled touch releases its button even outside its rectangle")
-	_send_touch(stick_at, 0, false)
-	_check(player.move_input() == Vector2.ZERO, "releasing the movement finger stops movement")
+	_send_touch(movement_at + Vector2(0, -96), 0, false)
+	_check(player.move_input() == Vector2.ZERO, "releasing the movement gesture stops movement")
 
 	for action: String in ["punch_right", "kick_left", "kick_right"]:
 		var count_before := player.attack_count
