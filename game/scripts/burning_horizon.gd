@@ -1,7 +1,7 @@
 extends Node3D
 ## Decorative moving backdrop: never participates in gameplay collision or culling.
 const WALL_HEIGHT := 6.0
-const HALF_EXTENT := 30.0
+const HALF_EXTENT := 20.0
 const WALL_SHADER := preload("res://shaders/burning_horizon.gdshader")
 const SKY_SHADER := preload("res://shaders/burning_sky.gdshader")
 
