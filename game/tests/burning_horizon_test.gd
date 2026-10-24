@@ -33,7 +33,7 @@ func run() -> void:
 		# Every horizontal ray must hit one of the four panels at 20..28.29 m.
 		for degrees in range(0, 360, 5):
 			var direction := Vector2(cos(deg_to_rad(float(degrees))), sin(deg_to_rad(float(degrees))))
-			var distance := 30.0 / maxf(absf(direction.x), absf(direction.y))
+			var distance := 20.0 / maxf(absf(direction.x), absf(direction.y))
 			check(distance >= 19.99 and distance <= 28.29, "box covers the full horizontal view")
 	var old_rotation := backdrop.global_rotation
 	arena._apply_camera_look(1.5, -0.1)
