@@ -355,7 +355,12 @@ func _test_ten_button_controls() -> void:
 	var shoulder_arm := arena.camera.get_parent() as SpringArm3D
 	_check(shoulder_arm != null, "close third-person camera uses a collision-aware shoulder spring arm")
 	if shoulder_arm != null:
-		_check(shoulder_arm.position.x > 0.0 and shoulder_arm.rotation_degrees.x < 0.0, "camera sits above and to the right of the player")
+		_check(
+			shoulder_arm.position.x > 0.0
+			and is_equal_approx(shoulder_arm.rotation_degrees.x, Foundation.CAMERA_PITCH_DEGREES)
+			and shoulder_arm.rotation_degrees.x > 0.0,
+			"camera sits above and to the right with a slight downward combat angle"
+		)
 		_check(is_equal_approx(arena.camera_rig.position.y - player.global_position.y, Foundation.CAMERA_PIVOT_HEIGHT), "camera follow rig maintains the intended eye-level height")
 		_check(is_equal_approx(shoulder_arm.spring_length, Foundation.CAMERA_FOLLOW_DISTANCE) and shoulder_arm.collision_mask == 1, "camera holds close distance and retracts near level geometry")
 		var horizontal_half_span := shoulder_arm.spring_length * tan(deg_to_rad(arena.camera.fov * 0.5)) * (float(root.size.x) / float(root.size.y))
