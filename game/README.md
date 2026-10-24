@@ -64,7 +64,7 @@ The camera uses a close **Resident Evil 4-style right-shoulder viewpoint** match
 ## Carried-forward rules and current scope
 
 - The Thornbound mobile GLB player and rigged LOD1 zombie were copied from user-supplied Retribution assets; no music is used.
-- The endless invasion keeps 40 ordinary zombies active, initially entering from a 50 m ring. Defeated shamblers are replaced after one second, while the existing 30 m visibility radius and distant-animation throttling keep the crowd lightweight.
+- The endless invasion keeps 200 ordinary zombies active, initially entering from a 50 m ring. Defeated shamblers are replaced after one second, while the existing 30 m visibility radius and distant-animation throttling keep the crowd lightweight.
 - The yard's enemies have telegraphed windups. Ordinary zombies can interrupt, slow, or lengthen recovery but never reduce HP. The boss can damage the player.
 - Shadows are disabled on every scene light, imported player/enemy model, and procedural mesh. Distance-based enemy detail never switches them back on, and the HUD notice has no text shadow.
 - Jump landing impacts can hit and damage enemies. Dash uses the previously selected 15 m mobility distance.
