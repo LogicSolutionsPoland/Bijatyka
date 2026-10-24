@@ -13,6 +13,7 @@ void fragment() {
 	if (distance(world_position.xz, player_position.xz) > 30.0) {
 		discard;
 	}
-	ALBEDO = floor_color;
+	float radius = distance(world_position.xz, player_position.xz);
+	ALBEDO = mix(floor_color, vec3(0.161, 0.105, 0.098), smoothstep(24.0, 30.0, radius));
 	ROUGHNESS = 0.96;
 }

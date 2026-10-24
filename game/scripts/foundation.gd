@@ -1,5 +1,6 @@
 extends Node3D
 
+const BURNING_HORIZON := preload("res://scripts/burning_horizon.gd")
 const PLAYER_SCENE := preload("res://scenes/player.tscn")
 const PLAYER_SCRIPT := preload("res://scripts/player_controller.gd")
 const ENEMY_SCRIPT := preload("res://scripts/enemy.gd")
@@ -36,6 +37,7 @@ var _pending_notice := ""
 var _visibility_timer := 0.0
 var _floor_material: ShaderMaterial
 var _boss_enemy: FoundationEnemy
+var burning_horizon: Node3D
 
 func _ready() -> void:
 	_build_environment()
@@ -46,6 +48,10 @@ func _ready() -> void:
 	player.safe_base_position = player.position
 	add_child(player)
 	_build_camera()
+	burning_horizon = BURNING_HORIZON.new()
+	burning_horizon.name = "BurningHorizon"
+	add_child(burning_horizon)
+	burning_horizon.follow_player(player.global_position)
 	_build_hud()
 	_spawn_enemies()
 	_update_distance_visibility()
@@ -62,6 +68,7 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if player == null or camera_rig == null:
 		return
+	burning_horizon.follow_player(player.global_position)
 	var target_position := player.global_position + Vector3(0.0, CAMERA_PIVOT_HEIGHT, 0.0)
 	camera_rig.global_position = camera_rig.global_position.lerp(target_position, 1.0 - exp(-delta * 7.5))
 	_update_gamepad_camera(delta)
@@ -81,16 +88,8 @@ func _process(delta: float) -> void:
 func _build_environment() -> void:
 	var world := WorldEnvironment.new()
 	var environment := Environment.new()
-	var sky_material := ProceduralSkyMaterial.new()
-	sky_material.sky_top_color = Color(0.035, 0.050, 0.095)
-	sky_material.sky_horizon_color = Color(0.42, 0.20, 0.15)
-	sky_material.ground_bottom_color = Color(0.025, 0.032, 0.042)
-	sky_material.ground_horizon_color = Color(0.16, 0.11, 0.105)
-	sky_material.sky_curve = 0.38
-	var sky := Sky.new()
-	sky.sky_material = sky_material
 	environment.background_mode = Environment.BG_SKY
-	environment.sky = sky
+	environment.sky = BURNING_HORIZON.make_sky()
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	environment.ambient_light_color = Color(0.43, 0.39, 0.40)
 	environment.ambient_light_energy = 0.62
@@ -496,6 +495,8 @@ func _update_distance_visibility() -> void:
 	_apply_distance_visibility(self)
 
 func _apply_distance_visibility(node: Node) -> void:
+	if node.is_in_group("distant_backdrop"):
+		return
 	if node.is_in_group("radial_floor"):
 		node.visible = true
 	elif node is GeometryInstance3D or node is Label3D:
