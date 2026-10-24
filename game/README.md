@@ -19,15 +19,16 @@ godot --headless --path game --script res://tests/test_runner.gd
 
 ## Controls
 
-| Action | Keyboard | Touch |
-|---|---|---|
-| Move | WASD / arrows | Left virtual stick |
-| Punch | J (right) | Left / right PUNCH |
-| Kick | K (right) | Left / right KICK |
-| Jump | Space | JUMP |
-| Dash | Shift | DASH |
-| Cast unlocked spell | L (selected spell) | Four direct MAGIC slots |
-| Cycle unlocked spells | U | Use the desired MAGIC slot directly |
+| Action | Keyboard | Gamepad | Touch |
+|---|---|---|---|
+| Move | WASD / arrows | Left stick | Drag on left half |
+| Camera | Drag on right half | Right stick | Swipe on right half |
+| Punch | J (right) | Buttons await your layout | Left / right PUNCH |
+| Kick | K (right) | Buttons await your layout | Left / right KICK |
+| Jump | Space | Button awaits your layout | JUMP |
+| Dash | Shift | Button awaits your layout | DASH |
+| Cast unlocked spell | L (selected spell) | Buttons await your layout | Four direct MAGIC slots |
+| Cycle unlocked spells | U | Button awaits your layout | Use the desired MAGIC slot directly |
 
 The touch buttons form two columns at the screen edges, in this exact order:
 
@@ -39,14 +40,13 @@ The touch buttons form two columns at the screen edges, in this exact order:
 | MAGIC (slot 3) | MAGIC (slot 4) |
 | DASH | JUMP |
 
-The movement stick sits just inside the left column, without overlapping a button.
+There is no on-screen analog stick: dragging on the left half moves, while swiping on the right half rotates the camera. The gamepad left stick moves and the right stick rotates the camera; gamepad skill buttons stay unbound until you provide their layout.
 Magic slots fill in the order distinct spells are unlocked through aura choices.
 All four stay visible while locked; unlocked slots show the spell name below MAGIC.
 Spells stay in their slots through normal RAGE decay and all slots lock again on a soul reset.
-Touch actions trigger once on finger-down. Holding or dragging a finger never queues another attack;
-independent fingers allow moving and attacking together. Combat input is blocked during aura selection.
+A touch tap triggers one action immediately; holding a melee button repeats at 0.20-second intervals, up to five hit attempts per second. Independent fingers allow moving, looking, and attacking together. Combat input is blocked during aura selection.
 
-Each attack press starts exactly one action. The player has four timed, full-body skeletal clips: left and right punches, plus left and right kicks. Every clip includes a chamber, contact, follow-through, and guarded recovery; the contact marker matches that move's existing hit timing. Punch and kick presses now play a bright, animated sweep across the center of the screen, so the move is visible even when it misses. A confirmed hit adds an expanding emissive burst at the target. The character keeps the model's imported idle animation between attacks. A held key never chains attacks.
+Each attack press starts exactly one action. The player has four timed, full-body skeletal clips: left and right punches, plus left and right kicks. Every clip includes a chamber, contact, follow-through, and guarded recovery; the contact marker matches that move's existing hit timing. Punch and kick presses now play a bright, animated sweep across the center of the screen, so the move is visible even when it misses. A confirmed hit adds an expanding emissive burst at the target. The character keeps the model's imported idle animation between attacks. Holding a melee key repeats at the same cadence; every hit remains a distinct manual attack.
 
 Both punch clips extend the striking fist along the player's forward direction at contact, including after the player turns. The unanimated fallback punch pose uses the same direction. The headless rig check measures each wrist relative to its shoulder and player heading.
 
