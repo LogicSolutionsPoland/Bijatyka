@@ -23,12 +23,14 @@ godot --headless --path game --script res://tests/test_runner.gd
 |---|---|---|---|
 | Move | WASD / arrows | Left stick | Drag on left half |
 | Camera | Drag on right half | Right stick | Swipe on right half |
-| Left / right punch | J (right) | X / Square, Y / Triangle | Left / right PUNCH |
+| Left / right punch | J (right) | Unassigned, Y / Triangle | Left / right PUNCH |
 | Left / right kick | K (right) | LB / L1, RB / R1 | Left / right KICK |
 | Jump | Space | A / Cross | JUMP |
-| Dash | Shift | B / Circle | DASH |
+| Dash | Shift | B / Circle or X / Square | DASH |
 | Magic slots 1 / 2 / 3 / 4 | L casts selected spell | D-pad Up / Right / Down / Left | Four direct MAGIC slots |
 | Cycle unlocked spells | U | — | Use the desired MAGIC slot directly |
+
+Xbox X / PlayStation Square now performs dash. B / Circle also performs dash until its new action is chosen; controller left punch is temporarily unassigned. Touch left punch remains available.
 
 The touch buttons form two columns at the screen edges, in this exact order:
 

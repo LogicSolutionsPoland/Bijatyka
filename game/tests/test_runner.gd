@@ -63,25 +63,34 @@ func _test_gamepad_input_map() -> void:
 					break
 		_check(found, "%s maps to the expected gamepad stick axis" % String(action))
 	var expected_buttons := {
-		&"pad_jump": JOY_BUTTON_A, &"pad_dash": JOY_BUTTON_B,
-		&"pad_punch_left": JOY_BUTTON_X, &"pad_punch_right": JOY_BUTTON_Y,
-		&"pad_kick_left": JOY_BUTTON_LEFT_SHOULDER, &"pad_kick_right": JOY_BUTTON_RIGHT_SHOULDER,
-		&"pad_spell_0": JOY_BUTTON_DPAD_UP, &"pad_spell_1": JOY_BUTTON_DPAD_RIGHT,
-		&"pad_spell_2": JOY_BUTTON_DPAD_DOWN, &"pad_spell_3": JOY_BUTTON_DPAD_LEFT
+		&"pad_jump": [JOY_BUTTON_A], &"pad_dash": [JOY_BUTTON_B, JOY_BUTTON_X],
+		&"pad_punch_right": [JOY_BUTTON_Y],
+		&"pad_kick_left": [JOY_BUTTON_LEFT_SHOULDER], &"pad_kick_right": [JOY_BUTTON_RIGHT_SHOULDER],
+		&"pad_spell_0": [JOY_BUTTON_DPAD_UP], &"pad_spell_1": [JOY_BUTTON_DPAD_RIGHT],
+		&"pad_spell_2": [JOY_BUTTON_DPAD_DOWN], &"pad_spell_3": [JOY_BUTTON_DPAD_LEFT]
 	}
 	var routed_actions: Array[String] = []
 	for row in Hud.ACTION_ROWS:
 		for action: String in row:
 			routed_actions.append(action)
-	_check(expected_buttons.size() == routed_actions.size() and Hud.GAMEPAD_ACTIONS.size() == routed_actions.size(), "each touch action has exactly one gamepad binding")
+	_check(expected_buttons.size() == routed_actions.size() - 1 and Hud.GAMEPAD_ACTIONS.size() == routed_actions.size(), "touch keeps ten actions while left punch awaits its controller button")
+	_check(InputMap.action_get_events(&"pad_punch_left").is_empty(), "unassigned left punch cannot fire together with X dash")
 	for action: StringName in expected_buttons:
 		var events := InputMap.action_get_events(action)
-		_check(events.size() == 1 and events[0] is InputEventJoypadButton and (events[0] as InputEventJoypadButton).button_index == expected_buttons[action], "%s uses its SDL logical gamepad button" % action)
+		var actual: Array[int] = []
+		for input_event: InputEvent in events:
+			if input_event is InputEventJoypadButton:
+				actual.append((input_event as InputEventJoypadButton).button_index)
+		actual.sort()
+		var expected: Array = expected_buttons[action].duplicate()
+		expected.sort()
+		_check(actual == expected and events.size() == expected.size(), "%s uses its assigned SDL logical gamepad buttons" % action)
 		_check(routed_actions.has(Hud.GAMEPAD_ACTIONS.get(action, "")), "%s routes to an existing touch HUD action" % action)
 	var assigned_buttons := {}
-	for button in expected_buttons.values():
-		assigned_buttons[button] = true
-	_check(assigned_buttons.size() == 10 and not assigned_buttons.has(JOY_BUTTON_START) and not assigned_buttons.has(JOY_BUTTON_GUIDE), "ten distinct gameplay buttons leave system buttons unassigned")
+	for buttons: Array in expected_buttons.values():
+		for button: int in buttons:
+			assigned_buttons[button] = true
+	_check(assigned_buttons.size() == 10 and not assigned_buttons.has(JOY_BUTTON_START) and not assigned_buttons.has(JOY_BUTTON_GUIDE), "ten physical gameplay buttons leave system buttons unassigned")
 
 func _test_rage_rules() -> void:
 	var rage := Rage.new(10.0, 1.0, 100.0) as RageProgression
@@ -503,7 +512,7 @@ func _test_gamepad_controls() -> void:
 	hud.action_requested.connect(func(action: String) -> void: routed.append(action))
 	var buttons := {
 		JOY_BUTTON_A: "jump", JOY_BUTTON_B: "dash",
-		JOY_BUTTON_X: "punch_left", JOY_BUTTON_Y: "punch_right",
+		JOY_BUTTON_X: "dash", JOY_BUTTON_Y: "punch_right",
 		JOY_BUTTON_LEFT_SHOULDER: "kick_left", JOY_BUTTON_RIGHT_SHOULDER: "kick_right",
 		JOY_BUTTON_DPAD_UP: "spell_0", JOY_BUTTON_DPAD_RIGHT: "spell_1",
 		JOY_BUTTON_DPAD_DOWN: "spell_2", JOY_BUTTON_DPAD_LEFT: "spell_3"
@@ -524,7 +533,7 @@ func _test_gamepad_controls() -> void:
 				player._update_attack(1.0)
 
 	# Every melee button has one immediate strike and repeats at the touch cadence.
-	for button in [JOY_BUTTON_X, JOY_BUTTON_Y, JOY_BUTTON_LEFT_SHOULDER, JOY_BUTTON_RIGHT_SHOULDER]:
+	for button in [JOY_BUTTON_Y, JOY_BUTTON_LEFT_SHOULDER, JOY_BUTTON_RIGHT_SHOULDER]:
 		var before := routed.size()
 		var attacks_before := player.attack_count
 		_send_pad(button, true)
@@ -550,7 +559,7 @@ func _test_gamepad_controls() -> void:
 		for step in range(4):
 			player._update_attack(1.0)
 
-	for button in [JOY_BUTTON_A, JOY_BUTTON_B, JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_RIGHT, JOY_BUTTON_DPAD_DOWN, JOY_BUTTON_DPAD_LEFT]:
+	for button in [JOY_BUTTON_A, JOY_BUTTON_B, JOY_BUTTON_X, JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_RIGHT, JOY_BUTTON_DPAD_DOWN, JOY_BUTTON_DPAD_LEFT]:
 		var before := routed.size()
 		_send_pad(button, true)
 		hud._process(1.0)
@@ -560,6 +569,12 @@ func _test_gamepad_controls() -> void:
 		_send_pad(button, true)
 		_check(routed.size() == before + 2, "%s can activate on a new press" % buttons[button])
 		_send_pad(button, false)
+
+	player.dash_time = 0.0
+	var attacks_before_x := player.attack_count
+	_send_pad(JOY_BUTTON_X, true)
+	_check(player.dash_time > 0.0 and player.attack_count == attacks_before_x, "Xbox X dashes without triggering left punch")
+	_send_pad(JOY_BUTTON_X, false)
 
 	player.rage.unlocked_spells.assign(["light"])
 	arena._refresh_hud()
@@ -603,8 +618,8 @@ func _test_gamepad_controls() -> void:
 	var before_menu := routed.size()
 	paused = true
 	hud.show_aura_selection(10)
+	_send_pad(JOY_BUTTON_Y, true)
 	_send_pad(JOY_BUTTON_X, true)
-	_send_pad(JOY_BUTTON_B, true)
 	hud._process(0.4)
 	arena._update_gamepad_camera(0.4)
 	_check(routed.size() == before_menu, "controller gameplay buttons cannot fire through an aura menu")
@@ -612,11 +627,11 @@ func _test_gamepad_controls() -> void:
 	paused = false
 	hud._process(0.4)
 	_check(routed.size() == before_menu, "holding buttons across pause cannot trigger delayed gameplay")
+	_send_pad(JOY_BUTTON_Y, false)
 	_send_pad(JOY_BUTTON_X, false)
-	_send_pad(JOY_BUTTON_B, false)
-	_send_pad(JOY_BUTTON_X, true)
+	_send_pad(JOY_BUTTON_Y, true)
 	_check(routed.size() == before_menu + 1, "a fresh press after the menu resumes melee")
-	_send_pad(JOY_BUTTON_X, false)
+	_send_pad(JOY_BUTTON_Y, false)
 	arena.queue_free()
 	await process_frame
 	root.size = original_size
