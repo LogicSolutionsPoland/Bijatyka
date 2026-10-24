@@ -21,6 +21,7 @@ func _run_all() -> void:
 	await _test_hud_aura_choices()
 	await _test_enemy_variant_health()
 	await _test_manual_attack_and_hit_window()
+	await _test_punch_animation_faces_forward()
 	await _test_magic_unlock_and_damage()
 	await _test_jump_and_enemy_interrupt_rules()
 	await _test_boss_damage_rule()
@@ -142,6 +143,29 @@ func _test_manual_attack_and_hit_window() -> void:
 	_check(player.rage.rage == rage_before_miss, "missed kick does not increase RAGE")
 	player.queue_free()
 	target.queue_free()
+	await process_frame
+
+func _test_punch_animation_faces_forward() -> void:
+	var player := Player.new() as FoundationPlayer
+	player.set_physics_process(false)
+	root.add_child(player)
+	await process_frame
+	_check(player._fight_animations_ready, "imported player rig accepts the authored fight clips")
+	if player._fight_animations_ready:
+		player.rotation.y = deg_to_rad(65.0)
+		for side in ["left", "right"]:
+			_check(player.request_attack("punch", side), "%s punch starts its authored clip" % side)
+			player._animation_player.advance(0.04)
+			player._animation_player.advance(float(Player.ATTACKS["punch"].windup) - 0.04)
+			var shoulder_index := player._skeleton.find_bone("%sUpperArm" % side.capitalize())
+			var wrist_index := player._skeleton.find_bone("%sHand" % side.capitalize())
+			var shoulder := player._skeleton.to_global(player._skeleton.get_bone_global_pose(shoulder_index).origin)
+			var wrist := player._skeleton.to_global(player._skeleton.get_bone_global_pose(wrist_index).origin)
+			var forward := -player.global_transform.basis.z
+			_check((wrist - shoulder).dot(forward) > 0.25, "%s fist extends in front of the player at contact" % side)
+			player.attack_phase = "ready"
+			player.attack_kind = ""
+	player.queue_free()
 	await process_frame
 
 func _test_magic_unlock_and_damage() -> void:

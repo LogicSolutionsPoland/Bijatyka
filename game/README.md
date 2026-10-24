@@ -48,6 +48,8 @@ independent fingers allow moving and attacking together. Combat input is blocked
 
 Each attack press starts exactly one action. The player has four timed, full-body skeletal clips: left and right punches, plus left and right kicks. Every clip includes a chamber, contact, follow-through, and guarded recovery; the contact marker matches that move's existing hit timing. Punch and kick presses now play a bright, animated sweep across the center of the screen, so the move is visible even when it misses. A confirmed hit adds an expanding emissive burst at the target. The character keeps the model's imported idle animation between attacks. A held key never chains attacks.
 
+Both punch clips extend the striking fist along the player's forward direction at contact, including after the player turns. The unanimated fallback punch pose uses the same direction. The headless rig check measures each wrist relative to its shoulder and player heading.
+
 The imported Thornbound rig has no finger joints, so the existing hand meshes remain unchanged.
 
 The zombie rig is turned to face the same forward direction used by its approach and attack logic.

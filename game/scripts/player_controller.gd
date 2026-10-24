@@ -503,8 +503,8 @@ func _update_attack_pose() -> void:
 	var mirror := -1.0 if attack_side == "left" else 1.0
 	if attack_kind == "punch":
 		_set_bone_rotation("Chest", Vector3(-0.08, -0.18 * windup_blend * mirror, 0.03 * mirror))
-		_set_bone_rotation(limb + "UpperArm", Vector3(-1.15 * windup_blend, 0.0, -0.15 * mirror))
-		_set_bone_rotation(limb + "Forearm", Vector3(-0.70 * windup_blend, 0.0, 0.0))
+		_set_bone_rotation(limb + "UpperArm", Vector3(1.24 * windup_blend, 0.0, -0.15 * mirror))
+		_set_bone_rotation(limb + "Forearm", Vector3(0.30 * windup_blend, 0.0, 0.0))
 	else:
 		_set_bone_rotation("Chest", Vector3(-0.12, 0.04 * mirror, 0.0))
 		_set_bone_rotation(limb + "Thigh", Vector3(-1.28 * windup_blend, 0.0, 0.0))

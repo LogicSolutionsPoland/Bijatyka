@@ -88,6 +88,8 @@ static func _pose_frames(kind: String, side: String) -> Dictionary:
     return _kick_frames(side_sign)
 
 static func _punch_frames(side_sign: float) -> Dictionary:
+    # Thornbound faces -Z. Positive local X lifts an arm toward -Z; the
+    # previous negative contact rotations sent both fists behind the rig.
     var active_arm := "Right" if side_sign > 0.0 else "Left"
     var guard_arm := "Left" if side_sign > 0.0 else "Right"
     var active_leg := active_arm
@@ -126,22 +128,22 @@ static func _punch_frames(side_sign: float) -> Dictionary:
     }
     poses["%sUpperArm" % active_arm] = [
         Vector3.ZERO,
-        Vector3(-0.30, 0.0, -0.07 * side_sign),
-        Vector3(-0.58, 0.0, -0.12 * side_sign),
-        Vector3(-1.15, 0.0, -0.15 * side_sign),
-        Vector3(-1.06, 0.0, -0.13 * side_sign),
-        Vector3(-0.62, 0.0, -0.08 * side_sign),
-        Vector3(-0.18, 0.0, -0.03 * side_sign),
+        Vector3(-0.16, 0.0, -0.07 * side_sign),
+        Vector3(0.30, 0.0, -0.12 * side_sign),
+        Vector3(1.24, 0.0, -0.15 * side_sign),
+        Vector3(1.18, 0.0, -0.13 * side_sign),
+        Vector3(0.68, 0.0, -0.08 * side_sign),
+        Vector3(0.20, 0.0, -0.03 * side_sign),
         Vector3.ZERO
     ]
     poses["%sForearm" % active_arm] = [
         Vector3.ZERO,
-        Vector3(-0.40, 0.0, 0.0),
-        Vector3(-0.66, 0.0, 0.0),
-        Vector3(-0.78, 0.0, 0.0),
-        Vector3(-0.52, 0.0, 0.0),
-        Vector3(-0.30, 0.0, 0.0),
-        Vector3(-0.10, 0.0, 0.0),
+        Vector3(1.05, 0.0, 0.0),
+        Vector3(0.88, 0.0, 0.0),
+        Vector3(0.30, 0.0, 0.0),
+        Vector3(0.24, 0.0, 0.0),
+        Vector3(0.40, 0.0, 0.0),
+        Vector3(0.20, 0.0, 0.0),
         Vector3.ZERO
     ]
     poses["%sHand" % active_arm] = [
@@ -156,22 +158,22 @@ static func _punch_frames(side_sign: float) -> Dictionary:
     ]
     poses["%sUpperArm" % guard_arm] = [
         Vector3.ZERO,
-        Vector3(-0.08, 0.0, 0.035 * side_sign),
-        Vector3(-0.14, 0.0, 0.06 * side_sign),
-        Vector3(-0.19, 0.0, 0.08 * side_sign),
-        Vector3(-0.17, 0.0, 0.07 * side_sign),
-        Vector3(-0.12, 0.0, 0.05 * side_sign),
-        Vector3(-0.05, 0.0, 0.02 * side_sign),
+        Vector3(0.22, 0.0, 0.035 * side_sign),
+        Vector3(0.30, 0.0, 0.06 * side_sign),
+        Vector3(0.36, 0.0, 0.08 * side_sign),
+        Vector3(0.34, 0.0, 0.07 * side_sign),
+        Vector3(0.25, 0.0, 0.05 * side_sign),
+        Vector3(0.10, 0.0, 0.02 * side_sign),
         Vector3.ZERO
     ]
     poses["%sForearm" % guard_arm] = [
         Vector3.ZERO,
-        Vector3(-0.08, 0.0, 0.0),
-        Vector3(-0.14, 0.0, 0.0),
-        Vector3(-0.20, 0.0, 0.0),
-        Vector3(-0.18, 0.0, 0.0),
-        Vector3(-0.10, 0.0, 0.0),
-        Vector3(-0.04, 0.0, 0.0),
+        Vector3(1.10, 0.0, 0.0),
+        Vector3(1.16, 0.0, 0.0),
+        Vector3(1.16, 0.0, 0.0),
+        Vector3(1.10, 0.0, 0.0),
+        Vector3(0.90, 0.0, 0.0),
+        Vector3(0.40, 0.0, 0.0),
         Vector3.ZERO
     ]
     poses["%sHand" % guard_arm] = [
