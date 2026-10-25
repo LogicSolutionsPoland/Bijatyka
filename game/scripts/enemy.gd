@@ -189,7 +189,8 @@ func _update_spawn_assault(delta: float) -> bool:
 func _ready() -> void:
 	add_to_group("enemies")
 	collision_layer = 2
-	collision_mask = 1
+	# Also collide with the player-base boundary (physics layer 3 / bit 4).
+	collision_mask = 1 | 4
 	name = enemy_variant.capitalize()
 	_apply_variant()
 	hp = starting_health
