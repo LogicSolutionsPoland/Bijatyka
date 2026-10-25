@@ -14,6 +14,7 @@ const SHADOW_POLICY := preload("res://scripts/shadow_policy.gd")
 const FLASHLIGHT_VISIBILITY := preload("res://scripts/flashlight_visibility.gd")
 const RADIAL_GROUND_SHADER := preload("res://shaders/radial_ground.gdshader")
 const RUIN_SURFACE_SHADER := preload("res://shaders/ruined_surface.gdshader")
+const ARENA_MAP_SCRIPT := preload("res://scripts/arena_map_upgrade.gd")
 const ZOMBIE_HORDE_SIZE := 15
 const ZOMBIE_PERFORMANCE_CAPACITY := 200
 const ZOMBIE_SPAWN_DISTANCE := 50.0
@@ -70,6 +71,9 @@ func _ready() -> void:
 	_start_game_music()
 	_build_environment()
 	_build_arena()
+	var arena_map := ARENA_MAP_SCRIPT.new() as Node3D
+	arena_map.name = "AshenQuarantineMap"
+	add_child(arena_map)
 	player = PLAYER_SCENE.instantiate() as FoundationPlayer
 	player.name = "ThornboundPlayer"
 	player.position = PLAYER_BASE_POSITION
