@@ -285,7 +285,7 @@ func _add_player_base_boundary() -> void:
 		var barrier := StaticBody3D.new()
 		barrier.name = "PlayerBaseBoundary_%02d" % index
 		barrier.collision_layer = 4
-		barrier.collision_mask = 0
+		barrier.collision_mask = 2
 		barrier.position = PLAYER_BASE_CENTER + Vector3(cos(angle) * PLAYER_BASE_BOUNDARY_RADIUS, 1.25, sin(angle) * PLAYER_BASE_BOUNDARY_RADIUS)
 		barrier.rotation.y = angle - PI * 0.5
 		barrier.add_to_group("zombie_base_boundary")
