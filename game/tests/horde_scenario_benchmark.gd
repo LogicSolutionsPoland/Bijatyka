@@ -1,7 +1,7 @@
 extends SceneTree
 ## Headless comparison run. Render-only monitors are explicitly reported as N/A.
 
-const POPULATIONS := [20, 69, 100, 200]
+const POPULATIONS := [15, 20, 69, 100, 200]
 const MODES := ["concentrated", "approach"]
 const FOUNDATION_SCENE := preload("res://scenes/foundation.tscn")
 const WARMUP_FRAMES := 60
@@ -130,7 +130,7 @@ func _run() -> void:
 			await process_frame
 
 	if failures.is_empty():
-		print("PASS: horde scenario benchmark (8 scenarios; headless CPU/scene metrics only)")
+		print("PASS: horde scenario benchmark (%d scenarios; headless CPU/scene metrics only)" % (POPULATIONS.size() * MODES.size()))
 	else:
 		for failure in failures:
 			push_error(failure)
