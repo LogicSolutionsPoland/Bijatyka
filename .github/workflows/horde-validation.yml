@@ -7,6 +7,7 @@ on:
       - codex/endless-invasion-40
       - codex/zombie-roaming-aggression
       - codex/concealed-forward-assault
+      - codex/graphics-upgrade
   workflow_dispatch:
 
 permissions:
@@ -80,7 +81,7 @@ jobs:
           if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/godot-smoke.log"; then exit 1; fi
 
   android-export:
-    # This feature is validation-only. Retain existing APK behavior on older branches.
+    # Keep the concealed-spawn review branch validation-only; graphics branches export an APK.
     if: github.ref_name != 'codex/concealed-forward-assault'
     needs: validate
     runs-on: ubuntu-24.04
@@ -110,12 +111,12 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p build
-          godot --headless --path game --export-debug "Android ARM64" "$GITHUB_WORKSPACE/build/Bijatyka-zombie-aggression-arm64.apk" 2>&1 | tee "$RUNNER_TEMP/android-export.log"
+          godot --headless --path game --export-debug "Android ARM64" "$GITHUB_WORKSPACE/build/Bijatyka-graphics-upgrade-arm64.apk" 2>&1 | tee "$RUNNER_TEMP/android-export.log"
           if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/android-export.log"; then exit 1; fi
-          test -s "$GITHUB_WORKSPACE/build/Bijatyka-zombie-aggression-arm64.apk"
+          test -s "$GITHUB_WORKSPACE/build/Bijatyka-graphics-upgrade-arm64.apk"
       - name: Upload playable APK
         uses: actions/upload-artifact@v4
         with:
-          name: Bijatyka-zombie-aggression-arm64
-          path: build/Bijatyka-zombie-aggression-arm64.apk
+          name: Bijatyka-graphics-upgrade-arm64
+          path: build/Bijatyka-graphics-upgrade-arm64.apk
           if-no-files-found: error

@@ -9,6 +9,7 @@ const CONCEALED_SPAWN := preload("res://scripts/concealed_spawn.gd")
 const HUD_SCRIPT := preload("res://scripts/mobile_hud.gd")
 const SHADOW_POLICY := preload("res://scripts/shadow_policy.gd")
 const RADIAL_GROUND_SHADER := preload("res://shaders/radial_ground.gdshader")
+const RUIN_SURFACE_SHADER := preload("res://shaders/ruined_surface.gdshader")
 const ZOMBIE_HORDE_SIZE := 200
 const ZOMBIE_SPAWN_DISTANCE := 50.0
 const VISIBILITY_RADIUS := 30.0
@@ -158,8 +159,7 @@ func _build_arena() -> void:
 	var dark_concrete := _material(Color(0.075, 0.085, 0.10), 0.98)
 	var rust := _material(Color(0.29, 0.15, 0.10), 0.88)
 	var hazard := _material(Color(0.78, 0.32, 0.10), 0.74)
-	var glass := _material(Color(0.035, 0.065, 0.078), 0.26)
-	glass.metallic = 0.55
+	var glass := _material(Color(0.035, 0.065, 0.078), 0.26, 0.55)
 
 	# Enclosed edges and a broken industrial skyline keep the combat space readable.
 	# Keep the encounter courtyard open so horde members can approach from 50 m.
@@ -532,8 +532,10 @@ func _refresh_hud(_a: float = 0.0, _b: float = 0.0, _c: float = 0.0) -> void:
 		return
 	hud.update_status(player.health, player.MAX_HEALTH, player.rage.rage, player.rage.maximum_rage, player.rage.condemnation_threshold(), player.magic_energy, player.current_spell, player.rage.unlocked_spells)
 
-func _material(color: Color, roughness: float = 0.85) -> StandardMaterial3D:
-	var material := StandardMaterial3D.new()
-	material.albedo_color = color
-	material.roughness = roughness
+func _material(color: Color, roughness: float = 0.85, metallic: float = 0.0) -> ShaderMaterial:
+	var material := ShaderMaterial.new()
+	material.shader = RUIN_SURFACE_SHADER
+	material.set_shader_parameter("base_color", color)
+	material.set_shader_parameter("surface_roughness", roughness)
+	material.set_shader_parameter("surface_metallic", metallic)
 	return material
