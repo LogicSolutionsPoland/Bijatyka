@@ -19,6 +19,9 @@ const ZOMBIE_HORDE_SIZE := 15
 const ZOMBIE_PERFORMANCE_CAPACITY := 200
 const ZOMBIE_SPAWN_DISTANCE := 50.0
 const VISIBILITY_RADIUS := 30.0
+# Bilinear 3D scaling keeps the touch HUD at native resolution. The fullscreen
+# depth-based flashlight and the arena are rendered at this scale on phones.
+const MOBILE_3D_RENDER_SCALE := 0.67
 const PLAYER_BASE_CENTER := Vector3(0.0, 0.0, -5.2)
 const PLAYER_BASE_POSITION := Vector3(0.0, 0.05, -5.2)
 const PLAYER_BASE_SAFE_RADIUS := 6.35
@@ -67,6 +70,8 @@ var _performance_scenario := ""
 var _spawn_blockers: Array[AABB] = []
 
 func _ready() -> void:
+	if OS.has_feature("mobile"):
+		get_viewport().scaling_3d_scale = MOBILE_3D_RENDER_SCALE
 	flashlight_visibility_enabled = bool(ProjectSettings.get_setting("gameplay/flashlight_visibility_enabled", true))
 	_start_game_music()
 	_build_environment()
@@ -637,7 +642,17 @@ func _setup_performance_diagnostics() -> void:
 	performance_diagnostics.name = "DevelopmentPerformanceDiagnostics"
 	performance_diagnostics.scenario_requested.connect(start_performance_scenario)
 	performance_diagnostics.stop_requested.connect(stop_performance_scenario)
+	performance_diagnostics.render_scale_requested.connect(_set_debug_render_scale)
+	performance_diagnostics.mask_comparison_requested.connect(_set_debug_mask_visible)
 	add_child(performance_diagnostics)
+
+func _set_debug_render_scale(scale: float) -> void:
+	if OS.is_debug_build() and [0.5, MOBILE_3D_RENDER_SCALE, 1.0].has(scale):
+		get_viewport().scaling_3d_scale = scale
+
+func _set_debug_mask_visible(is_visible: bool) -> void:
+	if OS.is_debug_build() and flashlight_visibility_manager != null:
+		flashlight_visibility_manager.set_composite_visible_for_comparison(is_visible)
 
 func start_performance_scenario(population: int, mode: String) -> bool:
 	if not [15, 20, 69, 100, 200].has(population) or not ["concentrated", "approach"].has(mode):

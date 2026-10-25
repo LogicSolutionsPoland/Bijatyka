@@ -84,6 +84,12 @@ func get_radial_weight(distance: float) -> float:
 func get_classification_counts() -> Dictionary:
 	return _counts.duplicate()
 
+func set_composite_visible_for_comparison(is_visible: bool) -> void:
+	# Debug-only A/B probe: stop drawing the full-screen pass while keeping
+	# exactly the same AI, horde classification, and scene geometry.
+	if OS.is_debug_build() and is_instance_valid(_composite):
+		_composite.visible = is_visible
+
 func _process(delta: float) -> void:
 	if not is_instance_valid(player):
 		return

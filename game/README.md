@@ -59,12 +59,12 @@ The imported Thornbound rig has no finger joints, so the existing hand meshes re
 
 The zombie rig is turned to face the same forward direction used by its approach and attack logic.
 
-The camera uses a close **Resident Evil 4-style right-shoulder viewpoint** matching the provided composition reference. The follow pivot sits **1.55 m** above the player's ground origin, with **2.35 m** spring-arm reach, **0.75 m** right shoulder offset, a **6° downward** pitch and **60°** vertical field of view. The character stays to the left of screen center while the open center looks down the forward combat lane. The camera smoothly follows facing direction, the spring arm retracts near walls, and it ignores the player's own collision body. Heights are absolute offsets from the player origin, not an extra 1.5 m on top of another pivot.
+The camera uses a right-shoulder viewpoint. The follow pivot sits **1.55 m** above the player's ground origin, with **4.1 m** spring-arm reach, a **12° downward** initial pitch and **66°** vertical field of view. The character stays to the left of screen center while the open center looks down the forward combat lane. The camera smoothly follows facing direction, the spring arm retracts near walls, and it ignores the player's own collision body. Heights are absolute offsets from the player origin, not an extra 1.5 m on top of another pivot.
 
 ## Carried-forward rules and current scope
 
 - The Thornbound mobile GLB player and rigged LOD1 zombie were copied from user-supplied Retribution assets; no music is used.
-- The endless invasion keeps 200 ordinary zombies active, initially entering from a 50 m ring. Defeated shamblers are replaced after one second, while the existing 30 m visibility radius and distant-animation throttling keep the crowd lightweight.
+- The endless invasion keeps up to 15 ordinary zombies active in normal play. Defeated shamblers are replaced through the concealed 50 m spawn flow, while the existing 30 m visibility radius and distant-animation throttling keep the crowd lightweight. The 200-zombie capacity remains available only in the development stress tests.
 - The yard's enemies have telegraphed windups. Ordinary zombies can interrupt, slow, or lengthen recovery but never reduce HP. The boss can damage the player.
 - Shadows are disabled on every scene light, imported player/enemy model, and procedural mesh. Distance-based enemy detail never switches them back on, and the HUD notice has no text shadow.
 - Jump landing impacts can hit and damage enemies. Dash uses the previously selected 15 m mobility distance.
@@ -75,5 +75,7 @@ The camera uses a close **Resident Evil 4-style right-shoulder viewpoint** match
 ## Android
 
 The project uses the source-confirmed Godot 4.7.2 Compatibility renderer, ETC2/ASTC texture import, and ARM64 as the intended Android architecture. The Android export preset and package build are validated in GitHub Actions. Device performance has not been measured yet; no Android hardware result is claimed.
+
+Android starts at **0.67x 3D render scale** with bilinear upscaling. The HUD stays crisp at native resolution. In a debug APK, hold the empty top-right corner for 1.5 seconds to show FPS and compare 3D render scale or the fullscreen flashlight mask. See `docs/mobile-fps-recovery-20261025.md` for the on-phone comparison.
 
 The test build uses the Bijatyka app name and package ID so it installs beside earlier Retribution foundation APKs signed with a different debug key.

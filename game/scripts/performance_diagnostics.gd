@@ -4,6 +4,8 @@ class_name FoundationPerformanceDiagnostics
 
 signal scenario_requested(population: int, mode: String)
 signal stop_requested
+signal render_scale_requested(scale: float)
+signal mask_comparison_requested(is_visible: bool)
 
 const SAMPLE_INTERVAL := 0.5
 const POPULATIONS := [15, 20, 69, 100, 200]
@@ -15,6 +17,8 @@ var _visible := false
 var _sample_elapsed := 0.0
 var _corner_hold := false
 var _corner_hold_elapsed := 0.0
+var _mask_visible := true
+var _mask_button: Button
 
 func _ready() -> void:
 	layer = 100
@@ -52,6 +56,19 @@ func _build_ui() -> void:
 	_readout.text = "Waiting for first sample…"
 	_readout.add_theme_font_size_override("font_size", 14)
 	column.add_child(_readout)
+	var graphics_row := HBoxContainer.new()
+	graphics_row.add_theme_constant_override("separation", 5)
+	column.add_child(graphics_row)
+	for scale in [0.5, 0.67, 1.0]:
+		var chosen_scale: float = scale
+		var scale_button := Button.new()
+		scale_button.text = "3D %.2fx" % chosen_scale
+		scale_button.pressed.connect(func() -> void: render_scale_requested.emit(chosen_scale))
+		graphics_row.add_child(scale_button)
+	_mask_button = Button.new()
+	_mask_button.text = "Mask ON"
+	_mask_button.pressed.connect(_toggle_mask_comparison)
+	graphics_row.add_child(_mask_button)
 
 	for mode in MODES:
 		var mode_label := Label.new()
@@ -115,6 +132,12 @@ func _toggle() -> void:
 		_sample_elapsed = SAMPLE_INTERVAL
 		_update_readout()
 
+func _toggle_mask_comparison() -> void:
+	_mask_visible = not _mask_visible
+	_mask_button.text = "Mask ON" if _mask_visible else "Mask OFF"
+	mask_comparison_requested.emit(_mask_visible)
+	_update_readout()
+
 func _update_readout() -> void:
 	var counts := _collect_horde_counts()
 	var fx_stats := _collect_effect_pool_stats()
@@ -135,8 +158,11 @@ func _update_readout() -> void:
 	var process_ms := "%.2f ms" % (process_seconds * 1000.0) if process_seconds > 0.0 else "N/A"
 	var physics_ms := "%.2f ms" % (physics_seconds * 1000.0) if physics_seconds > 0.0 else "N/A"
 	var memory := "%.1f MiB" % (static_bytes / 1048576.0) if static_bytes > 0.0 else "N/A (unavailable in this build)"
+	var viewport_size := get_viewport().get_visible_rect().size
+	var render_scale := get_viewport().scaling_3d_scale
 	_readout.text = (
-		"FPS: %s\nFrame processing: %s   Physics: %s\n"
+		"FPS: %s   3D: %.2fx (%d × %d viewport)\n"
+		+ "Frame processing: %s   Physics: %s\n"
 		+ "Active zombies: %d\n"
 		+ "Detailed 0–18 m: %d   Low-poly 18–30 m: %d\n"
 		+ "Outside 30 m: %d   Selected zombie rigs: %d / %d (+ boss: %d)\n"
@@ -149,7 +175,7 @@ func _update_readout() -> void:
 		+ "Zombie rigs: %d reused / %d created   overflow: %d\n"
 		+ "Engine static memory: %s"
 	) % [
-		fps, process_ms, physics_ms, counts.active, counts.detailed,
+		fps, render_scale, int(viewport_size.x), int(viewport_size.y), process_ms, physics_ms, counts.active, counts.detailed,
 		counts.low_poly, counts.outside, counts.full_rigs, FoundationEnemy.FULL_ANIMATION_BUDGET, counts.boss_rigs,
 		flashlight_counts.visible_close, flashlight_counts.visible_distant,
 		flashlight_counts.dark_close_combat, flashlight_counts.dark_distant, flashlight_counts.beyond_render,

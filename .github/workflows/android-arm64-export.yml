@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - codex/arena-map-apk-export-20261025
+      - codex/fix-mobile-5fps-20261025
 
 permissions:
   contents: read
@@ -43,7 +44,9 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p build
-          godot --headless --path game --export-debug "Android ARM64" "$GITHUB_WORKSPACE/build/Bijatyka-android-arm64.apk" 2>&1 | tee "$RUNNER_TEMP/android-export.log"
+          preset="Android ARM64"
+          if [ "$GITHUB_REF_NAME" = "codex/fix-mobile-5fps-20261025" ]; then preset="Android ARM64 FPS Test"; fi
+          godot --headless --path game --export-debug "$preset" "$GITHUB_WORKSPACE/build/Bijatyka-android-arm64.apk" 2>&1 | tee "$RUNNER_TEMP/android-export.log"
           if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/android-export.log"; then exit 1; fi
           test -s "$GITHUB_WORKSPACE/build/Bijatyka-android-arm64.apk"
 
@@ -80,7 +83,9 @@ jobs:
           fi
           aapt_bin="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
           test -n "$aapt_bin"
-          "$aapt_bin" dump badging "$apk" | grep -q "package: name='org.logicsolutionspoland.bijatyka'"
+          package_name="org.logicsolutionspoland.bijatyka"
+          if [ "$GITHUB_REF_NAME" = "codex/fix-mobile-5fps-20261025" ]; then package_name="org.logicsolutionspoland.bijatyka.fpstest"; fi
+          "$aapt_bin" dump badging "$apk" | grep -q "package: name='$package_name'"
 
       - name: Upload Android ARM64 APK artifact
         uses: actions/upload-artifact@v4
