@@ -13,9 +13,14 @@ const HUD_SCRIPT := preload("res://scripts/mobile_hud.gd")
 const SHADOW_POLICY := preload("res://scripts/shadow_policy.gd")
 const RADIAL_GROUND_SHADER := preload("res://shaders/radial_ground.gdshader")
 const RUIN_SURFACE_SHADER := preload("res://shaders/ruined_surface.gdshader")
-const ZOMBIE_HORDE_SIZE := 200
+const ZOMBIE_HORDE_SIZE := 69
 const ZOMBIE_SPAWN_DISTANCE := 50.0
 const VISIBILITY_RADIUS := 30.0
+const PLAYER_BASE_CENTER := Vector3(0.0, 0.0, -5.2)
+const PLAYER_BASE_POSITION := Vector3(0.0, 0.05, -5.2)
+const PLAYER_BASE_SAFE_RADIUS := 6.35
+const PLAYER_BASE_BOUNDARY_RADIUS := 6.70
+const PLAYER_BASE_BOUNDARY_SEGMENTS := 48
 # Reference: wide over-the-shoulder combat view, with Thornbound left of center
 # and enough distance to keep a group of enemies in frame.
 # Height is measured above the player's ground origin, not added to an existing camera offset.
@@ -60,8 +65,8 @@ func _ready() -> void:
 	_build_arena()
 	player = PLAYER_SCENE.instantiate() as FoundationPlayer
 	player.name = "ThornboundPlayer"
-	player.position = Vector3(0.0, 0.05, 3.2)
-	player.safe_base_position = player.position
+	player.position = PLAYER_BASE_POSITION
+	player.safe_base_position = PLAYER_BASE_POSITION
 	add_child(player)
 	combat_fx_pool = COMBAT_FX_POOL.new() as FoundationCombatFxPool
 	combat_fx_pool.name = "CombatEffectPool"
@@ -205,6 +210,7 @@ func _build_arena() -> void:
 	_add_arena_box("LowRuin", Vector3(8.5, 0.62, -3.0), Vector3(2.8, 1.24, 0.9), concrete, true)
 	_add_ground_ring("OuterHazardRing", Vector3(0.0, 0.035, -5.2), 6.72, 6.92, hazard)
 	_add_ground_ring("InnerScuffRing", Vector3(0.0, 0.040, -5.2), 6.42, 6.50, rust)
+	_add_player_base_boundary()
 	_add_ground_ring("CenterMark", Vector3(0.0, 0.045, -5.2), 1.65, 1.76, concrete)
 	_add_arena_box("CenterCross_NS", Vector3(0.0, 0.018, -5.2), Vector3(0.10, 0.018, 2.8), hazard, false)
 	_add_arena_box("CenterCross_EW", Vector3(0.0, 0.020, -5.2), Vector3(2.8, 0.018, 0.10), hazard, false)
@@ -269,6 +275,26 @@ func _add_ground_ring(label: String, at: Vector3, inner_radius: float, outer_rad
 	ring_instance.material_override = material
 	ring_instance.position = at
 	add_child(ring_instance)
+
+func _add_player_base_boundary() -> void:
+	# Segment colliders form a low-cost invisible wall. Ordinary enemies and the
+	# boss collide with layer 3; the player mask omits that layer and can leave.
+	var segment_length := 2.0 * PLAYER_BASE_BOUNDARY_RADIUS * sin(PI / float(PLAYER_BASE_BOUNDARY_SEGMENTS)) + 0.08
+	for index in range(PLAYER_BASE_BOUNDARY_SEGMENTS):
+		var angle := TAU * (float(index) + 0.5) / float(PLAYER_BASE_BOUNDARY_SEGMENTS)
+		var barrier := StaticBody3D.new()
+		barrier.name = "PlayerBaseBoundary_%02d" % index
+		barrier.collision_layer = 4
+		barrier.collision_mask = 0
+		barrier.position = PLAYER_BASE_CENTER + Vector3(cos(angle) * PLAYER_BASE_BOUNDARY_RADIUS, 1.25, sin(angle) * PLAYER_BASE_BOUNDARY_RADIUS)
+		barrier.rotation.y = angle - PI * 0.5
+		barrier.add_to_group("zombie_base_boundary")
+		var collision := CollisionShape3D.new()
+		var shape := BoxShape3D.new()
+		shape.size = Vector3(segment_length, 2.5, 0.65)
+		collision.shape = shape
+		barrier.add_child(collision)
+		add_child(barrier)
 
 func _add_barrel(label: String, at: Vector3, body_material: Material, stripe_material: Material) -> void:
 	var drum := Node3D.new()
@@ -433,8 +459,8 @@ func _spawn_enemies() -> void:
 	spawn_director.blocked_boxes = _spawn_blockers
 	spawn_director.spawn_requested.connect(_spawn_assault_zombie)
 	add_child(spawn_director)
-	# Fill across physics ticks under the same query budget used by replacements.
-	spawn_director.request_population()
+	# Seed the opening horde around the arena, concealed beyond the 30 m view.
+	spawn_director.request_initial_population()
 	# Keep one boss in the original arena; the HUD locator can point to it when
 	# the player moves beyond the 30 m render radius.
 	_spawn_enemy("boss", Vector3(0.6, 0.05, -16.2), true)
@@ -589,6 +615,7 @@ func start_performance_scenario(population: int, mode: String) -> bool:
 	spawn_director.set_physics_process(false)
 	spawn_director._live.clear()
 	spawn_director._pending.clear()
+	spawn_director._initial_population_pending = 0
 	for enemy in get_tree().get_nodes_in_group("enemies"):
 		if enemy is FoundationEnemy and not enemy.is_boss:
 			enemy.queue_free()
@@ -618,12 +645,13 @@ func stop_performance_scenario() -> void:
 	spawn_director.set_physics_process(false)
 	spawn_director._live.clear()
 	spawn_director._pending.clear()
+	spawn_director._initial_population_pending = 0
 	for enemy in get_tree().get_nodes_in_group("enemies"):
 		if enemy is FoundationEnemy and not enemy.is_boss:
 			enemy.queue_free()
 	spawn_director.population_limit = ZOMBIE_HORDE_SIZE
 	_performance_scenario = ""
-	# Restore the ordinary endless 200-zombie population and 50 m approach.
+	# Restore the ordinary endless 69-zombie population with a concealed map spread.
 	seed(int(Time.get_ticks_usec() & 0x7fffffff))
-	spawn_director.request_population()
+	spawn_director.request_initial_population()
 	spawn_director.set_physics_process(true)
