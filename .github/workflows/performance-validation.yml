@@ -1,0 +1,73 @@
+name: Bijatyka performance validation
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+      - 'codex/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: godot-validation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Import, tests, and playable scene smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Godot 4.7.2
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+
+      - name: Import Godot project and assets
+        run: |
+          set -o pipefail
+          godot --headless --editor --path game --import --quit 2>&1 | tee "$RUNNER_TEMP/godot-import.log"
+          if grep -E "SCRIPT ERROR:|ERROR: Failed to load" "$RUNNER_TEMP/godot-import.log"; then exit 1; fi
+
+      - name: Run gameplay and controls checks
+        run: |
+          set -o pipefail
+          godot --headless --path game --script res://tests/test_runner.gd 2>&1 | tee "$RUNNER_TEMP/gameplay-tests.log"
+          grep -q "PASS: " "$RUNNER_TEMP/gameplay-tests.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/gameplay-tests.log"; then exit 1; fi
+
+      - name: Check concealed spawning and assault handoff
+        run: |
+          set -o pipefail
+          godot --headless --path game --script res://tests/concealed_spawn_test.gd 2>&1 | tee "$RUNNER_TEMP/concealed-spawn-tests.log"
+          grep -q "PASS: concealed spawn" "$RUNNER_TEMP/concealed-spawn-tests.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/concealed-spawn-tests.log"; then exit 1; fi
+
+      - name: Check fog visibility tiers and horde performance
+        run: |
+          set -o pipefail
+          godot --headless --path game --script res://tests/horde_performance_test.gd 2>&1 | tee "$RUNNER_TEMP/horde-performance-tests.log"
+          grep -q "PASS: horde performance" "$RUNNER_TEMP/horde-performance-tests.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/horde-performance-tests.log"; then exit 1; fi
+
+      - name: Check Burning Horizon integration
+        run: |
+          set -o pipefail
+          godot --headless --path game --script res://tests/burning_horizon_test.gd 2>&1 | tee "$RUNNER_TEMP/burning-horizon-tests.log"
+          grep -q "PASS: burning horizon integration" "$RUNNER_TEMP/burning-horizon-tests.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/burning-horizon-tests.log"; then exit 1; fi
+
+      - name: Smoke-run playable scene for 600 frames
+        run: |
+          set -o pipefail
+          godot --headless --fixed-fps 60 --path game --quit-after 600 2>&1 | tee "$RUNNER_TEMP/godot-scene-smoke.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/godot-scene-smoke.log"; then exit 1; fi
