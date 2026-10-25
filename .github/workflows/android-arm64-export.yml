@@ -2,6 +2,9 @@ name: Android ARM64 APK export (manual)
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - codex/arena-map-apk-export-20261025
 
 permissions:
   contents: read
