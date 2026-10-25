@@ -65,8 +65,10 @@ func _fixture() -> Node3D:
 func run() -> void:
 	root.size = Vector2i(1280, 720)
 	await _test_placement_and_visibility()
+	await _test_initial_population_distribution()
 	await _test_assault()
 	await _test_wall_collision()
+	await _test_player_base_boundary()
 	await _test_population_and_replacements()
 	if failures.is_empty():
 		print("PASS: concealed spawn — %d checks" % checks)
@@ -177,6 +179,8 @@ func _test_placement_and_visibility() -> void:
 	director.blocked_boxes.clear()
 	player.safe_base_position = far
 	check(not director.is_valid_spawn(far), "safe return base is protected")
+	player.safe_base_position = Vector3(0.0, 0.05, -50.0)
+	check(not director.is_valid_spawn(Vector3(0.0, 0.05, -43.0)), "7.5 m base exclusion applies even when the player is farther away")
 	player.safe_base_position = Vector3.ZERO
 	director._recent.append({"position": far, "time": 0.0})
 	check(not director.is_valid_spawn(far + Vector3.RIGHT), "recent spots retain a two meter exclusion")
@@ -260,6 +264,71 @@ func _test_wall_collision() -> void:
 	fixture.queue_free()
 	await process_frame
 
+func _test_initial_population_distribution() -> void:
+	var fixture := _fixture()
+	var director := fixture.get_node("Director") as SpawnDirector
+	var player := fixture.get_node("Player") as FoundationPlayer
+	director.population_limit = 69
+	var positions: Array[Vector3] = []
+	director.spawn_requested.connect(func(at: Vector3) -> void: positions.append(at))
+	director.request_initial_population()
+	check(director._initial_population_pending == 69, "opening population queues exactly 69 ordinary zombies")
+	var budgets_ok := true
+	for frame in range(120):
+		await physics_frame
+		budgets_ok = budgets_ok and director.last_candidate_count <= Director.MAX_CANDIDATES_PER_TICK and director.last_spawn_count <= Director.MAX_SPAWNS_PER_TICK
+		if positions.size() == 69:
+			break
+	check(positions.size() == 69, "initial population finishes at exactly 69 zombies")
+	check(director._initial_population_pending == 0 and director._pending.is_empty(), "initial population does not create replacement debt")
+	check(budgets_ok, "initial map spread respects candidate and per-tick spawn budgets")
+	var sectors := [0, 0, 0, 0]
+	for at in positions:
+		var offset := at - player.global_position
+		offset.y = 0.0
+		var radius := offset.length()
+		check(radius >= Director.INITIAL_SPAWN_MIN_DISTANCE - 0.1 and radius <= Director.INITIAL_SPAWN_MAX_DISTANCE + 0.1, "opening zombie stays in the concealed 36–64 m arena band")
+		check(director.is_concealed(at), "opening zombie stays outside the full 30 m visible envelope")
+		var base_offset := at - player.safe_base_position
+		base_offset.y = 0.0
+		check(base_offset.length() >= Director.BASE_EXCLUSION_RADIUS, "opening zombie stays outside the player base")
+		var sector := clampi(int(floor((atan2(offset.z, offset.x) + PI) / (TAU / 4.0))), 0, 3)
+		sectors[sector] += 1
+	for count in sectors:
+		check(count > 0, "opening horde covers all four directions around the player")
+	fixture.queue_free()
+	await process_frame
+
+func _test_player_base_boundary() -> void:
+	var arena := Foundation.new()
+	root.add_child(arena)
+	arena.set_process(false)
+	arena.player.set_physics_process(false)
+	arena.spawn_director.set_physics_process(false)
+	arena.spawn_director._initial_population_pending = 0
+	await process_frame
+	check(arena.player.global_position.distance_to(Foundation.PLAYER_BASE_POSITION) < 0.1, "player starts inside the marked base")
+	var boundaries := get_nodes_in_group("zombie_base_boundary")
+	check(boundaries.size() == Foundation.PLAYER_BASE_BOUNDARY_SEGMENTS, "base has a continuous segmented enemy boundary")
+	var barrier_layers_ok := true
+	for barrier_variant in boundaries:
+		var barrier := barrier_variant as StaticBody3D
+		barrier_layers_ok = barrier_layers_ok and barrier.collision_layer == 4
+	check(barrier_layers_ok, "base boundary uses a collision layer the player can pass through")
+	check((arena.player.collision_mask & 4) == 0, "player can leave the protected base")
+	var enemy := Enemy.new() as FoundationEnemy
+	enemy.position = Foundation.PLAYER_BASE_CENTER + Vector3(0.0, 0.05, 8.0)
+	arena.add_child(enemy)
+	enemy.begin_spawn_assault(arena.player)
+	for frame in range(180):
+		await physics_frame
+	var enemy_offset := enemy.global_position - Foundation.PLAYER_BASE_CENTER
+	enemy_offset.y = 0.0
+	check((enemy.collision_mask & 4) != 0, "ordinary zombies collide with the base boundary")
+	check(enemy_offset.length() >= Foundation.PLAYER_BASE_SAFE_RADIUS, "approaching zombie cannot enter the player base")
+	arena.queue_free()
+	await process_frame
+
 func _test_population_and_replacements() -> void:
 	var arena := Foundation.new()
 	root.add_child(arena)
@@ -268,6 +337,10 @@ func _test_population_and_replacements() -> void:
 	arena._boss_enemy.set_physics_process(false)
 	var director = arena.spawn_director
 	director.set_physics_process(false)
+	check(Foundation.ZOMBIE_HORDE_SIZE == 69 and director._initial_population_pending == 69, "normal game starts with 69 ordinary zombies separate from the boss")
+	director._initial_population_pending = 0
+	director._pending.clear()
+	director.population_limit = 200
 	director.spawn_requested.connect(func(at: Vector3) -> void:
 		var enemy: FoundationEnemy = director._live.values().back()
 		enemy.set_physics_process(false)
@@ -359,6 +432,6 @@ func _test_population_and_replacements() -> void:
 	check(director._live.size() == 200 and director._pending.is_empty(), "spawn queue recovers after the camera returns")
 	arena._boss_enemy.receive_hit(10000)
 	check(director._live.size() == 200 and director._pending.is_empty(), "boss defeat does not add a 201st ordinary zombie")
-	check(Foundation.ZOMBIE_HORDE_SIZE == 200 and Foundation.ZOMBIE_SPAWN_DISTANCE == 50.0 and Foundation.VISIBILITY_RADIUS == 30.0, "population, arrival distance and visibility settings remain intact")
+	check(Foundation.ZOMBIE_HORDE_SIZE == 69 and Foundation.ZOMBIE_SPAWN_DISTANCE == 50.0 and Foundation.VISIBILITY_RADIUS == 30.0, "69-zombie cap, 50 m replacement distance and 30 m visibility remain intact")
 	arena.queue_free()
 	await process_frame
