@@ -16,7 +16,11 @@ static func install(animation_player: AnimationPlayer, skeleton: Skeleton3D, att
         animation_root = animation_player.get_parent()
     if animation_root == null or not animation_root.is_ancestor_of(skeleton):
         return false
-    for required_bone: String in ["Chest", "RightUpperArm", "RightForearm"]:
+    for required_bone: String in [
+        "Hips", "Spine", "Chest",
+        "LeftUpperArm", "LeftForearm", "LeftHand", "LeftThigh", "LeftShin", "LeftFoot",
+        "RightUpperArm", "RightForearm", "RightHand", "RightThigh", "RightShin", "RightFoot"
+    ]:
         if skeleton.find_bone(required_bone) < 0:
             return false
 
@@ -49,6 +53,8 @@ static func _build_animation(skeleton: Skeleton3D, skeleton_path: NodePath, kind
     var recovery := float(profile.get("recovery", 0.38))
     var impact_time := windup
     var total := windup + active + recovery
+    # The contact key stays at the existing gameplay windup boundary. The
+    # earlier keys chamber the strike; later keys cover follow-through/recovery.
     var key_times := [
         0.0,
         windup * 0.34,
@@ -237,21 +243,21 @@ static func _kick_frames(side_sign: float) -> Dictionary:
     }
     poses["%sThigh" % active_leg] = [
         Vector3.ZERO,
-        Vector3(-0.22, 0.0, 0.0),
-        Vector3(-0.68, 0.0, 0.0),
-        Vector3(-1.02, 0.0, 0.0),
-        Vector3(-1.42, 0.0, 0.0),
-        Vector3(-1.50, 0.0, 0.0),
-        Vector3(-0.82, 0.0, 0.0),
+        Vector3(0.10, 0.0, 0.0),
+        Vector3(0.52, 0.0, 0.0),
+        Vector3(0.92, 0.0, 0.0),
+        Vector3(1.04, 0.0, 0.0),
+        Vector3(0.90, 0.0, 0.0),
+        Vector3(0.40, 0.0, 0.0),
         Vector3.ZERO
     ]
     poses["%sShin" % active_leg] = [
         Vector3.ZERO,
-        Vector3(0.25, 0.0, 0.0),
-        Vector3(0.62, 0.0, 0.0),
+        Vector3(0.32, 0.0, 0.0),
         Vector3(0.82, 0.0, 0.0),
-        Vector3(0.12, 0.0, 0.0),
-        Vector3(0.08, 0.0, 0.0),
+        Vector3(1.02, 0.0, 0.0),
+        Vector3(0.06, 0.0, 0.0),
+        Vector3(0.04, 0.0, 0.0),
         Vector3(0.58, 0.0, 0.0),
         Vector3.ZERO
     ]
@@ -274,6 +280,16 @@ static func _kick_frames(side_sign: float) -> Dictionary:
         Vector3(0.07, 0.0, 0.0),
         Vector3(0.02, 0.0, 0.0),
         Vector3.ZERO
+    ]
+    poses["%sFoot" % support_leg] = [
+        Vector3.ZERO, Vector3(-0.025, 0.0, 0.0), Vector3(-0.045, 0.0, 0.0),
+        Vector3(-0.060, 0.0, 0.0), Vector3(-0.045, 0.0, 0.0),
+        Vector3(-0.025, 0.0, 0.0), Vector3.ZERO, Vector3.ZERO
+    ]
+    poses["%sFoot" % active_leg] = [
+        Vector3.ZERO, Vector3(-0.08, 0.0, 0.0), Vector3(-0.14, 0.0, 0.0),
+        Vector3(-0.10, 0.0, 0.0), Vector3(0.10, 0.0, 0.0),
+        Vector3(0.08, 0.0, 0.0), Vector3(0.03, 0.0, 0.0), Vector3.ZERO
     ]
     poses["%sUpperArm" % active_arm] = [
         Vector3.ZERO,

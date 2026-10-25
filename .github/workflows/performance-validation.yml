@@ -52,6 +52,13 @@ jobs:
           grep -q "PASS: " "$RUNNER_TEMP/gameplay-tests.log"
           if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/gameplay-tests.log"; then exit 1; fi
 
+      - name: Check player martial animation and hit synchronization
+        run: |
+          set -o pipefail
+          godot --headless --path game --script res://tests/player_animation_test.gd 2>&1 | tee "$RUNNER_TEMP/player-animation-tests.log"
+          grep -q "PASS: player martial animation" "$RUNNER_TEMP/player-animation-tests.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/player-animation-tests.log"; then exit 1; fi
+
       - name: Check zombie animation import and state connections
         run: |
           set -o pipefail

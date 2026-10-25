@@ -20,6 +20,8 @@ const DASH_DURATION := 0.30
 const TARGET_MELEE_HITS_PER_SECOND := 5.0
 const TARGET_MELEE_CYCLE_SECONDS := 1.0 / TARGET_MELEE_HITS_PER_SECOND
 const MELEE_TIMER_EPSILON := 0.0001
+const ATTACK_ANIMATION_BLEND_SECONDS := 0.08
+const LOCOMOTION_ANIMATION_BLEND_SECONDS := 0.12
 const ATTACKS := {
 	"punch": {"windup": 0.10, "active": TARGET_MELEE_CYCLE_SECONDS - 0.10, "recovery": 0.34, "range": 1.55, "damage": 18, "cone": 0.42},
 	"kick": {"windup": 0.12, "active": TARGET_MELEE_CYCLE_SECONDS - 0.12, "recovery": 0.48, "range": 2.15, "damage": 28, "cone": 0.30}
@@ -226,7 +228,7 @@ func _start_attack(kind: String, side: String) -> void:
 	_spawn_attack_sweep(kind, side)
 	if _animation_player != null:
 		if _fight_animations_ready:
-			_animation_player.play(FIGHT_ANIMATION_BUILDER.clip_path(kind, side), 0.04)
+			_animation_player.play(FIGHT_ANIMATION_BUILDER.clip_path(kind, side), ATTACK_ANIMATION_BLEND_SECONDS)
 		else:
 			_animation_player.stop()
 
@@ -611,7 +613,7 @@ func _set_locomotion_animation(animation_name: String) -> void:
 	if not _animation_player.has_animation(selected_animation):
 		return
 	if _animation_player.current_animation != selected_animation or not _animation_player.is_playing():
-		_animation_player.play(selected_animation, 0.10)
+		_animation_player.play(selected_animation, LOCOMOTION_ANIMATION_BLEND_SECONDS)
 
 func _update_locomotion_animation() -> void:
 	if _animation_player == null or attack_phase != "ready":
