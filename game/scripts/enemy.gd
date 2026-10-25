@@ -37,6 +37,11 @@ var _far_physics_time := 0.0
 var _player: FoundationPlayer
 var _model: Node3D
 var _animation_player: AnimationPlayer
+var _death_animation := ""
+var _death_started := false
+var _death_completed := false
+var _attack_animation := ""
+var _attack_contact_time := 0.0
 var _visual_root: Node3D
 var _status_label: Label3D
 var _health_bar_root: Node3D
@@ -146,7 +151,7 @@ func begin_spawn_assault(target: FoundationPlayer) -> bool:
 	velocity.z = direction.z * move_speed * SPAWN_ASSAULT_SPEED_MULTIPLIER
 	_set_distance_detail(global_position.distance_to(target.global_position))
 	if _visual_root.visible:
-		_play_animation("Walk")
+		_play_animation("Sprint")
 	return true
 
 func _finish_spawn_assault() -> void:
@@ -171,7 +176,7 @@ func _update_spawn_assault(delta: float) -> bool:
 	velocity.x = direction.x * move_speed * SPAWN_ASSAULT_SPEED_MULTIPLIER * slow_factor
 	velocity.z = direction.z * move_speed * SPAWN_ASSAULT_SPEED_MULTIPLIER * slow_factor
 	if _visual_root.visible:
-		_play_animation("Walk")
+		_play_animation("Sprint")
 	return true
 
 func _ready() -> void:
@@ -252,6 +257,12 @@ func _ensure_detailed_model() -> void:
 			elif enemy_variant == "stalker":
 				_model.scale = Vector3(0.91, 1.03, 0.91)
 			_animation_player = _model.find_child("AnimationPlayer", true, false) as AnimationPlayer
+			if _animation_player != null:
+				for loop_name in ["Idle", "Walk", "Sprint"]:
+					if _animation_player.has_animation(loop_name):
+						_animation_player.get_animation(loop_name).loop_mode = Animation.LOOP_LINEAR
+				if not _animation_player.animation_finished.is_connected(_on_animation_finished):
+					_animation_player.animation_finished.connect(_on_animation_finished)
 			if is_boss:
 				_apply_variant_overlay()
 	if _model == null:
@@ -542,11 +553,14 @@ func _update_ai(delta: float, distance: float) -> void:
 	if state == "hit":
 		velocity.x = move_toward(velocity.x, 0.0, delta * 10.0)
 		velocity.z = move_toward(velocity.z, 0.0, delta * 10.0)
+		_play_animation("Hit_React")
 		if state_time <= 0.0:
 			state = "approach"
 	elif state == "windup":
 		velocity.x = 0.0
 		velocity.z = 0.0
+		if _attack_animation.is_empty():
+			_begin_attack_animation(combat_target, distance, maxf(state_time, 0.01))
 		if state_time <= 0.0:
 			_resolve_enemy_attack(distance)
 	elif state == "recovery":
@@ -558,14 +572,14 @@ func _update_ai(delta: float, distance: float) -> void:
 		if distance > attack_range:
 			velocity.x = direction.x * move_speed * slow_factor * (1.0 if is_boss else 1.45)
 			velocity.z = direction.z * move_speed * slow_factor * (1.0 if is_boss else 1.45)
-			_play_animation("Walk")
+			_play_animation("Sprint" if _is_high_speed_chase() else "Walk")
 		elif distance <= attack_range and _clear_sight(combat_target):
 			state = "windup"
 			state_time = telegraph_duration if is_boss else telegraph_duration * 0.55
 			_attack_latched = true
 			velocity.x = 0.0
 			velocity.z = 0.0
-			_play_animation("Attack")
+			_begin_attack_animation(combat_target, distance, state_time)
 			telegraph_started.emit(self, is_boss)
 		else:
 			velocity.x = 0.0
@@ -588,6 +602,10 @@ func _resolve_enemy_attack(distance: float) -> void:
 				_player.interrupt_by_zombie(0.75, 0.60)
 			hit = true
 	attack_resolved.emit(self, hit)
+	if not _attack_animation.is_empty() and _animation_player != null and _animation_player.current_animation == _attack_animation:
+		_animation_player.seek(_attack_contact_time, true)
+		_animation_player.speed_scale = 1.0
+	_attack_animation = ""
 	state = "recovery"
 	state_time = recovery_duration if is_boss else recovery_duration * 0.65
 	_attack_latched = false
@@ -601,7 +619,7 @@ func _is_player_visible_to_player() -> bool:
 	return not camera.is_position_behind(global_position) and rect.grow(-28.0).has_point(point)
 
 func receive_hit(damage: int, hit_direction: Vector3 = Vector3.ZERO, is_jump_hit: bool = false) -> int:
-	if hp <= 0 or damage <= 0:
+	if hp <= 0 or damage <= 0 or _death_started:
 		return 0
 	_finish_spawn_assault()
 	var dealt := mini(hp, damage)
@@ -610,15 +628,31 @@ func receive_hit(damage: int, hit_direction: Vector3 = Vector3.ZERO, is_jump_hit
 	_show_impact_flash(is_jump_hit)
 	state = "hit"
 	state_time = 0.30 if not is_jump_hit else 0.42
+	_attack_animation = ""
 	if hit_direction.length_squared() > 0.01:
 		knockback = hit_direction.normalized() * (4.5 if not is_jump_hit else 6.5)
 	if hp <= 0:
 		state = "dead"
+		_death_started = true
 		velocity = Vector3.ZERO
-		defeated.emit(self)
-		var tween := create_tween()
-		tween.tween_property(_visual_root, "scale:y", 0.08, 0.45)
-		tween.tween_callback(queue_free)
+		set_physics_process(false)
+		collision_layer = 0
+		collision_mask = 0
+		var collision := get_node_or_null("CollisionShape3D") as CollisionShape3D
+		if collision != null:
+			collision.set_deferred("disabled", true)
+		_death_animation = _death_animation_for_hit(hit_direction)
+		if _lod_band == 0 and _play_animation(_death_animation, 1.0, 0.06, true):
+			return dealt
+		# Keep the old visual fallback when the rig or death clip is unavailable.
+		if _visual_root != null:
+			var tween := create_tween()
+			tween.tween_property(_visual_root, "scale:y", 0.08, 0.45)
+			tween.tween_callback(_complete_death)
+		else:
+			_complete_death()
+	else:
+		_play_animation("Hit_React", 1.0, 0.08, true)
 	return dealt
 
 func apply_stun(duration: float) -> void:
@@ -629,7 +663,63 @@ func apply_slow(factor: float, duration: float) -> void:
 	slow_factor = minf(slow_factor, clampf(factor, 0.1, 1.0))
 	slow_time = maxf(slow_time, duration)
 
-func _play_animation(animation_name: String) -> void:
-	if _lod_band == 0 and _animation_player != null and _animation_player.has_animation(animation_name):
-		if _animation_player.current_animation != animation_name or not _animation_player.is_playing():
-			_animation_player.play(animation_name)
+func _play_animation(animation_name: String, playback_speed: float = 1.0, blend: float = 0.12, force_restart: bool = false) -> bool:
+	if animation_name.is_empty() or _lod_band != 0 or _animation_player == null or not _animation_player.has_animation(animation_name):
+		return false
+	if force_restart or _animation_player.current_animation != animation_name or not _animation_player.is_playing():
+		_animation_player.play(animation_name, blend, maxf(0.01, playback_speed))
+	return true
+
+func _is_high_speed_chase() -> bool:
+	return _spawn_assault_time > 0.0 or (not is_boss and move_speed * 1.45 >= 4.5)
+
+func _attack_clip_contact_time(animation_name: String) -> float:
+	match animation_name:
+		"Attack_Swipe_L", "Attack_Swipe_R": return 0.36666667
+		"Attack_Bite": return 0.53333336
+	return 0.0
+
+func _select_attack_animation(target: Node3D, distance: float, available: Array[String] = []) -> String:
+	var desired := "Attack_Swipe_L"
+	if distance <= attack_range * 0.68:
+		desired = "Attack_Bite"
+	elif is_instance_valid(target):
+		var offset := target.global_position - global_position
+		var side := global_basis.x.dot(offset)
+		desired = "Attack_Swipe_L" if side < 0.0 else "Attack_Swipe_R"
+	var candidates: Array[String] = [desired, "Attack_Swipe_L", "Attack_Swipe_R", "Attack_Bite"]
+	if available.is_empty():
+		return desired
+	for candidate in candidates:
+		if available.has(candidate):
+			return candidate
+	return ""
+
+func _begin_attack_animation(target: Node3D, distance: float, windup_time: float) -> void:
+	var available: Array[String] = []
+	if _animation_player != null:
+		for candidate in ["Attack_Swipe_L", "Attack_Swipe_R", "Attack_Bite"]:
+			if _animation_player.has_animation(candidate):
+				available.append(candidate)
+	_attack_animation = _select_attack_animation(target, distance, available)
+	_attack_contact_time = _attack_clip_contact_time(_attack_animation)
+	var speed := _attack_contact_time / maxf(0.01, windup_time) if _attack_contact_time > 0.0 else 1.0
+	if not _play_animation(_attack_animation, speed, 0.08, true):
+		_attack_animation = ""
+
+func _death_animation_for_hit(hit_direction: Vector3) -> String:
+	if hit_direction.length_squared() < 0.01:
+		return "Death_Forward"
+	var forward := -global_basis.z
+	return "Death_Backward" if forward.dot(hit_direction.normalized()) >= 0.0 else "Death_Forward"
+
+func _on_animation_finished(animation_name: StringName) -> void:
+	if _death_started and not _death_completed and String(animation_name) == _death_animation:
+		_complete_death()
+
+func _complete_death() -> void:
+	if not _death_started or _death_completed:
+		return
+	_death_completed = true
+	defeated.emit(self)
+	queue_free()

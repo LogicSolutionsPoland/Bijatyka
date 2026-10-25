@@ -307,6 +307,7 @@ func _test_population_and_replacements() -> void:
 	for index in range(4):
 		var defeated: FoundationEnemy = existing[index]
 		defeated.receive_hit(10000)
+		defeated._complete_death() # Advance the death animation deterministically for this spawn-director test.
 		arena._on_enemy_defeated(defeated) # Duplicate notifications are harmless.
 	check(director._live.size() == 196 and director._pending.size() == 4, "four deaths queue exactly four replacements")
 	director._physics_process(0.99)
@@ -324,6 +325,7 @@ func _test_population_and_replacements() -> void:
 	check(visible.transform == visible_transform and visible.state == "idle", "visible living zombie is untouched by replacements")
 	var victim: FoundationEnemy = director._live.values().back()
 	victim.receive_hit(10000)
+	victim._complete_death() # Replacement is requested only after the death animation completes.
 	arena.player.position = Vector3(0, 0.05, -93)
 	arena.player.rotation.y = 0.0
 	arena.player.velocity = Vector3.ZERO
