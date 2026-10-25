@@ -38,7 +38,7 @@ func run() -> void:
 	var old_rotation := backdrop.global_rotation
 	arena._apply_camera_look(1.5, -0.1)
 	check(backdrop.global_rotation.is_equal_approx(old_rotation), "looking around does not rotate the skyline")
-	check(Foundation.ZOMBIE_HORDE_SIZE == 69 and Foundation.ZOMBIE_SPAWN_DISTANCE == 50.0, "69-zombie horde keeps 50 m concealed replacements")
+	check(Foundation.ZOMBIE_HORDE_SIZE == 15 and Foundation.ZOMBIE_SPAWN_DISTANCE == 50.0, "15-zombie horde keeps 50 m concealed replacements")
 	check(Foundation.ZOMBIE_PERFORMANCE_CAPACITY == 200, "stress scenarios retain 200-zombie capacity")
 	arena.queue_free()
 	await process_frame
