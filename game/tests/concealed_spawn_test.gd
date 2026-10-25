@@ -313,7 +313,7 @@ func _test_player_base_boundary() -> void:
 	var barrier_layers_ok := true
 	for barrier_variant in boundaries:
 		var barrier := barrier_variant as StaticBody3D
-		barrier_layers_ok = barrier_layers_ok and barrier.collision_layer == 4
+		barrier_layers_ok = barrier_layers_ok and barrier.collision_layer == 4 and barrier.collision_mask == 2
 	check(barrier_layers_ok, "base boundary uses a collision layer the player can pass through")
 	check((arena.player.collision_mask & 4) == 0, "player can leave the protected base")
 	var enemy := Enemy.new() as FoundationEnemy
