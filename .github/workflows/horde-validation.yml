@@ -5,6 +5,7 @@ on:
     branches:
       - codex/zombie-horde-30m
       - codex/endless-invasion-40
+      - codex/zombie-roaming-aggression
   workflow_dispatch:
 
 permissions:

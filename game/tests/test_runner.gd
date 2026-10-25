@@ -18,6 +18,7 @@ func _run_all() -> void:
 	_test_rage_rules()
 	_test_multiple_milestones_and_reset()
 	await _test_hud_aura_choices()
+	await _test_roaming_aggression()
 	await _test_enemy_variant_health()
 	await _test_manual_attack_and_hit_window()
 	await _test_punch_animation_faces_forward()
@@ -739,3 +740,43 @@ func _test_gamepad_controls() -> void:
 	arena.queue_free()
 	await process_frame
 	root.size = original_size
+
+func _test_roaming_aggression() -> void:
+	var player := Player.new() as FoundationPlayer
+	player.position = Vector3(60, 0, 0)
+	player.set_physics_process(false)
+	root.add_child(player)
+	var a := Enemy.new() as FoundationEnemy
+	var b := Enemy.new() as FoundationEnemy
+	for enemy in [a, b]:
+		enemy.set_physics_process(false)
+		root.add_child(enemy)
+		enemy._player = player
+	b.position = Vector3(1.5, 0, 0)
+	await physics_frame
+	a._choose_target()
+	_check(a.combat_target == b, "zombie selects nearby rival when player is distant")
+	var before := b.hp
+	a._resolve_enemy_attack(1.5)
+	_check(b.hp == before - 12, "zombie infighting damages rival")
+	_check(b.combat_target == a, "surviving rival retaliates")
+	_check(player.rage.rage == 0.0, "infighting awards no player RAGE")
+	player.position = Vector3(0, 0, 10)
+	a._choose_target()
+	_check(a.combat_target == player and b.combat_target == player, "player detection alerts nearby zombies")
+	player.position = Vector3(60, 0, 0)
+	b.position = Vector3(40, 0, 0)
+	a.combat_target = null
+	a.state = "idle"
+	a._wander_time = 0.0
+	a._wander(0.1)
+	_check(a.state == "wander" and a.velocity.length() > 0.0, "idle zombie begins walking without a target")
+	a._wander_time = 0.0
+	a._wander(0.1)
+	_check(a.state == "idle" and a.velocity.length() == 0.0, "wandering alternates with idle pauses")
+	a.combat_target = b
+	b.hp = 0
+	_check(not a._valid_target(), "dead opponents are rejected")
+	for node in [a, b, player]:
+		node.queue_free()
+	await process_frame

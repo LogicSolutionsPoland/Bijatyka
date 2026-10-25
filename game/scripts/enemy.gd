@@ -20,7 +20,7 @@ var move_speed := 2.5
 var attack_range := 1.8
 var telegraph_duration := 1.0
 var recovery_duration := 1.15
-var state := "approach"
+var state := "idle"
 var state_time := 0.0
 var stun_time := 0.0
 var slow_time := 0.0
@@ -37,6 +37,87 @@ var _health_bar_root: Node3D
 var _health_bar_fill: MeshInstance3D
 var _attack_latched := false
 var _lod_band := -1
+var combat_target: Node3D
+var _decision_time := 0.0
+var _wander_time := 0.0
+var _wander_direction := Vector3.ZERO
+# Rebuilt once per decision frame, shared by the whole population.
+static var _grid_frame := -1
+static var _grid: Dictionary = {}
+
+func _nearby() -> Array[FoundationEnemy]:
+	var frame := Engine.get_physics_frames()
+	if _grid_frame != frame:
+		_grid_frame = frame
+		_grid.clear()
+		for node in get_tree().get_nodes_in_group("enemies"):
+			if node is FoundationEnemy and node.hp > 0:
+				var key := Vector2i(floori(node.global_position.x / 10.0), floori(node.global_position.z / 10.0))
+				if not _grid.has(key):
+					_grid[key] = []
+				_grid[key].append(node)
+	var result: Array[FoundationEnemy] = []
+	var cell := Vector2i(floori(global_position.x / 10.0), floori(global_position.z / 10.0))
+	for x in range(-1, 2):
+		for z in range(-1, 2):
+			for node in _grid.get(cell + Vector2i(x, z), []):
+				if is_instance_valid(node) and node != self and node.hp > 0:
+					result.append(node)
+	return result
+
+func _clear_sight(target: Node3D) -> bool:
+	var query := PhysicsRayQueryParameters3D.create(global_position + Vector3.UP, target.global_position + Vector3.UP, 1)
+	query.exclude = [get_rid(), target.get_rid()] if target is CollisionObject3D else [get_rid()]
+	return get_world_3d().direct_space_state.intersect_ray(query).is_empty()
+
+func _valid_target() -> bool:
+	return is_instance_valid(combat_target) and not combat_target.is_queued_for_deletion() and (not combat_target is FoundationEnemy or combat_target.hp > 0)
+
+func _choose_target() -> void:
+	if is_boss:
+		combat_target = _player
+		return
+	if is_instance_valid(_player) and global_position.distance_to(_player.global_position) <= 14.0 and _clear_sight(_player):
+		var newly_alerted := combat_target != _player
+		combat_target = _player
+		if newly_alerted:
+			for ally in _nearby():
+				if ally.global_position.distance_squared_to(global_position) <= 100.0 and ally.state != "windup":
+					ally.combat_target = _player
+		return
+	if _valid_target() and global_position.distance_to(combat_target.global_position) < 24.0:
+		return
+	combat_target = null
+	var best := 36.0
+	for rival in _nearby():
+		if rival.is_boss:
+			continue
+		var distance := global_position.distance_squared_to(rival.global_position)
+		if distance < best and _clear_sight(rival):
+			best = distance
+			combat_target = rival
+
+func _wander(delta: float) -> void:
+	_wander_time -= delta
+	if _wander_time <= 0.0:
+		if state == "wander":
+			state = "idle"
+			_wander_time = randf_range(0.6, 2.5)
+			_wander_direction = Vector3.ZERO
+		else:
+			state = "wander"
+			_wander_time = randf_range(3.0, 8.0)
+			var angle := randf() * TAU
+			_wander_direction = Vector3(cos(angle), 0.0, sin(angle))
+	if is_on_wall():
+		_wander_direction = _wander_direction.rotated(Vector3.UP, 1.2)
+	if absf(global_position.x) > 92.0 or absf(global_position.z) > 92.0:
+		_wander_direction = -Vector3(global_position.x, 0.0, global_position.z).normalized()
+	velocity.x = _wander_direction.x * 1.5 * slow_factor
+	velocity.z = _wander_direction.z * 1.5 * slow_factor
+	if _wander_direction.length_squared() > 0.1:
+		rotation.y = lerp_angle(rotation.y, atan2(-_wander_direction.x, -_wander_direction.z), minf(1.0, delta * 5.0))
+	_play_animation("Walk" if state == "wander" else "Idle")
 
 func configure(kind: String, boss_target: bool = false) -> void:
 	enemy_variant = kind
@@ -49,6 +130,9 @@ func _ready() -> void:
 	name = enemy_variant.capitalize()
 	_apply_variant()
 	hp = starting_health
+	_decision_time = randf_range(0.0, 0.45)
+	_wander_time = randf_range(0.1, 2.5)
+	_ai_accumulator = randf_range(0.0, 0.10)
 	_build_collision()
 	_build_visual()
 
@@ -339,7 +423,25 @@ func _update_ai(delta: float, distance: float) -> void:
 		velocity.z = knockback.z
 		knockback = knockback.move_toward(Vector3.ZERO, delta * 14.0)
 		return
-	var to_player := _player.global_position - global_position
+	_decision_time -= delta
+	if _decision_time <= 0.0 and state != "windup":
+		_decision_time = randf_range(0.35, 0.55)
+		_choose_target()
+	if not _valid_target():
+		combat_target = null
+		if state == "windup":
+			state = "recovery"
+			state_time = recovery_duration
+		if state == "hit" or state == "recovery":
+			state_time = maxf(0.0, state_time - delta)
+			velocity.x = 0.0
+			velocity.z = 0.0
+			if state_time > 0.0:
+				return
+		_wander(delta)
+		return
+	distance = global_position.distance_to(combat_target.global_position)
+	var to_player := combat_target.global_position - global_position
 	to_player.y = 0.0
 	var direction := to_player.normalized()
 	if direction.length_squared() > 0.01:
@@ -362,12 +464,12 @@ func _update_ai(delta: float, distance: float) -> void:
 			state = "approach"
 	else:
 		if distance > attack_range:
-			velocity.x = direction.x * move_speed * slow_factor
-			velocity.z = direction.z * move_speed * slow_factor
+			velocity.x = direction.x * move_speed * slow_factor * (1.0 if is_boss else 1.45)
+			velocity.z = direction.z * move_speed * slow_factor * (1.0 if is_boss else 1.45)
 			_play_animation("Walk")
-		elif _is_player_visible_to_player() and distance <= attack_range:
+		elif distance <= attack_range and _clear_sight(combat_target):
 			state = "windup"
-			state_time = telegraph_duration
+			state_time = telegraph_duration if is_boss else telegraph_duration * 0.55
 			_attack_latched = true
 			velocity.x = 0.0
 			velocity.z = 0.0
@@ -379,15 +481,23 @@ func _update_ai(delta: float, distance: float) -> void:
 
 func _resolve_enemy_attack(distance: float) -> void:
 	var hit := false
-	if distance <= attack_range + 0.18 and _is_player_visible_to_player():
-		if is_boss:
-			_player.take_boss_damage(22)
-		else:
-			_player.interrupt_by_zombie(0.75, 0.60)
-		hit = true
+	# Legacy direct callers resolve against the player; active AI locks its target during windup.
+	var target: Node3D = combat_target if _valid_target() else _player
+	if is_instance_valid(target):
+		distance = global_position.distance_to(target.global_position)
+		if distance <= attack_range + 0.18 and _clear_sight(target):
+			if target is FoundationEnemy:
+				target.receive_hit(12, (target.global_position - global_position).normalized())
+				if target.hp > 0 and target.combat_target != _player:
+					target.combat_target = self
+			elif is_boss:
+				_player.take_boss_damage(22)
+			else:
+				_player.interrupt_by_zombie(0.75, 0.60)
+			hit = true
 	attack_resolved.emit(self, hit)
 	state = "recovery"
-	state_time = recovery_duration
+	state_time = recovery_duration if is_boss else recovery_duration * 0.65
 	_attack_latched = false
 
 func _is_player_visible_to_player() -> bool:
