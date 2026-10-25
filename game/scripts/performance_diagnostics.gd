@@ -153,9 +153,9 @@ func _collect_horde_counts() -> Dictionary:
 		"outside": 0,
 		"skeletons": 0,
 	}
-	if not is_instance_valid(get_parent()) or not "player" in get_parent():
+	if not is_instance_valid(get_parent()):
 		return result
-	var player: Node3D = get_parent().player
+	var player := get_parent().get("player") as Node3D
 	if not is_instance_valid(player):
 		return result
 	var enemies := get_tree().get_nodes_in_group("enemies")
