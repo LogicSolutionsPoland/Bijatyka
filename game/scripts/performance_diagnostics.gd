@@ -136,12 +136,14 @@ func _update_readout() -> void:
 		"FPS: %s\nFrame processing: %s   Physics: %s\n"
 		+ "Active zombies: %d\n"
 		+ "Detailed 0–18 m: %d   Low-poly 18–30 m: %d\n"
-		+ "Outside 30 m: %d   Active animated skeletons: %d\n"
+		+ "Outside 30 m: %d   Full zombie rigs: %d / %d (+ boss: %d)\n"
+		+ "Reduced-motion silhouettes: %d   Active animated skeletons: %d\n"
 		+ "Draw calls: %s   Rendered objects: %s\n"
 		+ "Engine static memory: %s"
 	) % [
 		fps, process_ms, physics_ms, counts.active, counts.detailed,
-		counts.low_poly, counts.outside, counts.skeletons,
+		counts.low_poly, counts.outside, counts.full_rigs, FoundationEnemy.FULL_ANIMATION_BUDGET, counts.boss_rigs,
+		counts.reduced_motion, counts.skeletons,
 		draw_calls, render_objects, memory
 	]
 
@@ -152,6 +154,9 @@ func _collect_horde_counts() -> Dictionary:
 		"low_poly": 0,
 		"outside": 0,
 		"skeletons": 0,
+		"full_rigs": 0,
+		"reduced_motion": 0,
+		"boss_rigs": 0,
 	}
 	if not is_instance_valid(get_parent()):
 		return result
@@ -163,7 +168,11 @@ func _collect_horde_counts() -> Dictionary:
 		if not node is FoundationEnemy:
 			continue
 		var enemy := node as FoundationEnemy
-		if enemy.hp <= 0 or enemy.is_boss:
+		if enemy.hp <= 0:
+			continue
+		if enemy.is_boss:
+			if enemy._animation_player != null and enemy._animation_player.is_playing():
+				result.boss_rigs += 1
 			continue
 		result.active += 1
 		var distance_squared := enemy.global_position.distance_squared_to(player.global_position)
@@ -173,6 +182,10 @@ func _collect_horde_counts() -> Dictionary:
 			result.low_poly += 1
 		else:
 			result.outside += 1
+		if enemy._full_animation_selected:
+			result.full_rigs += 1
+		elif distance_squared <= 900.0:
+			result.reduced_motion += 1
 		if enemy._animation_player != null and enemy._animation_player.is_playing() and enemy._model != null:
 			var skeletons: Array[Node] = enemy._model.find_children("*", "Skeleton3D", true, false)
 			if not skeletons.is_empty() and skeletons[0] is Skeleton3D and (skeletons[0] as Skeleton3D).is_visible_in_tree():

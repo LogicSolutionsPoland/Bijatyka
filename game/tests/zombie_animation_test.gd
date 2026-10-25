@@ -69,6 +69,7 @@ func _test_behavior_animation_connections() -> void:
 	enemy.position = Vector3.ZERO
 	enemy._player = player
 	enemy._set_distance_detail(0.0)
+	enemy._set_full_animation_selected(true)
 	var animations := enemy._animation_player
 	_check(animations != null, "near zombie creates its detailed imported rig")
 	if animations == null:

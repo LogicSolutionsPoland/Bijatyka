@@ -63,6 +63,8 @@ func _run() -> void:
 				"detailed_0_18m": counts.detailed,
 				"low_poly_18_30m": counts.low_poly,
 				"outside_30m": counts.outside,
+				"full_rig_zombies": counts.full_rigs,
+				"reduced_motion_visible_zombies": counts.reduced_motion,
 				"active_animated_skeletons": counts.skeletons,
 				"frame_processing_ms_avg": _average_ms(process_sum, process_samples),
 				"physics_processing_ms_avg": _average_ms(physics_sum, physics_samples),
@@ -90,7 +92,7 @@ func _active_zombies(game: Node) -> int:
 	return int(_horde_counts(game).active)
 
 func _horde_counts(game: Node) -> Dictionary:
-	var result := {"active": 0, "detailed": 0, "low_poly": 0, "outside": 0, "skeletons": 0}
+	var result := {"active": 0, "detailed": 0, "low_poly": 0, "outside": 0, "skeletons": 0, "full_rigs": 0, "reduced_motion": 0}
 	var player: Node3D = game.player
 	for node in get_nodes_in_group("enemies"):
 		if not node is FoundationEnemy:
@@ -106,6 +108,10 @@ func _horde_counts(game: Node) -> Dictionary:
 			result.low_poly += 1
 		else:
 			result.outside += 1
+		if enemy._full_animation_selected:
+			result.full_rigs += 1
+		elif distance_squared <= 900.0:
+			result.reduced_motion += 1
 		if enemy._animation_player != null and enemy._animation_player.is_playing() and enemy._model != null:
 			var skeletons: Array[Node] = enemy._model.find_children("*", "Skeleton3D", true, false)
 			if not skeletons.is_empty() and skeletons[0] is Skeleton3D and (skeletons[0] as Skeleton3D).is_visible_in_tree():

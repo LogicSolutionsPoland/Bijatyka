@@ -12,6 +12,7 @@ const GRAVITY := 24.0
 const RENDER_RADIUS := 30.0
 const DETAILED_RADIUS := 18.0
 const FAR_PHYSICS_INTERVAL := 0.10
+const FULL_ANIMATION_BUDGET := 20
 const SPAWN_ASSAULT_DURATION := 4.5
 const SPAWN_ASSAULT_SPEED_MULTIPLIER := 3.2
 const SPAWN_ASSAULT_HANDOFF_DISTANCE := 6.0
@@ -48,6 +49,7 @@ var _health_bar_root: Node3D
 var _health_bar_fill: MeshInstance3D
 var _attack_latched := false
 var _lod_band := -1
+var _full_animation_selected := false
 var combat_target: Node3D
 var _decision_time := 0.0
 var _wander_time := 0.0
@@ -236,6 +238,7 @@ func _build_visual() -> void:
 	# Most births occur at 50 m. Build the rig only when the zombie reaches
 	# the near combat ring; distant zombies use one shared silhouette batch.
 	if is_boss:
+		_full_animation_selected = true
 		_ensure_detailed_model()
 	_build_health_display()
 	SHADOW_POLICY.disable_in_tree(_visual_root)
@@ -496,18 +499,49 @@ func _move_and_check_assault(step: float) -> void:
 func _set_distance_detail(distance: float) -> void:
 	if _visual_root == null:
 		return
-	var band := 2 if distance > RENDER_RADIUS else (0 if is_boss or distance <= DETAILED_RADIUS else 1)
+	var band := 2 if distance > RENDER_RADIUS else (0 if distance <= DETAILED_RADIUS else 1)
 	if band == _lod_band:
+		_update_visual_visibility()
 		return
 	_lod_band = band
-	if band == 0:
+	_update_visual_visibility()
+
+func _update_visual_visibility() -> void:
+	if _visual_root == null:
+		return
+	_visual_root.visible = is_boss or (_full_animation_selected and _lod_band <= 1)
+
+func _set_full_animation_selected(selected: bool) -> void:
+	if is_boss:
+		selected = true
+	if _full_animation_selected == selected:
+		_update_visual_visibility()
+		return
+	_full_animation_selected = selected
+	if selected:
 		_ensure_detailed_model()
-	_visual_root.visible = band == 0
-	if _animation_player != null:
-		if band == 0:
-			_animation_player.speed_scale = 1.0
-		else:
-			_animation_player.stop()
+		_update_visual_visibility()
+		_resume_animation_for_state()
+	elif _animation_player != null:
+		_animation_player.speed_scale = 1.0
+		_animation_player.stop()
+		_update_visual_visibility()
+
+func _resume_animation_for_state() -> void:
+	if _animation_player == null or not _full_animation_selected:
+		return
+	match state:
+		"windup":
+			var target := combat_target if _valid_target() else _player
+			if is_instance_valid(target):
+				_begin_attack_animation(target, global_position.distance_to(target.global_position), maxf(state_time, 0.01))
+			else:
+				_play_animation("Idle")
+		"hit": _play_animation("Hit_React", 1.0, 0.04, true)
+		"assault": _play_animation("Sprint")
+		"wander": _play_animation("Walk")
+		"approach": _play_animation("Sprint" if _is_high_speed_chase() else "Walk")
+		_: _play_animation("Idle")
 
 func _update_ai(delta: float, distance: float) -> void:
 	if stun_time > 0.0:
@@ -642,7 +676,9 @@ func receive_hit(damage: int, hit_direction: Vector3 = Vector3.ZERO, is_jump_hit
 		if collision != null:
 			collision.set_deferred("disabled", true)
 		_death_animation = _death_animation_for_hit(hit_direction)
-		if _lod_band == 0 and _play_animation(_death_animation, 1.0, 0.06, true):
+		if _lod_band <= 1:
+			_set_full_animation_selected(true)
+		if _full_animation_selected and _play_animation(_death_animation, 1.0, 0.06, true):
 			return dealt
 		# Keep the old visual fallback when the rig or death clip is unavailable.
 		if _visual_root != null:
@@ -664,7 +700,7 @@ func apply_slow(factor: float, duration: float) -> void:
 	slow_time = maxf(slow_time, duration)
 
 func _play_animation(animation_name: String, playback_speed: float = 1.0, blend: float = 0.12, force_restart: bool = false) -> bool:
-	if animation_name.is_empty() or _lod_band != 0 or _animation_player == null or not _animation_player.has_animation(animation_name):
+	if animation_name.is_empty() or not _full_animation_selected or _animation_player == null or not _animation_player.has_animation(animation_name):
 		return false
 	if force_restart or _animation_player.current_animation != animation_name or not _animation_player.is_playing():
 		_animation_player.play(animation_name, blend, maxf(0.01, playback_speed))
