@@ -8,6 +8,7 @@ on:
       - codex/zombie-roaming-aggression
       - codex/concealed-forward-assault
       - codex/graphics-upgrade
+      - codex/horde-performance
   workflow_dispatch:
 
 permissions:
@@ -53,6 +54,13 @@ jobs:
           godot --headless --path game --script res://tests/burning_horizon_test.gd 2>&1 | tee "$RUNNER_TEMP/horizon.log"
           grep -q "PASS: burning horizon integration" "$RUNNER_TEMP/horizon.log"
           if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/horizon.log"; then exit 1; fi
+
+      - name: Check fog horde visual tiers
+        run: |
+          set -o pipefail
+          godot --headless --path game --script res://tests/horde_performance_test.gd 2>&1 | tee "$RUNNER_TEMP/horde-performance.log"
+          grep -q "PASS: horde performance" "$RUNNER_TEMP/horde-performance.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/horde-performance.log"; then exit 1; fi
 
 
   scene-smoke:

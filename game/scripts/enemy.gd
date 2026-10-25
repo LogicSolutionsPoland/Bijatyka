@@ -10,6 +10,8 @@ const ENEMY_MODEL_YAW_OFFSET := PI
 const SHADOW_POLICY := preload("res://scripts/shadow_policy.gd")
 const GRAVITY := 24.0
 const RENDER_RADIUS := 30.0
+const DETAILED_RADIUS := 18.0
+const FAR_PHYSICS_INTERVAL := 0.10
 const SPAWN_ASSAULT_DURATION := 4.5
 const SPAWN_ASSAULT_SPEED_MULTIPLIER := 3.2
 const SPAWN_ASSAULT_HANDOFF_DISTANCE := 6.0
@@ -31,6 +33,7 @@ var slow_factor := 1.0
 var knockback := Vector3.ZERO
 var _ai_accumulator := 0.0
 var _ai_interval := 0.0
+var _far_physics_time := 0.0
 var _player: FoundationPlayer
 var _model: Node3D
 var _animation_player: AnimationPlayer
@@ -225,6 +228,16 @@ func _build_visual() -> void:
 	_visual_root = Node3D.new()
 	_visual_root.name = "VisualRoot"
 	add_child(_visual_root)
+	# Most births occur at 50 m. Build the rig only when the zombie reaches
+	# the near combat ring; distant zombies use one shared silhouette batch.
+	if is_boss:
+		_ensure_detailed_model()
+	_build_health_display()
+	SHADOW_POLICY.disable_in_tree(_visual_root)
+
+func _ensure_detailed_model() -> void:
+	if _model != null:
+		return
 	if ResourceLoader.exists(ENEMY_MODEL_PATH):
 		var packed := load(ENEMY_MODEL_PATH) as PackedScene
 		if packed != null:
@@ -245,7 +258,6 @@ func _build_visual() -> void:
 		_build_debug_variant()
 	if is_boss or enemy_variant == "brute":
 		_add_silhouette_piece()
-	_build_health_display()
 	SHADOW_POLICY.disable_in_tree(_visual_root)
 
 func attach_status_label(label: Label3D) -> void:
@@ -409,21 +421,32 @@ func _descendants(root: Node) -> Array[Node]:
 func _physics_process(delta: float) -> void:
 	if hp <= 0:
 		return
-	if not is_on_floor():
-		velocity.y -= GRAVITY * delta
-	else:
-		velocity.y = 0.0
-	_player = get_tree().get_first_node_in_group("player") as FoundationPlayer
+	if not is_instance_valid(_player):
+		_player = get_tree().get_first_node_in_group("player") as FoundationPlayer
 	if _player == null:
 		return
 	var distance := global_position.distance_to(_player.global_position)
 	_set_distance_detail(distance)
+	# Outside the visible ring, sample collision and motion at 10 Hz. Spawn
+	# assaults stay at full rate so the initial dash and wall handoff are exact.
+	if not is_boss and distance > RENDER_RADIUS and _spawn_assault_time <= 0.0:
+		_far_physics_time += delta
+		if _far_physics_time < FAR_PHYSICS_INTERVAL:
+			return
+		delta = _far_physics_time
+		_far_physics_time = 0.0
+	else:
+		_far_physics_time = 0.0
+	if not is_on_floor():
+		velocity.y -= GRAVITY * delta
+	else:
+		velocity.y = 0.0
 	if distance > 70.0:
 		if _spawn_assault_time > 0.0:
 			_finish_spawn_assault()
 		velocity.x = 0.0
 		velocity.z = 0.0
-		_move_and_check_assault()
+		velocity.y = 0.0
 		return
 	# Cheap distance guard between staggered decisions prevents a fast burst from
 	# carrying through the player. Contact still requires the normal attack windup.
@@ -439,15 +462,21 @@ func _physics_process(delta: float) -> void:
 	else:
 		_ai_interval = 0.10
 	if _ai_accumulator < _ai_interval:
-		_move_and_check_assault()
+		_move_and_check_assault(delta)
 		return
 	var step := _ai_accumulator
 	_ai_accumulator = 0.0
 	_update_ai(step, distance)
-	_move_and_check_assault()
+	_move_and_check_assault(delta)
 
-func _move_and_check_assault() -> void:
+func _move_and_check_assault(step: float) -> void:
+	# CharacterBody3D moves for one engine tick per call. Scale velocity for
+	# a skipped far tick, then restore the collision-adjusted speed so a zombie
+	# covers the same ground in real time at 10 Hz as it did at 60 Hz.
+	var factor := maxf(1.0, step / get_physics_process_delta_time())
+	velocity *= factor
 	move_and_slide()
+	velocity /= factor
 	# Collision flags can clear on the next zero-velocity tick. Inspect them here,
 	# rather than waiting up to 0.45 seconds for a distant AI decision.
 	if _spawn_assault_time > 0.0 and is_on_wall():
@@ -456,16 +485,16 @@ func _move_and_check_assault() -> void:
 func _set_distance_detail(distance: float) -> void:
 	if _visual_root == null:
 		return
-	var band := 0 if distance <= 18.0 else (1 if distance <= RENDER_RADIUS else 2)
+	var band := 2 if distance > RENDER_RADIUS else (0 if is_boss or distance <= DETAILED_RADIUS else 1)
 	if band == _lod_band:
 		return
 	_lod_band = band
-	_visual_root.visible = distance <= RENDER_RADIUS
+	if band == 0:
+		_ensure_detailed_model()
+	_visual_root.visible = band == 0
 	if _animation_player != null:
-		if distance <= 18.0:
+		if band == 0:
 			_animation_player.speed_scale = 1.0
-		elif distance <= RENDER_RADIUS:
-			_animation_player.speed_scale = 0.55
 		else:
 			_animation_player.stop()
 
@@ -601,6 +630,6 @@ func apply_slow(factor: float, duration: float) -> void:
 	slow_time = maxf(slow_time, duration)
 
 func _play_animation(animation_name: String) -> void:
-	if _animation_player != null and _animation_player.has_animation(animation_name):
+	if _lod_band == 0 and _animation_player != null and _animation_player.has_animation(animation_name):
 		if _animation_player.current_animation != animation_name or not _animation_player.is_playing():
 			_animation_player.play(animation_name)

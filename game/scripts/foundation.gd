@@ -6,6 +6,7 @@ const PLAYER_SCENE := preload("res://scenes/player.tscn")
 const PLAYER_SCRIPT := preload("res://scripts/player_controller.gd")
 const ENEMY_SCRIPT := preload("res://scripts/enemy.gd")
 const CONCEALED_SPAWN := preload("res://scripts/concealed_spawn.gd")
+const HORDE_FAR_VISUALS := preload("res://scripts/horde_far_visuals.gd")
 const HUD_SCRIPT := preload("res://scripts/mobile_hud.gd")
 const SHADOW_POLICY := preload("res://scripts/shadow_policy.gd")
 const RADIAL_GROUND_SHADER := preload("res://shaders/radial_ground.gdshader")
@@ -43,6 +44,7 @@ var _boss_enemy: FoundationEnemy
 var burning_horizon: Node3D
 var game_music_player: AudioStreamPlayer
 var spawn_director: Node3D
+var horde_far_visuals: HordeFarVisuals
 var _spawn_blockers: Array[AABB] = []
 
 func _ready() -> void:
@@ -414,6 +416,10 @@ func _apply_camera_look(yaw_delta: float, pitch_delta: float) -> void:
 		player.set_camera_yaw(_camera_yaw)
 
 func _spawn_enemies() -> void:
+	horde_far_visuals = HORDE_FAR_VISUALS.new()
+	horde_far_visuals.configure(ZOMBIE_HORDE_SIZE)
+	horde_far_visuals.player = player
+	add_child(horde_far_visuals)
 	spawn_director = CONCEALED_SPAWN.new()
 	spawn_director.name = "ConcealedForwardSpawns"
 	spawn_director.player = player
@@ -433,6 +439,7 @@ func _spawn_enemies() -> void:
 func _spawn_assault_zombie(at: Vector3) -> void:
 	var enemy := _spawn_enemy("shambler", at)
 	spawn_director.register_enemy(enemy)
+	horde_far_visuals.register_enemy(enemy)
 	enemy.begin_spawn_assault(player)
 
 func _spawn_enemy(kind: String, at: Vector3, boss_target: bool = false) -> FoundationEnemy:
@@ -516,14 +523,16 @@ func _update_distance_visibility() -> void:
 	_apply_distance_visibility(self)
 
 func _apply_distance_visibility(node: Node) -> void:
-	if node.is_in_group("distant_backdrop"):
+	# Enemy rigs own their 18/30 m bands; walking every bone and mesh every
+	# 120 ms scales with the full 200-zombie population.
+	if node is FoundationEnemy or node == horde_far_visuals or node.is_in_group("distant_backdrop"):
 		return
 	if node.is_in_group("radial_floor"):
 		node.visible = true
 	elif node is GeometryInstance3D or node is Label3D:
-		node.visible = node.global_position.distance_to(player.global_position) <= VISIBILITY_RADIUS
+		node.visible = node.global_position.distance_squared_to(player.global_position) <= VISIBILITY_RADIUS * VISIBILITY_RADIUS
 	elif node is OmniLight3D or node is SpotLight3D:
-		node.visible = node.global_position.distance_to(player.global_position) <= VISIBILITY_RADIUS
+		node.visible = node.global_position.distance_squared_to(player.global_position) <= VISIBILITY_RADIUS * VISIBILITY_RADIUS
 	for child in node.get_children():
 		_apply_distance_visibility(child)
 
