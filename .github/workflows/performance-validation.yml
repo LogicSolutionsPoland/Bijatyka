@@ -29,6 +29,9 @@ jobs:
       - name: Check candidate asset archive staging safety
         run: python3 -m unittest tools.test_stage_asset_packs
 
+      - name: Check optional environment archive import guards
+        run: python3 -m unittest tools.test_environment_import
+
       - name: Install Godot 4.7.2
         uses: chickensoft-games/setup-godot@v2
         with:
