@@ -14,6 +14,7 @@ const SHADOW_POLICY := preload("res://scripts/shadow_policy.gd")
 const RADIAL_GROUND_SHADER := preload("res://shaders/radial_ground.gdshader")
 const RUIN_SURFACE_SHADER := preload("res://shaders/ruined_surface.gdshader")
 const ZOMBIE_HORDE_SIZE := 69
+const ZOMBIE_PERFORMANCE_CAPACITY := 200
 const ZOMBIE_SPAWN_DISTANCE := 50.0
 const VISIBILITY_RADIUS := 30.0
 const PLAYER_BASE_CENTER := Vector3(0.0, 0.0, -5.2)
@@ -446,7 +447,7 @@ func _apply_camera_look(yaw_delta: float, pitch_delta: float) -> void:
 
 func _spawn_enemies() -> void:
 	horde_far_visuals = HORDE_FAR_VISUALS.new()
-	horde_far_visuals.configure(ZOMBIE_HORDE_SIZE)
+	horde_far_visuals.configure(ZOMBIE_PERFORMANCE_CAPACITY)
 	horde_far_visuals.player = player
 	add_child(horde_far_visuals)
 	spawn_director = CONCEALED_SPAWN.new()
