@@ -123,7 +123,7 @@ func _process(delta: float) -> void:
 	_update_gamepad_camera(delta)
 	player.set_camera_yaw(_camera_yaw)
 	if flashlight_visibility_manager != null:
-		flashlight_visibility_manager.set_aim_yaw(_camera_yaw)
+		flashlight_visibility_manager.set_aim_from_camera()
 	_status_timer += delta
 	if _status_timer >= 0.18:
 		_status_timer = 0.0
@@ -472,7 +472,7 @@ func _apply_camera_look(yaw_delta: float, pitch_delta: float) -> void:
 	if player != null:
 		player.set_camera_yaw(_camera_yaw)
 	if flashlight_visibility_manager != null:
-		flashlight_visibility_manager.set_aim_yaw(_camera_yaw)
+		flashlight_visibility_manager.set_aim_from_camera()
 
 func _spawn_enemies() -> void:
 	horde_far_visuals = HORDE_FAR_VISUALS.new()

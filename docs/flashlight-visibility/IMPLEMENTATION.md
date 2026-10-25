@@ -6,7 +6,7 @@ The enabled mode uses a single Compatibility spatial shader on a camera-local fu
 
 The environment switches to black background, neutral white ambient and key light, no fog, and no glow while the mode is enabled. The existing Burning Horizon node, geometry, shaders, and follow behavior remain present; its distant pixels fall outside the 30 m lit disk and are masked by the same shader. Turning the configuration option off restores the former environment setup.
 
-`FlashlightVisibilityManager` tracks ordinary enemies registered by the existing horde owner. It classifies them every 120 ms using squared distance, a dot product against the camera aim direction, a separate camera-frustum check, and 0.65 m sector hysteresis. The high-frequency shader uniform update follows camera yaw each frame. Only visible actors are eligible for the shared silhouette MultiMesh and detailed-rig scheduler. Gameplay AI, collisions, health, attacks, and replacement remain active in darkness.
+`FlashlightVisibilityManager` tracks ordinary enemies registered by the existing horde owner. It classifies them every 120 ms using squared distance, a dot product against the camera aim direction, a separate camera-frustum check, and 0.65 m sector hysteresis. The high-frequency shader uniform update projects the camera's world-space forward axis onto the ground each frame, keeping the sector and mask aligned with the actual view. Only visible actors are eligible for the shared silhouette MultiMesh and detailed-rig scheduler. Gameplay AI, collisions, health, attacks, and replacement remain active in darkness.
 
 ## Camera
 

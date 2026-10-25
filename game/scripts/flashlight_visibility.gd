@@ -39,9 +39,14 @@ func configure(player_node: Node3D, camera_node: Camera3D, is_enabled: bool) -> 
 	_upload_shader_parameters()
 	_classify_enemies()
 
-func set_aim_yaw(yaw: float) -> void:
-	# Camera yaw and player combat aim share the same heading in Foundation.
-	aim_direction = Vector3(sin(yaw), 0.0, -cos(yaw)).normalized()
+func set_aim_from_camera() -> void:
+	# The camera faces local -Z. Project its actual world-space forward axis onto
+	# the ground so the visibility sector always follows the rendered camera aim.
+	if is_instance_valid(camera):
+		var camera_forward := -camera.global_basis.z
+		camera_forward.y = 0.0
+		if camera_forward.length_squared() > 0.000001:
+			aim_direction = camera_forward.normalized()
 	_upload_shader_parameters()
 
 func track_enemy(enemy: Node3D) -> void:

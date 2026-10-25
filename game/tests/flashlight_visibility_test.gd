@@ -24,26 +24,31 @@ func _run() -> void:
 	_check(is_equal_approx(game.camera.fov, Foundation.CAMERA_VERTICAL_FOV), "camera keeps the existing 66-degree perspective")
 
 	var manager = game.flashlight_visibility_manager
-	manager.set_aim_yaw(0.0)
-	_check(manager.is_point_in_sector(game.player.global_position + Vector3(0, 0, -10)), "forward point is inside the 180-degree sector")
-	_check(not manager.is_point_in_sector(game.player.global_position + Vector3(0, 0, 10)), "rear point is outside the 180-degree sector")
+	manager.set_aim_from_camera()
+	_check(manager.is_point_in_sector(game.player.global_position + Vector3(0, 0, -10)), "camera-forward point is inside the 180-degree sector")
+	_check(not manager.is_point_in_sector(game.player.global_position + Vector3(0, 0, 10)), "camera-rear point is outside the 180-degree sector")
 	_check(not manager.is_point_in_sector(game.player.global_position + Vector3(0, 0, 31)), "visibility never extends beyond the 30 m radius")
 	_check(manager.is_point_in_sector(game.player.global_position + Vector3(0, 0, 0.3), 0.65), "sector hysteresis holds a recently visible actor near the boundary")
 	_check(is_equal_approx(manager.get_radial_weight(22.0), 1.0), "illumination stays bright through 22 m")
 	_check(manager.get_radial_weight(26.0) > 0.0 and manager.get_radial_weight(26.0) < 1.0, "outer 22–30 m band fades smoothly")
 	_check(is_zero_approx(manager.get_radial_weight(30.0)), "illumination reaches black at 30 m")
 
-	manager.set_aim_yaw(PI * 0.5)
-	_check(manager.is_point_in_sector(game.player.global_position + Vector3(10, 0, 0)), "sector rotates immediately with camera aim yaw")
-	_check(not manager.is_point_in_sector(game.player.global_position + Vector3(-10, 0, 0)), "rotated sector excludes its rear half")
-	_check(manager.aim_direction.distance_to(Vector3.RIGHT) < 0.001, "aim direction has no rotation lag")
-	manager.set_aim_yaw(0.0)
+	game._camera_yaw = PI * 0.5
+	game.camera_rig.rotation.y = game._camera_yaw
+	manager.set_aim_from_camera()
+	var rotated_camera_forward := _camera_ground_forward(game.camera)
+	_check(manager.is_point_in_sector(game.player.global_position + rotated_camera_forward * 10.0), "sector follows the camera's actual world-space forward direction")
+	_check(not manager.is_point_in_sector(game.player.global_position - rotated_camera_forward * 10.0), "rotated sector excludes the camera's rear half")
+	_check(manager.aim_direction.distance_to(rotated_camera_forward) < 0.001, "aim direction matches camera basis without rotation lag")
+	game._camera_yaw = 0.0
+	game.camera_rig.rotation.y = 0.0
+	manager.set_aim_from_camera()
 
 	# Touch camera gestures flow through the same callback used by the HUD.
 	var yaw_before_touch := game._camera_yaw
 	game.hud.camera_dragged.emit(Vector2(18.0, -7.0))
 	_check(not is_equal_approx(game._camera_yaw, yaw_before_touch), "touch drag rotates the camera")
-	_check(game.flashlight_visibility_manager.aim_direction.distance_to(Vector3(sin(game._camera_yaw), 0.0, -cos(game._camera_yaw))) < 0.001, "touch aim updates the flashlight in the same frame")
+	_check(game.flashlight_visibility_manager.aim_direction.distance_to(_camera_ground_forward(game.camera)) < 0.001, "touch aim updates the flashlight in the same frame")
 
 	# The same input actions used by the right stick update the camera and aim.
 	var yaw_before_gamepad := game._camera_yaw
@@ -51,13 +56,13 @@ func _run() -> void:
 	game._update_gamepad_camera(1.0 / 60.0)
 	Input.action_release("camera_right")
 	_check(not is_equal_approx(game._camera_yaw, yaw_before_gamepad), "gamepad camera action rotates the camera")
-	_check(game.flashlight_visibility_manager.aim_direction.distance_to(Vector3(sin(game._camera_yaw), 0.0, -cos(game._camera_yaw))) < 0.001, "gamepad aim updates the flashlight")
+	_check(game.flashlight_visibility_manager.aim_direction.distance_to(_camera_ground_forward(game.camera)) < 0.001, "gamepad aim updates the flashlight")
 
 	# Verify the light classifier feeds the shared MultiMesh queue independently
 	# from AI and collision. The test scene is discarded after these placements.
 	game._camera_yaw = 0.0
 	game.camera_rig.rotation.y = 0.0
-	manager.set_aim_yaw(0.0)
+	manager.set_aim_from_camera()
 	var test_enemies: Array = game.horde_far_visuals._enemies.values()
 	_check(test_enemies.size() >= 2, "ordinary zombie population is registered with the shared visibility manager")
 	if test_enemies.size() >= 2:
@@ -76,7 +81,9 @@ func _run() -> void:
 		game.horde_far_visuals._update_full_rig_selection()
 		game.horde_far_visuals._process(0.21)
 		_check(game.horde_far_visuals.multimesh.visible_instance_count == 1, "shared MultiMesh compacts the horde to the one visible distant zombie")
-		manager.set_aim_yaw(PI)
+		game._camera_yaw = PI
+		game.camera_rig.rotation.y = game._camera_yaw
+		manager.set_aim_from_camera()
 		manager._classify_enemies()
 		_check(dark_zombie.global_position.distance_to(dark_position) < 0.001, "turning the flashlight never teleports a hidden zombie")
 		_check(dark_zombie.is_physics_processing(), "hidden zombie physics and AI remain active")
@@ -96,7 +103,7 @@ func _run() -> void:
 	game._camera_pitch = deg_to_rad(Foundation.CAMERA_PITCH_DEGREES)
 	game.camera_rig.rotation.y = 0.0
 	game.camera_arm.rotation.x = game._camera_pitch
-	game.flashlight_visibility_manager.set_aim_yaw(0.0)
+	game.flashlight_visibility_manager.set_aim_from_camera()
 	for frame in range(30):
 		await process_frame
 	_check(game.player.try_jump(), "jump input starts while grounded")
@@ -141,6 +148,11 @@ func _run() -> void:
 			push_error(failure)
 		print("FAIL: flashlight visibility and camera (%d/%d failed)" % [failures.size(), checks])
 	quit(0 if failures.is_empty() else 1)
+
+func _camera_ground_forward(camera_node: Camera3D) -> Vector3:
+	var direction := -camera_node.global_basis.z
+	direction.y = 0.0
+	return direction.normalized()
 
 func _check(ok: bool, message: String) -> void:
 	checks += 1
