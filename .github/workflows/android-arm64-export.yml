@@ -54,6 +54,7 @@ jobs:
             lib/arm64-v8a/libgodot_android.so \
             assets/project.binary \
             assets/scripts/foundation.gdc \
+            assets/scripts/flashlight_visibility.gdc \
             assets/scripts/enemy.gdc \
             assets/scripts/horde_far_visuals.gdc \
             assets/scripts/player_controller.gdc \
@@ -63,6 +64,7 @@ jobs:
             assets/scenes/foundation.tscn.remap \
             assets/scenes/player.tscn.remap \
             assets/shaders/burning_horizon.gdshader \
+            assets/shaders/flashlight_visibility.gdshader \
             assets/shaders/horde_crowd_animation.gdshader \
             assets/assets/audio/menu_music.mp3.import \
             assets/assets/zombies/brutal_v2/Retribution_Zombie_01_Brutal_V2_RIGGED_LOD1.glb.import; do

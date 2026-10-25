@@ -1,7 +1,7 @@
 extends SceneTree
 ## Headless comparison run. Render-only monitors are explicitly reported as N/A.
 
-const POPULATIONS := [20, 100, 200]
+const POPULATIONS := [20, 69, 100, 200]
 const MODES := ["concentrated", "approach"]
 const FOUNDATION_SCENE := preload("res://scenes/foundation.tscn")
 const WARMUP_FRAMES := 60
@@ -82,6 +82,7 @@ func _run() -> void:
 			var rendered := Engine.get_frames_drawn() > 0
 			var rig_stats: Dictionary = game.horde_far_visuals.get_rig_pool_stats()
 			var fx_stats: Dictionary = game.combat_fx_pool.get_profile_stats()
+			var flashlight_counts: Dictionary = game.flashlight_visibility_manager.get_classification_counts()
 			var report := {
 				"population": population,
 				"scenario": mode,
@@ -95,6 +96,12 @@ func _run() -> void:
 				"resident_detailed_rigs_peak": resident_peak,
 				"dying_detailed_rigs": rig_stats.dying,
 				"reduced_motion_visible_zombies": counts.reduced_motion,
+				"flashlight_visible_close": flashlight_counts.visible_close,
+				"flashlight_visible_distant": flashlight_counts.visible_distant,
+				"flashlight_dark_close_combat": flashlight_counts.dark_close_combat,
+				"flashlight_dark_distant": flashlight_counts.dark_distant,
+				"flashlight_beyond_30m": flashlight_counts.beyond_render,
+				"multimesh_visible_instances": game.horde_far_visuals.multimesh.visible_instance_count,
 				"active_animated_skeletons": counts.skeletons,
 				"frame_processing_ms_avg": _average_ms(process_ms),
 				"physics_processing_ms_avg": _average_ms(physics_ms),
@@ -123,7 +130,7 @@ func _run() -> void:
 			await process_frame
 
 	if failures.is_empty():
-		print("PASS: horde scenario benchmark (6 scenarios; headless CPU/scene metrics only)")
+		print("PASS: horde scenario benchmark (8 scenarios; headless CPU/scene metrics only)")
 	else:
 		for failure in failures:
 			push_error(failure)

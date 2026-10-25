@@ -52,6 +52,7 @@ var _health_bar_fill: MeshInstance3D
 var _attack_latched := false
 var _lod_band := -1
 var _full_animation_selected := false
+var _flashlight_render_visible := true
 var combat_target: Node3D
 var _decision_time := 0.0
 var _wander_time := 0.0
@@ -549,7 +550,13 @@ func _set_distance_detail(distance: float) -> void:
 func _update_visual_visibility() -> void:
 	if _visual_root == null:
 		return
-	_visual_root.visible = is_boss or (_full_animation_selected and _lod_band <= 1)
+	_visual_root.visible = is_boss or (_flashlight_render_visible and _full_animation_selected and _lod_band <= 1)
+
+func set_flashlight_render_visible(is_visible: bool) -> void:
+	if is_boss or _flashlight_render_visible == is_visible:
+		return
+	_flashlight_render_visible = is_visible
+	_update_visual_visibility()
 
 func _set_full_animation_selected(selected: bool) -> void:
 	if is_boss:

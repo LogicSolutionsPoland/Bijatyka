@@ -11,6 +11,7 @@ const PERFORMANCE_DIAGNOSTICS := preload("res://scripts/performance_diagnostics.
 const COMBAT_FX_POOL := preload("res://scripts/combat_fx_pool.gd")
 const HUD_SCRIPT := preload("res://scripts/mobile_hud.gd")
 const SHADOW_POLICY := preload("res://scripts/shadow_policy.gd")
+const FLASHLIGHT_VISIBILITY := preload("res://scripts/flashlight_visibility.gd")
 const RADIAL_GROUND_SHADER := preload("res://shaders/radial_ground.gdshader")
 const RUIN_SURFACE_SHADER := preload("res://shaders/ruined_surface.gdshader")
 const ZOMBIE_HORDE_SIZE := 69
@@ -27,7 +28,8 @@ const PLAYER_BASE_BOUNDARY_SEGMENTS := 48
 # Height is measured above the player's ground origin, not added to an existing camera offset.
 const CAMERA_PIVOT_HEIGHT := 1.55
 const CAMERA_FOLLOW_DISTANCE := 4.1
-const CAMERA_SHOULDER_OFFSET := 1.35
+const CAMERA_TARGET_SCREEN_X := 0.38
+const CAMERA_VERTICAL_FOV := 66.0
 const CAMERA_PITCH_DEGREES := 4.0
 const CAMERA_YAW_RADIANS_PER_PIXEL := 0.006
 const CAMERA_PITCH_RADIANS_PER_PIXEL := 0.004
@@ -41,6 +43,9 @@ var player: FoundationPlayer
 var camera_rig: Node3D
 var camera_arm: SpringArm3D
 var camera: Camera3D
+var flashlight_visibility_manager: Node
+var flashlight_visibility_enabled := true
+var _last_framing_viewport_size := Vector2.ZERO
 var _camera_yaw := 0.0
 var _camera_pitch := deg_to_rad(CAMERA_PITCH_DEGREES)
 var hud: FoundationHUD
@@ -61,6 +66,7 @@ var _performance_scenario := ""
 var _spawn_blockers: Array[AABB] = []
 
 func _ready() -> void:
+	flashlight_visibility_enabled = bool(ProjectSettings.get_setting("gameplay/flashlight_visibility_enabled", true))
 	_start_game_music()
 	_build_environment()
 	_build_arena()
@@ -75,6 +81,10 @@ func _ready() -> void:
 	add_child(combat_fx_pool)
 	player.combat_fx_pool = combat_fx_pool
 	_build_camera()
+	flashlight_visibility_manager = FLASHLIGHT_VISIBILITY.new()
+	flashlight_visibility_manager.name = "FlashlightVisibilityManager"
+	flashlight_visibility_manager.configure(player, camera, flashlight_visibility_enabled)
+	add_child(flashlight_visibility_manager)
 	burning_horizon = BURNING_HORIZON.new()
 	burning_horizon.name = "BurningHorizon"
 	add_child(burning_horizon)
@@ -109,8 +119,11 @@ func _process(delta: float) -> void:
 	burning_horizon.follow_player(player.global_position)
 	var target_position := player.global_position + Vector3(0.0, CAMERA_PIVOT_HEIGHT, 0.0)
 	camera_rig.global_position = camera_rig.global_position.lerp(target_position, 1.0 - exp(-delta * 7.5))
+	_update_camera_framing()
 	_update_gamepad_camera(delta)
 	player.set_camera_yaw(_camera_yaw)
+	if flashlight_visibility_manager != null:
+		flashlight_visibility_manager.set_aim_yaw(_camera_yaw)
 	_status_timer += delta
 	if _status_timer >= 0.18:
 		_status_timer = 0.0
@@ -126,20 +139,22 @@ func _process(delta: float) -> void:
 func _build_environment() -> void:
 	var world := WorldEnvironment.new()
 	var environment := Environment.new()
-	environment.background_mode = Environment.BG_SKY
+	environment.background_mode = Environment.BG_COLOR if flashlight_visibility_enabled else Environment.BG_SKY
 	environment.sky = BURNING_HORIZON.make_sky()
+	if flashlight_visibility_enabled:
+		environment.background_color = Color.BLACK
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	environment.ambient_light_color = Color(0.43, 0.39, 0.40)
-	environment.ambient_light_energy = 0.62
+	environment.ambient_light_color = Color.WHITE if flashlight_visibility_enabled else Color(0.43, 0.39, 0.40)
+	environment.ambient_light_energy = 0.72 if flashlight_visibility_enabled else 0.62
 	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	environment.fog_enabled = true
+	environment.fog_enabled = not flashlight_visibility_enabled
 	environment.fog_light_color = Color(0.23, 0.15, 0.14)
 	environment.fog_light_energy = 0.7
 	environment.fog_depth_begin = 24.0
 	environment.fog_depth_end = VISIBILITY_RADIUS
 	environment.fog_density = 0.004
 	environment.fog_sun_scatter = 0.10
-	environment.glow_enabled = true
+	environment.glow_enabled = not flashlight_visibility_enabled
 	environment.glow_intensity = 0.28
 	environment.glow_bloom = 0.04
 	environment.glow_hdr_threshold = 0.88
@@ -148,8 +163,8 @@ func _build_environment() -> void:
 	var sun := DirectionalLight3D.new()
 	sun.name = "ChemicalDuskKeyLight"
 	sun.rotation_degrees = Vector3(-39.0, -34.0, 0.0)
-	sun.light_color = Color(1.0, 0.72, 0.54)
-	sun.light_energy = 1.15
+	sun.light_color = Color.WHITE if flashlight_visibility_enabled else Color(1.0, 0.72, 0.54)
+	sun.light_energy = 1.0 if flashlight_visibility_enabled else 1.15
 	sun.shadow_enabled = false
 	add_child(sun)
 
@@ -392,19 +407,31 @@ func _build_camera() -> void:
 	camera_arm.margin = 0.15
 	camera_arm.collision_mask = 1
 	camera_arm.add_excluded_object(player.get_rid())
-	# Offset the camera to the player's right to keep Thornbound in the left third
-	# of the screen while the forward combat lane stays open near the center.
-	camera_arm.position.x = CAMERA_SHOULDER_OFFSET
 	camera_arm.rotation.x = _camera_pitch
 	camera_rig.add_child(camera_arm)
 	camera = Camera3D.new()
 	camera.name = "BehindPlayerCamera"
-	camera.fov = 66.0
+	camera.fov = CAMERA_VERTICAL_FOV
+	camera.keep_aspect = Camera3D.KEEP_HEIGHT
 	camera.near = 0.08
 	camera.far = 140.0
 	camera.current = true
 	camera.add_to_group("foundation_camera")
 	camera_arm.add_child(camera)
+	_update_camera_framing()
+
+func _update_camera_framing() -> void:
+	if camera_arm == null or camera == null or not is_instance_valid(camera):
+		return
+	var viewport_size := camera.get_viewport().get_visible_rect().size
+	if viewport_size.y <= 1.0 or viewport_size.is_equal_approx(_last_framing_viewport_size):
+		return
+	_last_framing_viewport_size = viewport_size
+	var aspect := viewport_size.x / viewport_size.y
+	var half_horizontal_fov := atan(tan(deg_to_rad(CAMERA_VERTICAL_FOV * 0.5)) * aspect)
+	# Camera-space shoulder framing keeps the player in the lower-left reference
+	# region without shifting the player model away from the protected base.
+	camera_arm.position.x = (0.5 - CAMERA_TARGET_SCREEN_X) * 2.0 * CAMERA_FOLLOW_DISTANCE * tan(half_horizontal_fov)
 
 func _build_hud() -> void:
 	hud = HUD_SCRIPT.new() as FoundationHUD
@@ -444,11 +471,14 @@ func _apply_camera_look(yaw_delta: float, pitch_delta: float) -> void:
 		camera_arm.rotation.x = _camera_pitch
 	if player != null:
 		player.set_camera_yaw(_camera_yaw)
+	if flashlight_visibility_manager != null:
+		flashlight_visibility_manager.set_aim_yaw(_camera_yaw)
 
 func _spawn_enemies() -> void:
 	horde_far_visuals = HORDE_FAR_VISUALS.new()
 	horde_far_visuals.configure(ZOMBIE_PERFORMANCE_CAPACITY)
 	horde_far_visuals.player = player
+	horde_far_visuals.visibility_manager = flashlight_visibility_manager
 	add_child(horde_far_visuals)
 	spawn_director = CONCEALED_SPAWN.new()
 	spawn_director.name = "ConcealedForwardSpawns"
@@ -606,7 +636,7 @@ func _setup_performance_diagnostics() -> void:
 	add_child(performance_diagnostics)
 
 func start_performance_scenario(population: int, mode: String) -> bool:
-	if not [20, 100, 200].has(population) or not ["concentrated", "approach"].has(mode):
+	if not [20, 69, 100, 200].has(population) or not ["concentrated", "approach"].has(mode):
 		return false
 	if not is_instance_valid(spawn_director) or not is_instance_valid(player):
 		return false

@@ -14,6 +14,7 @@ const CROWD_TRANSFORM_INTERVAL := 0.033
 const FULL_RIG_BUDGET := FoundationEnemy.FULL_ANIMATION_BUDGET
 
 var player: Node3D
+var visibility_manager: Node
 var _enemies: Dictionary = {}
 var _slot_enemy_ids: Array[int] = []
 var _refresh_time := 0.0
@@ -87,9 +88,13 @@ func register_enemy(enemy: FoundationEnemy) -> void:
 	_enemies[id] = enemy
 	enemy._rig_budget_owner = self
 	enemy.tree_exiting.connect(_remove_enemy.bind(id))
+	if is_instance_valid(visibility_manager):
+		visibility_manager.track_enemy(enemy)
 
 func _remove_enemy(id: int) -> void:
 	var enemy := _enemies.get(id) as FoundationEnemy
+	if is_instance_valid(visibility_manager):
+		visibility_manager.untrack_enemy(id)
 	if is_instance_valid(enemy):
 		# Scenario resets and scene teardown may free an enemy outside the usual
 		# defeat signal. Its rig must not remain counted against a vanished actor.
@@ -166,6 +171,8 @@ func _process(delta: float) -> void:
 		var distance_squared: float = enemy.global_position.distance_squared_to(player.global_position)
 		if enemy._full_animation_selected or distance_squared > VIEW_DISTANCE_SQUARED:
 			continue
+		if is_instance_valid(visibility_manager) and not visibility_manager.is_visible_to_flashlight(enemy):
+			continue
 		var facing := Basis(Vector3.UP, enemy.rotation.y)
 		if enemy._death_started:
 			facing = facing.scaled(Vector3(1.0, enemy._low_poly_death_scale, 1.0))
@@ -192,6 +199,8 @@ func _update_full_rig_selection() -> void:
 			continue
 		var enemy := enemy_variant as FoundationEnemy
 		if enemy.hp <= 0 or enemy.is_boss:
+			continue
+		if is_instance_valid(visibility_manager) and not visibility_manager.is_visible_to_flashlight(enemy):
 			continue
 		var distance_squared := enemy.global_position.distance_squared_to(player.global_position)
 		var active_combatant := enemy.state in ["windup", "hit", "recovery"] or enemy.combat_target == player

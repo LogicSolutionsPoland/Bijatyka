@@ -6,7 +6,7 @@ signal scenario_requested(population: int, mode: String)
 signal stop_requested
 
 const SAMPLE_INTERVAL := 0.5
-const POPULATIONS := [20, 100, 200]
+const POPULATIONS := [20, 69, 100, 200]
 const MODES := ["concentrated", "approach"]
 
 var _panel: PanelContainer
@@ -72,7 +72,7 @@ func _build_ui() -> void:
 			row.add_child(button)
 
 	var stop := Button.new()
-	stop.text = "Stop scenario / restore normal 200"
+	stop.text = "Stop scenario / restore normal 69"
 	stop.pressed.connect(func() -> void: stop_requested.emit())
 	column.add_child(stop)
 
@@ -119,6 +119,7 @@ func _update_readout() -> void:
 	var counts := _collect_horde_counts()
 	var fx_stats := _collect_effect_pool_stats()
 	var rig_stats := _collect_rig_pool_stats()
+	var flashlight_counts := _collect_flashlight_counts()
 	var rendered := Engine.get_frames_drawn() > 0
 	var fps := "N/A (headless/no rendered frame)"
 	var draw_calls := "N/A (headless/no rendered frame)"
@@ -139,6 +140,8 @@ func _update_readout() -> void:
 		+ "Active zombies: %d\n"
 		+ "Detailed 0–18 m: %d   Low-poly 18–30 m: %d\n"
 		+ "Outside 30 m: %d   Selected zombie rigs: %d / %d (+ boss: %d)\n"
+		+ "Flashlight visible close/distant: %d / %d\n"
+		+ "Dark close/distant: %d / %d   Beyond 30 m: %d\n"
 		+ "Resident rigs: %d   Dying: %d   Spare: %d\n"
 		+ "Reduced-motion silhouettes: %d   Active animated skeletons: %d\n"
 		+ "Draw calls: %s   Rendered objects: %s\n"
@@ -148,12 +151,23 @@ func _update_readout() -> void:
 	) % [
 		fps, process_ms, physics_ms, counts.active, counts.detailed,
 		counts.low_poly, counts.outside, counts.full_rigs, FoundationEnemy.FULL_ANIMATION_BUDGET, counts.boss_rigs,
+		flashlight_counts.visible_close, flashlight_counts.visible_distant,
+		flashlight_counts.dark_close_combat, flashlight_counts.dark_distant, flashlight_counts.beyond_render,
 		rig_stats.resident, rig_stats.dying, rig_stats.spare,
 		counts.reduced_motion, counts.skeletons,
 		draw_calls, render_objects, fx_stats.reused, fx_stats.created,
 		fx_stats.active, fx_stats.overflow,
 		rig_stats.reused, rig_stats.created, rig_stats.overflow, memory
 	]
+
+func _collect_flashlight_counts() -> Dictionary:
+	var fallback := {"visible_close": 0, "visible_distant": 0, "dark_close_combat": 0, "dark_distant": 0, "beyond_render": 0}
+	if not is_instance_valid(get_parent()):
+		return fallback
+	var manager: Node = get_parent().get("flashlight_visibility_manager") as Node
+	if not is_instance_valid(manager) or not manager.has_method("get_classification_counts"):
+		return fallback
+	return manager.call("get_classification_counts") as Dictionary
 
 func _collect_rig_pool_stats() -> Dictionary:
 	var fallback := {"resident": 0, "dying": 0, "spare": 0, "created": 0, "reused": 0, "overflow": 0}
