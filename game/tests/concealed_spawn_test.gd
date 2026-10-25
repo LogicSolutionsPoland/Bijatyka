@@ -266,7 +266,7 @@ func _test_wall_collision() -> void:
 
 func _test_initial_population_distribution() -> void:
 	var fixture := _fixture()
-	var director := fixture.get_node("Director") as SpawnDirector
+	var director = fixture.get_node("Director")
 	var player := fixture.get_node("Player") as FoundationPlayer
 	director.population_limit = 69
 	var positions: Array[Vector3] = []
