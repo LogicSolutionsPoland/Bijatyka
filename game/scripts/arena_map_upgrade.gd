@@ -3,6 +3,7 @@ extends Node3D
 ## All geometry is procedural, has no collision, and uses the existing weathering shader.
 
 const RUIN_SURFACE_SHADER := preload("res://shaders/ruined_surface.gdshader")
+var _static_box_batches: Dictionary = {}
 
 func _ready() -> void:
 	_build_map()
@@ -22,6 +23,7 @@ func _build_map() -> void:
 	_build_ruined_fronts(concrete, dark_concrete, glass)
 	_build_edge_debris(rust, concrete)
 	_build_southern_checkpoint(concrete, dark_concrete, rust, amber)
+	_flush_static_boxes()
 
 func _build_street(asphalt: Material, concrete: Material, dark_concrete: Material, road_paint: Material) -> void:
 	# A cross street and boulevard give the flat fight yard a clear route through it.
@@ -135,41 +137,39 @@ func _build_southern_checkpoint(concrete: Material, dark_concrete: Material, rus
 	_box("SouthGateBrokenBarrierWest", Vector3(-12.6, 1.05, 17.4), Vector3(3.8, 2.1, 0.78), rust, -0.12)
 	_box("SouthGateBrokenBarrierEast", Vector3(12.6, 1.05, 17.4), Vector3(3.8, 2.1, 0.78), rust, 0.12)
 
-func _box(label: String, at: Vector3, dimensions: Vector3, surface: Material, yaw: float = 0.0) -> MeshInstance3D:
-	var instance := MeshInstance3D.new()
-	instance.name = label
-	var mesh := BoxMesh.new()
-	mesh.size = dimensions
-	instance.mesh = mesh
-	instance.position = at
-	instance.rotation.y = yaw
-	instance.material_override = surface
-	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(instance)
-	return instance
+func _box(_label: String, at: Vector3, dimensions: Vector3, surface: Material, yaw: float = 0.0) -> void:
+	# A scaled unit box keeps all static scenery with one material in one draw.
+	# The shader's world-space weathering still uses the per-instance transform.
+	var key := surface.get_instance_id()
+	if not _static_box_batches.has(key):
+		_static_box_batches[key] = {"material": surface, "transforms": []}
+	var transforms: Array = _static_box_batches[key]["transforms"]
+	transforms.append(Transform3D(Basis(Vector3.UP, yaw).scaled(dimensions), at))
 
-func _box_batch(label: String, center: Vector3, dimensions: Vector3, positions: Array[Vector3], surface: Material) -> void:
-	if positions.is_empty():
-		return
-	var cluster := Node3D.new()
-	cluster.name = label
-	cluster.position = center
-	add_child(cluster)
-	var mesh := BoxMesh.new()
-	mesh.size = dimensions
-	var batch := MultiMesh.new()
-	batch.transform_format = MultiMesh.TRANSFORM_3D
-	batch.mesh = mesh
-	batch.instance_count = positions.size()
-	batch.visible_instance_count = positions.size()
-	for index in range(positions.size()):
-		batch.set_instance_transform(index, Transform3D(Basis.IDENTITY, positions[index] - center))
-	var instance := MultiMeshInstance3D.new()
-	instance.name = "%sInstances" % label
-	instance.multimesh = batch
-	instance.material_override = surface
-	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	cluster.add_child(instance)
+func _box_batch(label: String, _center: Vector3, dimensions: Vector3, positions: Array[Vector3], surface: Material) -> void:
+	for position in positions:
+		_box(label, position, dimensions, surface)
+
+func _flush_static_boxes() -> void:
+	var unit_box := BoxMesh.new()
+	for key in _static_box_batches:
+		var data: Dictionary = _static_box_batches[key]
+		var transforms: Array = data["transforms"]
+		var batch := MultiMesh.new()
+		batch.transform_format = MultiMesh.TRANSFORM_3D
+		batch.mesh = unit_box
+		batch.instance_count = transforms.size()
+		batch.visible_instance_count = transforms.size()
+		for index in range(transforms.size()):
+			batch.set_instance_transform(index, transforms[index])
+		var instance := MultiMeshInstance3D.new()
+		instance.name = "DistrictStaticBatch%d" % get_child_count()
+		instance.multimesh = batch
+		instance.material_override = data["material"]
+		instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		instance.add_to_group("static_map_batch")
+		add_child(instance)
+	_static_box_batches.clear()
 
 func _surface(color: Color, roughness: float, metallic: float = 0.0) -> ShaderMaterial:
 	var material := ShaderMaterial.new()

@@ -61,6 +61,7 @@ var _ruin_materials: Dictionary = {}
 var _emissive_materials: Dictionary = {}
 var _boss_enemy: FoundationEnemy
 var burning_horizon: Node3D
+var arena_map: Node3D
 var game_music_player: AudioStreamPlayer
 var spawn_director: Node3D
 var horde_far_visuals: HordeFarVisuals
@@ -76,7 +77,7 @@ func _ready() -> void:
 	_start_game_music()
 	_build_environment()
 	_build_arena()
-	var arena_map := ARENA_MAP_SCRIPT.new() as Node3D
+	arena_map = ARENA_MAP_SCRIPT.new() as Node3D
 	arena_map.name = "AshenQuarantineMap"
 	add_child(arena_map)
 	player = PLAYER_SCENE.instantiate() as FoundationPlayer
@@ -595,7 +596,7 @@ func _update_distance_visibility() -> void:
 func _apply_distance_visibility(node: Node) -> void:
 	# Enemy rigs own their 18/30 m bands; walking every bone and mesh every
 	# 120 ms scales with the full 200-zombie population.
-	if node is FoundationEnemy or node == horde_far_visuals or node.is_in_group("distant_backdrop"):
+	if node is FoundationEnemy or node == horde_far_visuals or node.is_in_group("distant_backdrop") or node.is_in_group("static_map_batch"):
 		return
 	if node.is_in_group("radial_floor"):
 		node.visible = true
@@ -644,6 +645,7 @@ func _setup_performance_diagnostics() -> void:
 	performance_diagnostics.stop_requested.connect(stop_performance_scenario)
 	performance_diagnostics.render_scale_requested.connect(_set_debug_render_scale)
 	performance_diagnostics.mask_comparison_requested.connect(_set_debug_mask_visible)
+	performance_diagnostics.map_comparison_requested.connect(_set_debug_map_visible)
 	add_child(performance_diagnostics)
 
 func _set_debug_render_scale(scale: float) -> void:
@@ -653,6 +655,10 @@ func _set_debug_render_scale(scale: float) -> void:
 func _set_debug_mask_visible(is_visible: bool) -> void:
 	if OS.is_debug_build() and flashlight_visibility_manager != null:
 		flashlight_visibility_manager.set_composite_visible_for_comparison(is_visible)
+
+func _set_debug_map_visible(is_visible: bool) -> void:
+	if OS.is_debug_build() and is_instance_valid(arena_map):
+		arena_map.visible = is_visible
 
 func start_performance_scenario(population: int, mode: String) -> bool:
 	if not [15, 20, 69, 100, 200].has(population) or not ["concentrated", "approach"].has(mode):

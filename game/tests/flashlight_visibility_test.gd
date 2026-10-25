@@ -157,6 +157,10 @@ func _run() -> void:
 		_check(game.horde_far_visuals._enemies.size() == active_enemies, "mask comparison does not change the zombie population")
 		game.performance_diagnostics.mask_comparison_requested.emit(true)
 		_check(manager._composite.visible, "debug comparison restores the flashlight mask")
+		game.performance_diagnostics.map_comparison_requested.emit(false)
+		_check(not game.arena_map.visible, "debug profiler can isolate static map rendering")
+		game.performance_diagnostics.map_comparison_requested.emit(true)
+		_check(game.arena_map.visible, "debug profiler restores the map")
 
 	game.queue_free()
 	await process_frame

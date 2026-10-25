@@ -27,6 +27,16 @@ func _run() -> void:
 	_check(game.burning_horizon.get_child_count() == 4, "Burning Horizon retains four panels")
 	_check(game.burning_horizon.get_child(0).material_override == game.burning_horizon.get_child(1).material_override, "horizon panels share their material")
 	_check(game.get_node("QuarantineCourtyardGround") != null, "ground and collision remain")
+	var district := game.get_node("AshenQuarantineMap")
+	var district_batches := 0
+	var district_boxes := 0
+	for child in district.get_children():
+		if child is MultiMeshInstance3D:
+			var batch := child as MultiMeshInstance3D
+			district_batches += 1
+			district_boxes += batch.multimesh.instance_count
+			_check(batch.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "district batches cast no shadows")
+	_check(district_batches == 7 and district_boxes == 103, "all 103 district boxes share seven material draws")
 	_check(Foundation.VISIBILITY_RADIUS == 30.0, "visual edge stays at 30 m")
 	game.queue_free()
 	await process_frame

@@ -6,6 +6,7 @@ signal scenario_requested(population: int, mode: String)
 signal stop_requested
 signal render_scale_requested(scale: float)
 signal mask_comparison_requested(is_visible: bool)
+signal map_comparison_requested(is_visible: bool)
 
 const SAMPLE_INTERVAL := 0.5
 const POPULATIONS := [15, 20, 69, 100, 200]
@@ -19,6 +20,8 @@ var _corner_hold := false
 var _corner_hold_elapsed := 0.0
 var _mask_visible := true
 var _mask_button: Button
+var _map_visible := true
+var _map_button: Button
 
 func _ready() -> void:
 	layer = 100
@@ -69,6 +72,10 @@ func _build_ui() -> void:
 	_mask_button.text = "Mask ON"
 	_mask_button.pressed.connect(_toggle_mask_comparison)
 	graphics_row.add_child(_mask_button)
+	_map_button = Button.new()
+	_map_button.text = "Map ON"
+	_map_button.pressed.connect(_toggle_map_comparison)
+	graphics_row.add_child(_map_button)
 
 	for mode in MODES:
 		var mode_label := Label.new()
@@ -136,6 +143,12 @@ func _toggle_mask_comparison() -> void:
 	_mask_visible = not _mask_visible
 	_mask_button.text = "Mask ON" if _mask_visible else "Mask OFF"
 	mask_comparison_requested.emit(_mask_visible)
+	_update_readout()
+
+func _toggle_map_comparison() -> void:
+	_map_visible = not _map_visible
+	_map_button.text = "Map ON" if _map_visible else "Map OFF"
+	map_comparison_requested.emit(_map_visible)
 	_update_readout()
 
 func _update_readout() -> void:
