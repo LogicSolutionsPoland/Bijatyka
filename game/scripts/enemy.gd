@@ -36,6 +36,7 @@ var _ai_accumulator := 0.0
 var _ai_interval := 0.0
 var _far_physics_time := 0.0
 var _player: FoundationPlayer
+var combat_fx_pool: Node
 var _model: Node3D
 var _animation_player: AnimationPlayer
 var _death_animation := ""
@@ -324,6 +325,9 @@ func _update_health_display() -> void:
 
 func _show_impact_flash(is_jump_hit: bool) -> void:
 	if _visual_root == null:
+		return
+	if is_instance_valid(combat_fx_pool) and combat_fx_pool.has_method("play_zombie_hit_flash"):
+		combat_fx_pool.call("play_zombie_hit_flash", global_position + Vector3(0.0, 1.0, 0.0), is_jump_hit)
 		return
 	var flash := MeshInstance3D.new()
 	flash.name = "ImpactFlash"

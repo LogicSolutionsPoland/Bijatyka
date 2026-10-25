@@ -57,6 +57,7 @@ var _burns: Array[Dictionary] = []
 var _magic_hud_timer := 0.0
 var _desktop_attack_repeat_timers: Dictionary = {}
 var safe_base_position := Vector3.ZERO
+var combat_fx_pool: Node
 
 @onready var visual_root: Node3D = get_node_or_null("VisualRoot")
 
@@ -453,6 +454,9 @@ func _find_target(max_range: float, min_facing_dot: float) -> FoundationEnemy:
 	return chosen
 
 func _spawn_attack_sweep(kind: String, side: String) -> void:
+	if is_instance_valid(combat_fx_pool) and combat_fx_pool.has_method("play_attack_sweep"):
+		combat_fx_pool.call("play_attack_sweep", kind, side, get_viewport().get_visible_rect().size)
+		return
 	var scene_root: Node = get_tree().current_scene
 	if scene_root == null:
 		scene_root = get_tree().root
@@ -504,6 +508,9 @@ func _spawn_attack_sweep(kind: String, side: String) -> void:
 	tween.tween_callback(sweep_layer.queue_free)
 
 func _spawn_attack_impact(at: Vector3, kind: String) -> void:
+	if is_instance_valid(combat_fx_pool) and combat_fx_pool.has_method("play_attack_impact"):
+		combat_fx_pool.call("play_attack_impact", at, kind)
+		return
 	var impact := Node3D.new()
 	impact.name = "CombatImpact"
 	impact.add_to_group("attack_impact_fx")
@@ -547,6 +554,11 @@ func _spawn_attack_impact(at: Vector3, kind: String) -> void:
 	tween.tween_callback(impact.queue_free)
 
 func _spawn_spell_burst(at: Vector3, school: String = "") -> void:
+	var effect_school: String = school if not school.is_empty() else current_spell
+	var spell_color: Color = SPELLS[effect_school].color
+	if is_instance_valid(combat_fx_pool) and combat_fx_pool.has_method("play_spell_burst"):
+		combat_fx_pool.call("play_spell_burst", at, spell_color)
+		return
 	var root := MeshInstance3D.new()
 	root.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var sphere := SphereMesh.new()
@@ -554,8 +566,6 @@ func _spawn_spell_burst(at: Vector3, school: String = "") -> void:
 	sphere.height = 0.56
 	root.mesh = sphere
 	var material := StandardMaterial3D.new()
-	var effect_school: String = school if not school.is_empty() else current_spell
-	var spell_color: Color = SPELLS[effect_school].color
 	material.albedo_color = spell_color
 	material.emission_enabled = true
 	material.emission = spell_color

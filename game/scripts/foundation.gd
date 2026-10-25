@@ -8,6 +8,7 @@ const ENEMY_SCRIPT := preload("res://scripts/enemy.gd")
 const CONCEALED_SPAWN := preload("res://scripts/concealed_spawn.gd")
 const HORDE_FAR_VISUALS := preload("res://scripts/horde_far_visuals.gd")
 const PERFORMANCE_DIAGNOSTICS := preload("res://scripts/performance_diagnostics.gd")
+const COMBAT_FX_POOL := preload("res://scripts/combat_fx_pool.gd")
 const HUD_SCRIPT := preload("res://scripts/mobile_hud.gd")
 const SHADOW_POLICY := preload("res://scripts/shadow_policy.gd")
 const RADIAL_GROUND_SHADER := preload("res://shaders/radial_ground.gdshader")
@@ -47,6 +48,7 @@ var game_music_player: AudioStreamPlayer
 var spawn_director: Node3D
 var horde_far_visuals: HordeFarVisuals
 var performance_diagnostics: FoundationPerformanceDiagnostics
+var combat_fx_pool: FoundationCombatFxPool
 var _performance_scenario := ""
 var _spawn_blockers: Array[AABB] = []
 
@@ -59,6 +61,11 @@ func _ready() -> void:
 	player.position = Vector3(0.0, 0.05, 3.2)
 	player.safe_base_position = player.position
 	add_child(player)
+	combat_fx_pool = COMBAT_FX_POOL.new() as FoundationCombatFxPool
+	combat_fx_pool.name = "CombatEffectPool"
+	combat_fx_pool.visibility_origin = player
+	add_child(combat_fx_pool)
+	player.combat_fx_pool = combat_fx_pool
 	_build_camera()
 	burning_horizon = BURNING_HORIZON.new()
 	burning_horizon.name = "BurningHorizon"
@@ -450,6 +457,7 @@ func _spawn_enemy(kind: String, at: Vector3, boss_target: bool = false) -> Found
 	var enemy := ENEMY_SCRIPT.new() as FoundationEnemy
 	enemy.configure(kind, boss_target)
 	enemy.position = at
+	enemy.combat_fx_pool = combat_fx_pool
 	enemy.telegraph_started.connect(_on_enemy_telegraph)
 	enemy.defeated.connect(_on_enemy_defeated)
 	add_child(enemy)

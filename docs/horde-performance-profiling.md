@@ -34,3 +34,20 @@ Phase 2 recorded these CI headless frame-processing averages for the six compari
 The runner data is not isolated rig cost and has no Android renderer/device samples. It therefore cannot establish a safe handset capacity. The initial cap is 20 ordinary-zombie full rigs because 20 is the smallest measured concentrated population; this gives a reproducible, measured runner envelope instead of scaling the animation count with the 200-zombie gameplay cap. The player and boss remain full quality outside that ordinary-zombie cap. Recheck the overlay and six post-change samples on the same device before increasing it.
 
 The manager re-ranks eligible zombies every 0.20 s. Windups, hit reactions, recovery, and current player targets receive priority; nearby selections get a small retention bonus. A zombie enters full-rig selection at 16 m and retains it until 18.5 m, limiting churn at tier edges. Animation selection changes visibility and playback but retains any already-created rig for reuse. The remaining living zombies inside 30 m use one shared, low-poly MultiMesh with per-instance phase/speed and continuous shader limb motion. Instance placement and heading refresh at about 30 Hz; shader motion is evaluated continuously by the renderer. Outside 30 m both visual tiers stay hidden. AI, collision, attack resolution and spawn timings remain on their existing gameplay schedules.
+
+## Phase 5 runtime effect reuse
+
+The Phase 2 scenario averages are warmed steady-state samples and do not correlate a creation event with a frame-time spike. A focused Phase 5 baseline therefore measured the synchronous script-side construction and scene attachment call time for the four repeated visual paths (24 warmed calls each, headless CI runner):
+
+| Effect | Average call time | Maximum observed |
+| --- | ---: | ---: |
+| Melee sweep | 67.3 µs | 115 µs |
+| Melee hit impact | 348.5 µs | 441 µs |
+| Zombie hit flash | 74.4 µs | 159 µs |
+| Spell burst | 248.5 µs | 341 µs |
+
+These values measure the synchronous creation/attachment function only. They do not measure full frame time, rendering, GPU work, or handset performance. The largest repeated costs were the melee impact and spell burst; all four paths were pooled because sweeps and hit flashes also recur during rapid melee. The player and enemy paths retain their original allocation-based fallback if the pool manager is unavailable.
+
+The main-thread pool is bounded at 4 attack sweeps, 6 melee impacts, 3 spell bursts, and 6 zombie hit flashes (19 visual objects total). The sweep and burst lifetimes are 0.22 s; hit visuals last 0.18 s. These limits provide spare overlap around the existing five-hit-per-second melee cadence without tying capacity to the 200-zombie horde. The pool constructs at most one visual object per frame during preparation, and each effect shares cached sphere/shard mesh resources while keeping its own mutable material. No zombie rig is pre-instantiated or pooled: Phase 4 creates detailed rigs only for its measured 20-rig animation budget, and an enemy node is destroyed after its death signal. Reusing whole zombie nodes would require a wider AI, signal, collision, animation, and replacement reset contract that this phase's profiling does not justify.
+
+If a cosmetic pool is exhausted, it drops that visual request and increments the overflow counter; it never grows past its cap or changes hit, damage, animation, or replacement behavior. In-game debug output reports created, reused, active, and overflow counts. The validation benchmark reports pooled acquisition timing and reuse counts; its headless times are not device frame-pacing results. Physical Android profiling is still needed to determine whether these CPU-side savings reduce visible stutter on the target handset.

@@ -117,6 +117,7 @@ func _toggle() -> void:
 
 func _update_readout() -> void:
 	var counts := _collect_horde_counts()
+	var fx_stats := _collect_effect_pool_stats()
 	var rendered := Engine.get_frames_drawn() > 0
 	var fps := "N/A (headless/no rendered frame)"
 	var draw_calls := "N/A (headless/no rendered frame)"
@@ -139,13 +140,24 @@ func _update_readout() -> void:
 		+ "Outside 30 m: %d   Full zombie rigs: %d / %d (+ boss: %d)\n"
 		+ "Reduced-motion silhouettes: %d   Active animated skeletons: %d\n"
 		+ "Draw calls: %s   Rendered objects: %s\n"
+		+ "Combat FX pool: %d reused / %d created   active: %d   overflow: %d\n"
 		+ "Engine static memory: %s"
 	) % [
 		fps, process_ms, physics_ms, counts.active, counts.detailed,
 		counts.low_poly, counts.outside, counts.full_rigs, FoundationEnemy.FULL_ANIMATION_BUDGET, counts.boss_rigs,
 		counts.reduced_motion, counts.skeletons,
-		draw_calls, render_objects, memory
+		draw_calls, render_objects, fx_stats.reused, fx_stats.created,
+		fx_stats.active, fx_stats.overflow, memory
 	]
+
+func _collect_effect_pool_stats() -> Dictionary:
+	var fallback := {"created": 0, "reused": 0, "active": 0, "overflow": 0}
+	if not is_instance_valid(get_parent()):
+		return fallback
+	var pool: Node = get_parent().get("combat_fx_pool") as Node
+	if not is_instance_valid(pool) or not pool.has_method("get_profile_stats"):
+		return fallback
+	return pool.call("get_profile_stats") as Dictionary
 
 func _collect_horde_counts() -> Dictionary:
 	var result := {

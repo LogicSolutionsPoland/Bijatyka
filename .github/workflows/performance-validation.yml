@@ -38,11 +38,11 @@ jobs:
           godot --headless --editor --path game --import --quit 2>&1 | tee "$RUNNER_TEMP/godot-import.log"
           if grep -E "SCRIPT ERROR:|ERROR: Failed to load" "$RUNNER_TEMP/godot-import.log"; then exit 1; fi
 
-      - name: Measure runtime combat effect creation baseline
+      - name: Measure reused runtime combat effects
         run: |
           set -o pipefail
           godot --headless --path game --script res://tests/runtime_creation_benchmark.gd 2>&1 | tee "$RUNNER_TEMP/runtime-creation-benchmark.log"
-          grep -q "PASS: runtime creation baseline" "$RUNNER_TEMP/runtime-creation-benchmark.log"
+          grep -q "PASS: runtime pooled effect benchmark" "$RUNNER_TEMP/runtime-creation-benchmark.log"
           if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/runtime-creation-benchmark.log"; then exit 1; fi
 
       - name: Run gameplay and controls checks
@@ -58,6 +58,13 @@ jobs:
           godot --headless --path game --script res://tests/zombie_animation_test.gd 2>&1 | tee "$RUNNER_TEMP/zombie-animation-tests.log"
           grep -q "PASS: zombie animation" "$RUNNER_TEMP/zombie-animation-tests.log"
           if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/zombie-animation-tests.log"; then exit 1; fi
+
+      - name: Check runtime effect pools and zombie replacement safety
+        run: |
+          set -o pipefail
+          godot --headless --path game --script res://tests/runtime_creation_test.gd 2>&1 | tee "$RUNNER_TEMP/runtime-pooling-tests.log"
+          grep -q "PASS: runtime effect pooling" "$RUNNER_TEMP/runtime-pooling-tests.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/runtime-pooling-tests.log"; then exit 1; fi
 
       - name: Check concealed spawning and assault handoff
         run: |
