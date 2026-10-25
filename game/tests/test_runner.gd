@@ -359,8 +359,9 @@ func _test_ten_button_controls() -> void:
 		_check(
 			shoulder_arm.position.x > 0.0
 			and is_equal_approx(shoulder_arm.rotation_degrees.x, Foundation.CAMERA_PITCH_DEGREES)
-			and shoulder_arm.rotation_degrees.x > 0.0,
-			"camera sits above and to the right with a slight downward combat angle"
+			and shoulder_arm.rotation_degrees.x < 0.0
+			and -arena.camera.global_transform.basis.z.y < 0.0,
+			"camera sits above and to the right and looks down toward combat"
 		)
 		_check(is_equal_approx(arena.camera_rig.position.y - player.global_position.y, Foundation.CAMERA_PIVOT_HEIGHT), "camera follow rig maintains the intended eye-level height")
 		_check(is_equal_approx(shoulder_arm.spring_length, Foundation.CAMERA_FOLLOW_DISTANCE) and shoulder_arm.collision_mask == 1, "camera holds close distance and retracts near level geometry")
@@ -425,6 +426,9 @@ func _test_ten_button_controls() -> void:
 	arena._update_gamepad_camera(0.25)
 	Input.action_release(&"camera_right")
 	_check(arena._camera_yaw < yaw_before_pad, "right gamepad stick rotates the over-shoulder camera")
+	# Start the vertical gamepad check away from the swipe's upper clamp.
+	arena._camera_pitch = deg_to_rad(Foundation.CAMERA_PITCH_DEGREES)
+	arena.camera_arm.rotation.x = arena._camera_pitch
 	var pitch_before_pad := arena._camera_pitch
 	Input.action_press(&"camera_up")
 	arena._update_gamepad_camera(0.25)

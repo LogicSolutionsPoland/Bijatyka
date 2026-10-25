@@ -40,8 +40,9 @@ func configure(player_node: Node3D, camera_node: Camera3D, is_enabled: bool) -> 
 	_classify_enemies()
 
 func set_aim_yaw(yaw: float) -> void:
-	# Camera yaw and player combat aim share the same heading in Foundation.
-	aim_direction = Vector3(sin(yaw), 0.0, -cos(yaw)).normalized()
+	# Godot's positive Y rotation turns local -Z toward -X. Match the
+	# camera's actual forward vector so the lit half always fills the view.
+	aim_direction = Vector3(-sin(yaw), 0.0, -cos(yaw)).normalized()
 	_upload_shader_parameters()
 
 func track_enemy(enemy: Node3D) -> void:

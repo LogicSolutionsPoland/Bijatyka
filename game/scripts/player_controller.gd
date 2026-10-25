@@ -126,8 +126,12 @@ func _physics_process(delta: float) -> void:
 			movement_slow_factor = 1.0
 	if dash_time > 0.0:
 		dash_time = maxf(0.0, dash_time - delta)
-		# Keep the vertical component so an upward-aimed dash can clear walls.
+		# Explicit directed dashes may rise; the default camera dash stays level.
+		var vertical_velocity := velocity.y
 		velocity = dash_direction * (DASH_DISTANCE / DASH_DURATION)
+		if is_zero_approx(dash_direction.y) and (not is_on_floor() or vertical_velocity > 0.1):
+			# A level air dash must not cancel an upward jump or force a fall.
+			velocity.y = vertical_velocity
 	else:
 		_update_movement(delta)
 	if not is_on_floor():
@@ -324,6 +328,9 @@ func try_dash(direction: Vector3 = Vector3.ZERO) -> bool:
 		return false
 	if direction.length_squared() < 0.01:
 		direction = _camera_aim_direction()
+		# The camera looks down at the arena; do not drive the 15 m dash
+		# into the floor or shorten its horizontal reach.
+		direction.y = 0.0
 	if direction.length_squared() < 0.01:
 		direction = -global_transform.basis.z
 	dash_direction = direction.normalized()

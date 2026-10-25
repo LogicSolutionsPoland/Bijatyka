@@ -22,6 +22,7 @@ func _run() -> void:
 	_check(is_equal_approx(game.camera_arm.spring_length, Foundation.CAMERA_FOLLOW_DISTANCE), "raised over-shoulder follow distance remains intact")
 	_check(game.camera.projection == Camera3D.PROJECTION_PERSPECTIVE, "camera keeps perspective projection instead of a 180-degree lens")
 	_check(is_equal_approx(game.camera.fov, Foundation.CAMERA_VERTICAL_FOV), "camera keeps the existing 66-degree perspective")
+	_check(game._camera_pitch < 0.0 and -game.camera.global_transform.basis.z.y < 0.0, "default camera looks down toward the lit ground")
 
 	var manager = game.flashlight_visibility_manager
 	manager.set_aim_yaw(0.0)
@@ -34,16 +35,20 @@ func _run() -> void:
 	_check(is_zero_approx(manager.get_radial_weight(30.0)), "illumination reaches black at 30 m")
 
 	manager.set_aim_yaw(PI * 0.5)
-	_check(manager.is_point_in_sector(game.player.global_position + Vector3(10, 0, 0)), "sector rotates immediately with camera aim yaw")
-	_check(not manager.is_point_in_sector(game.player.global_position + Vector3(-10, 0, 0)), "rotated sector excludes its rear half")
-	_check(manager.aim_direction.distance_to(Vector3.RIGHT) < 0.001, "aim direction has no rotation lag")
+	_check(manager.is_point_in_sector(game.player.global_position + Vector3(-10, 0, 0)), "positive camera yaw lights the camera's leftward view")
+	_check(not manager.is_point_in_sector(game.player.global_position + Vector3(10, 0, 0)), "rotated sector excludes the opposite half")
+	_check(manager.aim_direction.distance_to(Vector3.LEFT) < 0.001, "aim direction has no rotation lag")
+	manager.set_aim_yaw(-PI * 0.5)
+	_check(manager.aim_direction.distance_to(Vector3.RIGHT) < 0.001, "negative camera yaw lights the camera's rightward view")
 	manager.set_aim_yaw(0.0)
 
 	# Touch camera gestures flow through the same callback used by the HUD.
 	var yaw_before_touch := game._camera_yaw
 	game.hud.camera_dragged.emit(Vector2(18.0, -7.0))
 	_check(not is_equal_approx(game._camera_yaw, yaw_before_touch), "touch drag rotates the camera")
-	_check(game.flashlight_visibility_manager.aim_direction.distance_to(Vector3(sin(game._camera_yaw), 0.0, -cos(game._camera_yaw))) < 0.001, "touch aim updates the flashlight in the same frame")
+	var camera_forward := -game.camera.global_transform.basis.z
+	camera_forward.y = 0.0
+	_check(game.flashlight_visibility_manager.aim_direction.distance_to(camera_forward.normalized()) < 0.001, "touch aim points the flashlight along the camera in the same frame")
 
 	# The same input actions used by the right stick update the camera and aim.
 	var yaw_before_gamepad := game._camera_yaw
@@ -51,7 +56,9 @@ func _run() -> void:
 	game._update_gamepad_camera(1.0 / 60.0)
 	Input.action_release("camera_right")
 	_check(not is_equal_approx(game._camera_yaw, yaw_before_gamepad), "gamepad camera action rotates the camera")
-	_check(game.flashlight_visibility_manager.aim_direction.distance_to(Vector3(sin(game._camera_yaw), 0.0, -cos(game._camera_yaw))) < 0.001, "gamepad aim updates the flashlight")
+	camera_forward = -game.camera.global_transform.basis.z
+	camera_forward.y = 0.0
+	_check(game.flashlight_visibility_manager.aim_direction.distance_to(camera_forward.normalized()) < 0.001, "gamepad aim points the flashlight along the camera")
 
 	# Verify the light classifier feeds the shared MultiMesh queue independently
 	# from AI and collision. The test scene is discarded after these placements.
@@ -101,6 +108,11 @@ func _run() -> void:
 		await process_frame
 	_check(game.player.try_jump(), "jump input starts while grounded")
 	_check(game.player.try_dash(), "dash input starts without replacing the jump state")
+	var level_camera_forward := -game.camera.global_transform.basis.z
+	level_camera_forward.y = 0.0
+	_check(is_zero_approx(game.player.dash_direction.y) and game.player.dash_direction.dot(level_camera_forward.normalized()) > 0.999, "downward combat camera keeps the default air dash level and forward")
+	game.player._physics_process(1.0 / 60.0)
+	_check(game.player.velocity.y > 0.0, "level air dash preserves upward jump velocity")
 	for frame in range(18):
 		await physics_frame
 		await process_frame
