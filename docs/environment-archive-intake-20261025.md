@@ -21,7 +21,7 @@ Rocks GLB: 30 meshes, ~10,217 triangles; Cemetery GLB: 35 meshes, ~25,106 triang
 
 ## Local integration
 
-The source-only code in this branch adds `game/scripts/community_props.gd` and an **off-by-default** hook in `foundation.gd`. The hook loads selected *individual nodes* from the local GLB libraries, with **no collision**. Props are placed outside the protected base. The feature does not touch the ordinary-zombie cap (15), 30 m vision, 50 m replacement spawns, Burning Horizon, shadow policy, camera, or controls.
+The source-only code in this branch adds `game/scripts/community_props.gd` and a **missing-assets-inert** hook in `foundation.gd`. The lightweight props are automatically enabled only when the local Rocks GLB is installed; the project setting can override this to false. The hook loads selected *individual nodes* from the local GLB libraries, with **no collision**. Props are placed outside the protected base. The feature does not touch the ordinary-zombie cap (15), 30 m vision, 50 m replacement spawns, Burning Horizon, shadow policy, camera, or controls.
 
 When the archive originals are available on a computer with Python and libarchive, run:
 
@@ -30,6 +30,6 @@ python3 tools/install_environment_packs.py --source /path/to/original_archives -
 python3 -m unittest tools.test_environment_import
 ```
 
-Then reopen Godot 4.7.2, import assets and activate the local project setting `gameplay/enable_community_environment_packs=true` **only for development tests**. This is not enabled by default. Heavy assets are separate: `--include-heavy` stages Abandoned House and Trees but does not place them in the playable arena.
+Then reopen Godot 4.7.2 and import the GLBs. If the Rocks GLB exists, the code enables the seven collision-free visual props by default for local testing; set `gameplay/enable_community_environment_packs=false` to turn them off. Without local GLBs the feature is inactive. Heavy assets are separate: `--include-heavy` stages Abandoned House and Trees but does not place them in the playable arena.
 
 Do **not** commit `game/assets/environment/community/**/*.glb` or export a redistributed APK until the source licenses are verified. Public asset redistribution, Android GPU memory cost, mobile FPS and complete character/level integration **are not verified**. A standalone local content bundle was prepared from the uploaded archives for the user to install privately.
