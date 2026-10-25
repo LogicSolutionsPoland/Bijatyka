@@ -60,6 +60,9 @@ var _spawn_assault_time := 0.0
 # Rebuilt once per decision frame, shared by the whole population.
 static var _grid_frame := -1
 static var _grid: Dictionary = {}
+static var _detailed_scene: PackedScene
+var _rig_budget_owner: Node
+var _low_poly_death_scale := 1.0
 
 func _nearby() -> Array[FoundationEnemy]:
 	var frame := Engine.get_physics_frames()
@@ -244,39 +247,68 @@ func _build_visual() -> void:
 	if is_boss:
 		_full_animation_selected = true
 		_ensure_detailed_model()
+	if is_boss or enemy_variant == "brute":
+		_add_silhouette_piece()
 	_build_health_display()
 	SHADOW_POLICY.disable_in_tree(_visual_root)
 
 func _ensure_detailed_model() -> void:
 	if _model != null:
 		return
-	if ResourceLoader.exists(ENEMY_MODEL_PATH):
-		var packed := load(ENEMY_MODEL_PATH) as PackedScene
-		if packed != null:
-			_model = packed.instantiate()
-			# The imported zombie rig faces +Z; enemy movement and targeting use -Z as forward.
-			_model.rotation.y += ENEMY_MODEL_YAW_OFFSET
-			_visual_root.add_child(_model)
-			if is_boss:
-				_model.scale = Vector3.ONE * 1.38
-			elif enemy_variant == "brute":
-				_model.scale = Vector3(1.16, 1.0, 1.15)
-			elif enemy_variant == "stalker":
-				_model.scale = Vector3(0.91, 1.03, 0.91)
-			_animation_player = _model.find_child("AnimationPlayer", true, false) as AnimationPlayer
-			if _animation_player != null:
-				for loop_name in ["Idle", "Walk", "Sprint"]:
-					if _animation_player.has_animation(loop_name):
-						_animation_player.get_animation(loop_name).loop_mode = Animation.LOOP_LINEAR
-				if not _animation_player.animation_finished.is_connected(_on_animation_finished):
-					_animation_player.animation_finished.connect(_on_animation_finished)
-			if is_boss:
-				_apply_variant_overlay()
+	if not is_boss and is_instance_valid(_rig_budget_owner):
+		_rig_budget_owner.call("_acquire_rig", self)
+	else:
+		_adopt_detailed_model(_instantiate_detailed_model())
 	if _model == null:
-		_build_debug_variant()
-	if is_boss or enemy_variant == "brute":
-		_add_silhouette_piece()
+		if is_boss:
+			_build_debug_variant()
+		return
 	SHADOW_POLICY.disable_in_tree(_visual_root)
+
+func _instantiate_detailed_model() -> Node3D:
+	if _detailed_scene == null and ResourceLoader.exists(ENEMY_MODEL_PATH):
+		_detailed_scene = load(ENEMY_MODEL_PATH) as PackedScene
+	return _detailed_scene.instantiate() as Node3D if _detailed_scene != null else null
+
+func _adopt_detailed_model(model: Node3D) -> void:
+	if model == null or _model != null:
+		return
+	_model = model
+	_visual_root.add_child(model)
+	model.visible = true
+	model.position = Vector3.ZERO
+	# The imported rig faces +Z; enemy movement and targeting use -Z as forward.
+	model.rotation = Vector3(0.0, ENEMY_MODEL_YAW_OFFSET, 0.0)
+	model.scale = Vector3.ONE * 1.38 if is_boss else (Vector3(1.16, 1.0, 1.15) if enemy_variant == "brute" else (Vector3(0.91, 1.03, 0.91) if enemy_variant == "stalker" else Vector3.ONE))
+	_animation_player = model.find_child("AnimationPlayer", true, false) as AnimationPlayer
+	if _animation_player != null:
+		for loop_name in ["Idle", "Walk", "Sprint"]:
+			if _animation_player.has_animation(loop_name):
+				_animation_player.get_animation(loop_name).loop_mode = Animation.LOOP_LINEAR
+		_animation_player.speed_scale = 1.0
+		if not _animation_player.animation_finished.is_connected(_on_animation_finished):
+			_animation_player.animation_finished.connect(_on_animation_finished)
+	if is_boss:
+		_apply_variant_overlay()
+
+func _release_detailed_model() -> void:
+	if _model == null:
+		return
+	var model := _model
+	if _animation_player != null:
+		_animation_player.stop()
+		_animation_player.speed_scale = 1.0
+		if _animation_player.animation_finished.is_connected(_on_animation_finished):
+			_animation_player.animation_finished.disconnect(_on_animation_finished)
+	_animation_player = null
+	_model = null
+	_full_animation_selected = false
+	_update_visual_visibility()
+	_visual_root.remove_child(model)
+	if not is_boss and is_instance_valid(_rig_budget_owner):
+		_rig_budget_owner.call("_release_rig", model)
+	else:
+		model.free()
 
 func attach_status_label(label: Label3D) -> void:
 	_status_label = label
@@ -521,17 +553,19 @@ func _update_visual_visibility() -> void:
 func _set_full_animation_selected(selected: bool) -> void:
 	if is_boss:
 		selected = true
+	if _death_started and not is_boss:
+		return
 	if _full_animation_selected == selected:
 		_update_visual_visibility()
 		return
-	_full_animation_selected = selected
 	if selected:
 		_ensure_detailed_model()
+		_full_animation_selected = _model != null
 		_update_visual_visibility()
-		_resume_animation_for_state()
-	elif _animation_player != null:
-		_animation_player.speed_scale = 1.0
-		_animation_player.stop()
+		if _full_animation_selected:
+			_resume_animation_for_state()
+	else:
+		_release_detailed_model()
 		_update_visual_visibility()
 
 func _resume_animation_for_state() -> void:
@@ -682,17 +716,13 @@ func receive_hit(damage: int, hit_direction: Vector3 = Vector3.ZERO, is_jump_hit
 		if is_instance_valid(_collision_shape):
 			_collision_shape.set_deferred("disabled", true)
 		_death_animation = _death_animation_for_hit(hit_direction)
-		if _lod_band <= 1:
-			_set_full_animation_selected(true)
 		if _full_animation_selected and _play_animation(_death_animation, 1.0, 0.06, true):
 			return dealt
-		# Keep the old visual fallback when the rig or death clip is unavailable.
-		if _visual_root != null:
-			var tween := create_tween()
-			tween.tween_property(_visual_root, "scale:y", 0.08, 0.45)
-			tween.tween_callback(_complete_death)
-		else:
-			_complete_death()
+		# A dying reduced-tier zombie remains in the shared silhouette batch.
+		# No new rig is allocated just to play a death animation.
+		var tween := create_tween()
+		tween.tween_property(self, "_low_poly_death_scale", 0.08, 0.45)
+		tween.tween_callback(_complete_death)
 	else:
 		_play_animation("Hit_React", 1.0, 0.08, true)
 	return dealt
@@ -763,5 +793,6 @@ func _complete_death() -> void:
 	if not _death_started or _death_completed:
 		return
 	_death_completed = true
+	_release_detailed_model()
 	defeated.emit(self)
 	queue_free()

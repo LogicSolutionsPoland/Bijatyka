@@ -44,6 +44,39 @@ jobs:
           if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/android-export.log"; then exit 1; fi
           test -s "$GITHUB_WORKSPACE/build/Bijatyka-android-arm64.apk"
 
+      - name: Verify architecture and packaged playable content
+        run: |
+          set -euo pipefail
+          apk="$GITHUB_WORKSPACE/build/Bijatyka-android-arm64.apk"
+          unzip -tqq "$apk"
+          unzip -Z1 "$apk" > "$RUNNER_TEMP/apk-files.txt"
+          for entry in \
+            lib/arm64-v8a/libgodot_android.so \
+            assets/project.binary \
+            assets/scripts/foundation.gdc \
+            assets/scripts/enemy.gdc \
+            assets/scripts/horde_far_visuals.gdc \
+            assets/scripts/player_controller.gdc \
+            assets/scripts/mobile_hud.gdc \
+            assets/scripts/performance_diagnostics.gdc \
+            assets/scripts/combat_fx_pool.gdc \
+            assets/scenes/foundation.tscn.remap \
+            assets/scenes/player.tscn.remap \
+            assets/shaders/burning_horizon.gdshader \
+            assets/shaders/horde_crowd_animation.gdshader \
+            assets/assets/audio/menu_music.mp3.import \
+            assets/assets/zombies/brutal_v2/Retribution_Zombie_01_Brutal_V2_RIGGED_LOD1.glb.import; do
+            grep -Fxq "$entry" "$RUNNER_TEMP/apk-files.txt"
+            test "$(unzip -p "$apk" "$entry" | wc -c)" -gt 0
+          done
+          if grep -Eq '^lib/(armeabi-v7a|x86|x86_64)/' "$RUNNER_TEMP/apk-files.txt"; then
+            echo 'Unexpected non-ARM64 native library in APK' >&2
+            exit 1
+          fi
+          aapt_bin="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
+          test -n "$aapt_bin"
+          "$aapt_bin" dump badging "$apk" | grep -q "package: name='org.logicsolutionspoland.bijatyka'"
+
       - name: Upload Android ARM64 APK artifact
         uses: actions/upload-artifact@v4
         with:

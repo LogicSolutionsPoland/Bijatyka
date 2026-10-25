@@ -53,11 +53,13 @@ func run() -> void:
 	batch._process(0.04)
 	check(enemy._full_animation_selected and enemy._model != null and enemy._visual_root.visible, "close combat selection promotes the zombie to a full rig")
 	check(batch.multimesh.visible_instance_count == 0, "selected full rig is removed from the shared silhouette")
+	var first_rig_id := enemy._model.get_instance_id()
 	enemy.position.z = -18.7
 	enemy._set_distance_detail(18.7)
 	batch._update_full_rig_selection()
-	check(not enemy._full_animation_selected and enemy._model != null, "leaving the rig tier stops animation but retains the model for reuse")
-	check(not enemy._visual_root.visible, "reduced visual tier hides the retained full rig")
+	check(not enemy._full_animation_selected and enemy._model == null, "leaving the rig tier returns its resident model to the bounded pool")
+	check(batch.get_resident_rig_count() == 1 and batch.get_rig_pool_stats().spare == 1, "unselected detailed rigs are counted even while spare")
+	check(not enemy._visual_root.visible, "reduced visual tier hides the rig container")
 	enemy.position.z = -16.1
 	enemy._set_distance_detail(16.1)
 	batch._update_full_rig_selection()
@@ -66,6 +68,9 @@ func run() -> void:
 	enemy._set_distance_detail(15.9)
 	batch._update_full_rig_selection()
 	check(enemy._full_animation_selected, "zombie promotes when it crosses inside the 16 m entry threshold")
+	check(enemy._model.get_instance_id() == first_rig_id, "LOD return reuses the same imported rig")
+	check(enemy._animation_player != null and enemy._animation_player.is_playing() and enemy._animation_player.current_animation == "Idle", "LOD promotion resumes the correct idle animation on the recycled rig")
+	check(is_equal_approx(enemy._model.rotation.y, PI), "recycled imported rig preserves forward-facing orientation")
 	enemy.position.z = -17.5
 	batch._update_full_rig_selection()
 	check(enemy._full_animation_selected, "full rig remains selected between entry and exit thresholds")
@@ -111,6 +116,7 @@ func run() -> void:
 	active_attacker.combat_target = player
 	batch._update_full_rig_selection()
 	check(batch.get_full_rig_count() == batch.FULL_RIG_BUDGET, "200 active close zombies stay independent from the 20 full-rig animation cap")
+	check(batch.get_resident_rig_count() == batch.FULL_RIG_BUDGET, "200 close zombies never allocate more than 20 resident detailed rigs")
 	check(active_attacker._full_animation_selected, "active attacker receives full-quality priority")
 	check(player.get_parent() == fixture and player.is_in_group("player"), "player remains outside zombie visual-tier scheduling")
 	fixture.queue_free()

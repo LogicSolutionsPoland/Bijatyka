@@ -19,6 +19,10 @@ var _slot_enemy_ids: Array[int] = []
 var _refresh_time := 0.0
 var _scheduler_time := 0.0
 var _full_rig_count := 0
+var _spare_rigs: Array[Node3D] = []
+var _rig_creations := 0
+var _rig_reuses := 0
+var _rig_overflow := 0
 
 func configure(capacity: int) -> void:
 	name = "FogHordeSilhouettes"
@@ -74,11 +78,73 @@ func register_enemy(enemy: FoundationEnemy) -> void:
 	if enemy.is_boss:
 		return
 	var id := enemy.get_instance_id()
+	if _enemies.has(id):
+		return
+	if enemy._model != null and get_resident_rig_count() >= FULL_RIG_BUDGET:
+		# A preconfigured actor can be registered by a caller outside the normal
+		# spawn path. Demote it before adopting it into the horde budget.
+		enemy._release_detailed_model()
 	_enemies[id] = enemy
+	enemy._rig_budget_owner = self
 	enemy.tree_exiting.connect(_remove_enemy.bind(id))
 
 func _remove_enemy(id: int) -> void:
+	var enemy := _enemies.get(id) as FoundationEnemy
+	if is_instance_valid(enemy):
+		# Scenario resets and scene teardown may free an enemy outside the usual
+		# defeat signal. Its rig must not remain counted against a vanished actor.
+		enemy._release_detailed_model()
+		enemy._rig_budget_owner = null
 	_enemies.erase(id)
+
+func _acquire_rig(enemy: FoundationEnemy) -> bool:
+	if not _enemies.has(enemy.get_instance_id()) or enemy._model != null:
+		return enemy._model != null
+	var model: Node3D
+	if not _spare_rigs.is_empty():
+		model = _spare_rigs.pop_back()
+		remove_child(model)
+		_rig_reuses += 1
+	elif get_resident_rig_count() < FULL_RIG_BUDGET:
+		model = enemy._instantiate_detailed_model()
+		if model != null:
+			_rig_creations += 1
+	else:
+		_rig_overflow += 1
+		return false
+	if model == null:
+		return false
+	enemy._adopt_detailed_model(model)
+	return enemy._model != null
+
+func _release_rig(model: Node3D) -> void:
+	if is_queued_for_deletion():
+		model.free()
+		return
+	model.visible = false
+	add_child(model)
+	_spare_rigs.append(model)
+
+func get_resident_rig_count() -> int:
+	var total := _spare_rigs.size()
+	for enemy_variant in _enemies.values():
+		var enemy := enemy_variant as FoundationEnemy
+		if is_instance_valid(enemy) and enemy._model != null:
+			total += 1
+	return total
+
+func get_dying_rig_count() -> int:
+	var total := 0
+	for enemy_variant in _enemies.values():
+		var enemy := enemy_variant as FoundationEnemy
+		if is_instance_valid(enemy) and enemy._death_started and not enemy._death_completed and enemy._model != null:
+			total += 1
+	return total
+
+func get_rig_pool_stats() -> Dictionary:
+	return {"resident": get_resident_rig_count(), "dying": get_dying_rig_count(),
+		"spare": _spare_rigs.size(), "created": _rig_creations,
+		"reused": _rig_reuses, "overflow": _rig_overflow}
 
 func _process(delta: float) -> void:
 	_refresh_time += delta
@@ -86,6 +152,7 @@ func _process(delta: float) -> void:
 	if _scheduler_time >= SCHEDULER_INTERVAL:
 		_scheduler_time = 0.0
 		_update_full_rig_selection()
+		_refresh_time = CROWD_TRANSFORM_INTERVAL
 	if _refresh_time < CROWD_TRANSFORM_INTERVAL:
 		return
 	_refresh_time = 0.0
@@ -94,12 +161,14 @@ func _process(delta: float) -> void:
 		return
 	var count := 0
 	for enemy in _enemies.values():
-		if not is_instance_valid(enemy) or enemy.hp <= 0:
+		if not is_instance_valid(enemy) or (enemy.hp <= 0 and (not enemy._death_started or enemy._death_completed)):
 			continue
 		var distance_squared: float = enemy.global_position.distance_squared_to(player.global_position)
 		if enemy._full_animation_selected or distance_squared > VIEW_DISTANCE_SQUARED:
 			continue
 		var facing := Basis(Vector3.UP, enemy.rotation.y)
+		if enemy._death_started:
+			facing = facing.scaled(Vector3(1.0, enemy._low_poly_death_scale, 1.0))
 		multimesh.set_instance_transform(count, Transform3D(facing, enemy.global_position))
 		# Compact the visible set, but avoid redundant instance-color uploads while
 		# the same zombie remains in this slot. The shader reads stable per-zombie
@@ -138,18 +207,31 @@ func _update_full_rig_selection() -> void:
 		candidates.append({"enemy": enemy, "score": score})
 	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a.score) < float(b.score))
 	var selected_ids: Dictionary = {}
-	var limit := mini(FULL_RIG_BUDGET, candidates.size())
+	# Dying detailed actors keep their rigs until the authored clip completes.
+	# They consume resident slots even though they are no longer selectable.
+	var limit := mini(maxi(0, FULL_RIG_BUDGET - get_dying_rig_count()), candidates.size())
 	for index in range(limit):
 		var enemy := candidates[index].enemy as FoundationEnemy
 		selected_ids[enemy.get_instance_id()] = true
+	# Return every deselected rig before promoting candidates. A spare is moved
+	# directly between actors, so a priority change cannot transiently exceed 20.
 	for enemy_variant in _enemies.values():
 		if not is_instance_valid(enemy_variant):
 			continue
 		var enemy := enemy_variant as FoundationEnemy
 		if enemy.hp <= 0 or enemy.is_boss:
 			continue
-		enemy._set_full_animation_selected(selected_ids.has(enemy.get_instance_id()))
-	_full_rig_count = selected_ids.size()
+		if not selected_ids.has(enemy.get_instance_id()) and (enemy._full_animation_selected or enemy._model != null):
+			enemy._set_full_animation_selected(false)
+	_full_rig_count = 0
+	for enemy_variant in _enemies.values():
+		if not is_instance_valid(enemy_variant):
+			continue
+		var enemy := enemy_variant as FoundationEnemy
+		if enemy.hp > 0 and selected_ids.has(enemy.get_instance_id()):
+			enemy._set_full_animation_selected(true)
+			if enemy._model != null:
+				_full_rig_count += 1
 
 func get_full_rig_count() -> int:
 	return _full_rig_count
