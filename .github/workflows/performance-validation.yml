@@ -111,7 +111,7 @@ jobs:
       - name: Compile Compatibility shaders and sample software-rendered scene
         run: |
           set -o pipefail
-          xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --rendering-driver opengl3 --path game --script res://tests/environment_render_probe.gd 2>&1 | tee "$RUNNER_TEMP/environment-render-probe.log"
+          xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/environment_render_probe.gd 2>&1 | tee "$RUNNER_TEMP/environment-render-probe.log"
           grep -q "RENDERED_DESKTOP_ENVIRONMENT_SAMPLE" "$RUNNER_TEMP/environment-render-probe.log"
           if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/environment-render-probe.log"; then exit 1; fi
 
