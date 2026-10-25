@@ -6,6 +6,11 @@ signal attack_resolved(enemy: Node, hit: bool)
 signal defeated(enemy: Node)
 
 const ENEMY_MODEL_PATH := "res://assets/zombies/brutal_v2/Retribution_Zombie_01_Brutal_V2_RIGGED_LOD1.glb"
+const DISTORTED_FACE_CROWD_MODEL_PATH := "res://assets/zombies/distorted_face/Retribution_Zombie_DistortedFace_Crowd_LOD.glb"
+const BOSS_DISTORTED_FACE_MODEL_PATH := "res://assets/zombies/distorted_face/Retribution_Zombie_DistortedFace_Animated.glb"
+const BOSS_DISTORTED_FACE_LOD_PATH := DISTORTED_FACE_CROWD_MODEL_PATH
+const BOSS_MODEL_LOD_ENTER_DISTANCE := 20.0
+const BOSS_MODEL_LOD_EXIT_DISTANCE := 17.5
 const ENEMY_MODEL_YAW_OFFSET := PI
 const SHADOW_POLICY := preload("res://scripts/shadow_policy.gd")
 const GRAVITY := 24.0
@@ -62,6 +67,10 @@ var _spawn_assault_time := 0.0
 static var _grid_frame := -1
 static var _grid: Dictionary = {}
 static var _detailed_scene: PackedScene
+static var _distorted_face_scene: PackedScene
+static var _boss_high_detail_scene: PackedScene
+var model_family := "standard"
+var _boss_crowd_lod_selected := false
 var _rig_budget_owner: Node
 var _low_poly_death_scale := 1.0
 
@@ -139,9 +148,13 @@ func _wander(delta: float) -> void:
 		rotation.y = lerp_angle(rotation.y, atan2(-_wander_direction.x, -_wander_direction.z), minf(1.0, delta * 5.0))
 	_play_animation("Walk" if state == "wander" else "Idle")
 
-func configure(kind: String, boss_target: bool = false) -> void:
+func configure(kind: String, boss_target: bool = false, model_family_override: String = "standard") -> void:
 	enemy_variant = kind
 	is_boss = boss_target or kind == "boss"
+	model_family = "distorted_face" if model_family_override == "distorted_face" else "standard"
+
+func _model_pool_key() -> String:
+	return model_family
 
 func begin_spawn_assault(target: FoundationPlayer) -> bool:
 	if is_boss or hp <= 0 or not is_instance_valid(target):
@@ -268,9 +281,25 @@ func _ensure_detailed_model() -> void:
 	SHADOW_POLICY.disable_in_tree(_visual_root)
 
 func _instantiate_detailed_model() -> Node3D:
+	if is_boss:
+		return _instantiate_boss_model(_boss_crowd_lod_selected)
+	if model_family == "distorted_face":
+		if _distorted_face_scene == null and ResourceLoader.exists(DISTORTED_FACE_CROWD_MODEL_PATH):
+			_distorted_face_scene = load(DISTORTED_FACE_CROWD_MODEL_PATH) as PackedScene
+		if _distorted_face_scene != null:
+			return _distorted_face_scene.instantiate() as Node3D
 	if _detailed_scene == null and ResourceLoader.exists(ENEMY_MODEL_PATH):
 		_detailed_scene = load(ENEMY_MODEL_PATH) as PackedScene
 	return _detailed_scene.instantiate() as Node3D if _detailed_scene != null else null
+
+func _instantiate_boss_model(use_crowd_lod: bool) -> Node3D:
+	if use_crowd_lod:
+		if _distorted_face_scene == null and ResourceLoader.exists(BOSS_DISTORTED_FACE_LOD_PATH):
+			_distorted_face_scene = load(BOSS_DISTORTED_FACE_LOD_PATH) as PackedScene
+		return _distorted_face_scene.instantiate() as Node3D if _distorted_face_scene != null else null
+	if _boss_high_detail_scene == null and ResourceLoader.exists(BOSS_DISTORTED_FACE_MODEL_PATH):
+		_boss_high_detail_scene = load(BOSS_DISTORTED_FACE_MODEL_PATH) as PackedScene
+	return _boss_high_detail_scene.instantiate() as Node3D if _boss_high_detail_scene != null else null
 
 func _adopt_detailed_model(model: Node3D) -> void:
 	if model == null or _model != null:
@@ -279,12 +308,18 @@ func _adopt_detailed_model(model: Node3D) -> void:
 	_visual_root.add_child(model)
 	model.visible = true
 	model.position = Vector3.ZERO
-	# The imported rig faces +Z; enemy movement and targeting use -Z as forward.
-	model.rotation = Vector3(0.0, ENEMY_MODEL_YAW_OFFSET, 0.0)
-	model.scale = Vector3.ONE * 1.38 if is_boss else (Vector3(1.16, 1.0, 1.15) if enemy_variant == "brute" else (Vector3(0.91, 1.03, 0.91) if enemy_variant == "stalker" else Vector3.ONE))
+	# Existing Brutal V2 faces +Z; the supplied distorted-face GLBs already face -Z.
+	var model_faces_game_forward := is_boss or model_family == "distorted_face"
+	model.rotation = Vector3(0.0, 0.0 if model_faces_game_forward else ENEMY_MODEL_YAW_OFFSET, 0.0)
+	if is_boss:
+		model.scale = Vector3.ONE * 1.11
+	elif model_family == "distorted_face":
+		model.scale = Vector3.ONE * 0.81
+	else:
+		model.scale = Vector3(1.16, 1.0, 1.15) if enemy_variant == "brute" else (Vector3(0.91, 1.03, 0.91) if enemy_variant == "stalker" else Vector3.ONE)
 	_animation_player = model.find_child("AnimationPlayer", true, false) as AnimationPlayer
 	if _animation_player != null:
-		for loop_name in ["Idle", "Walk", "Sprint"]:
+		for loop_name in ["Idle", "Walk", "Sprint", "Chase"]:
 			if _animation_player.has_animation(loop_name):
 				_animation_player.get_animation(loop_name).loop_mode = Animation.LOOP_LINEAR
 		_animation_player.speed_scale = 1.0
@@ -308,7 +343,7 @@ func _release_detailed_model() -> void:
 	_update_visual_visibility()
 	_visual_root.remove_child(model)
 	if not is_boss and is_instance_valid(_rig_budget_owner):
-		_rig_budget_owner.call("_release_rig", model)
+		_rig_budget_owner.call("_release_rig", model, _model_pool_key())
 	else:
 		model.free()
 
@@ -540,12 +575,32 @@ func _move_and_check_assault(step: float) -> void:
 func _set_distance_detail(distance: float) -> void:
 	if _visual_root == null:
 		return
+	if is_boss and _model != null:
+		_update_boss_visual_lod(distance)
 	var band := 2 if distance > RENDER_RADIUS else (0 if distance <= DETAILED_RADIUS else 1)
 	if band == _lod_band:
 		_update_visual_visibility()
 		return
 	_lod_band = band
 	_update_visual_visibility()
+
+func _update_boss_visual_lod(distance: float) -> void:
+	var use_crowd_lod := _boss_crowd_lod_selected
+	if _boss_crowd_lod_selected:
+		use_crowd_lod = distance > BOSS_MODEL_LOD_EXIT_DISTANCE
+	else:
+		use_crowd_lod = distance >= BOSS_MODEL_LOD_ENTER_DISTANCE
+	if use_crowd_lod == _boss_crowd_lod_selected:
+		return
+	var replacement := _instantiate_boss_model(use_crowd_lod)
+	if replacement == null:
+		return
+	_release_detailed_model()
+	_boss_crowd_lod_selected = use_crowd_lod
+	_adopt_detailed_model(replacement)
+	_full_animation_selected = true
+	_update_visual_visibility()
+	_resume_animation_for_state()
 
 func _update_visual_visibility() -> void:
 	if _visual_root == null:
@@ -743,11 +798,29 @@ func apply_slow(factor: float, duration: float) -> void:
 	slow_factor = minf(slow_factor, clampf(factor, 0.1, 1.0))
 	slow_time = maxf(slow_time, duration)
 
+func _resolve_animation_name(animation_name: String) -> String:
+	if _animation_player == null:
+		return ""
+	if _animation_player.has_animation(animation_name):
+		return animation_name
+	var fallback := ""
+	match animation_name:
+		"Sprint": fallback = "Chase"
+		"Hit_React": fallback = "Hit"
+		"Attack_Swipe_L", "Attack_Swipe_R", "Attack_Bite": fallback = "Attack"
+		"Death_Forward", "Death_Backward": fallback = "Death"
+	if not fallback.is_empty() and _animation_player.has_animation(fallback):
+		return fallback
+	return ""
+
 func _play_animation(animation_name: String, playback_speed: float = 1.0, blend: float = 0.12, force_restart: bool = false) -> bool:
-	if animation_name.is_empty() or not _full_animation_selected or _animation_player == null or not _animation_player.has_animation(animation_name):
+	if animation_name.is_empty() or not _full_animation_selected or _animation_player == null:
 		return false
-	if force_restart or _animation_player.current_animation != animation_name or not _animation_player.is_playing():
-		_animation_player.play(animation_name, blend, maxf(0.01, playback_speed))
+	var resolved_animation := _resolve_animation_name(animation_name)
+	if resolved_animation.is_empty():
+		return false
+	if force_restart or _animation_player.current_animation != resolved_animation or not _animation_player.is_playing():
+		_animation_player.play(resolved_animation, blend, maxf(0.01, playback_speed))
 	return true
 
 func _is_high_speed_chase() -> bool:
@@ -757,6 +830,7 @@ func _attack_clip_contact_time(animation_name: String) -> float:
 	match animation_name:
 		"Attack_Swipe_L", "Attack_Swipe_R": return 0.36666667
 		"Attack_Bite": return 0.53333336
+		"Attack": return 0.42
 	return 0.0
 
 func _select_attack_animation(target: Node3D, distance: float, available: Array[String] = []) -> String:
@@ -767,7 +841,7 @@ func _select_attack_animation(target: Node3D, distance: float, available: Array[
 		var offset := target.global_position - global_position
 		var side := global_basis.x.dot(offset)
 		desired = "Attack_Swipe_L" if side < 0.0 else "Attack_Swipe_R"
-	var candidates: Array[String] = [desired, "Attack_Swipe_L", "Attack_Swipe_R", "Attack_Bite"]
+	var candidates: Array[String] = [desired, "Attack_Swipe_L", "Attack_Swipe_R", "Attack_Bite", "Attack"]
 	if available.is_empty():
 		return desired
 	for candidate in candidates:
@@ -778,7 +852,7 @@ func _select_attack_animation(target: Node3D, distance: float, available: Array[
 func _begin_attack_animation(target: Node3D, distance: float, windup_time: float) -> void:
 	var available: Array[String] = []
 	if _animation_player != null:
-		for candidate in ["Attack_Swipe_L", "Attack_Swipe_R", "Attack_Bite"]:
+		for candidate in ["Attack_Swipe_L", "Attack_Swipe_R", "Attack_Bite", "Attack"]:
 			if _animation_player.has_animation(candidate):
 				available.append(candidate)
 	_attack_animation = _select_attack_animation(target, distance, available)
@@ -794,7 +868,7 @@ func _death_animation_for_hit(hit_direction: Vector3) -> String:
 	return "Death_Backward" if forward.dot(hit_direction.normalized()) >= 0.0 else "Death_Forward"
 
 func _on_animation_finished(animation_name: StringName) -> void:
-	if _death_started and not _death_completed and String(animation_name) == _death_animation:
+	if _death_started and not _death_completed and String(animation_name) == _resolve_animation_name(_death_animation):
 		_complete_death()
 
 func _complete_death() -> void:

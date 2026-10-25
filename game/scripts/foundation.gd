@@ -18,6 +18,7 @@ const ZOMBIE_HORDE_SIZE := 69
 const ZOMBIE_PERFORMANCE_CAPACITY := 200
 const ZOMBIE_SPAWN_DISTANCE := 50.0
 const VISIBILITY_RADIUS := 30.0
+const DISTORTED_FACE_SPAWN_INTERVAL := 9
 const PLAYER_BASE_CENTER := Vector3(0.0, 0.0, -5.2)
 const PLAYER_BASE_POSITION := Vector3(0.0, 0.05, -5.2)
 const PLAYER_BASE_SAFE_RADIUS := 6.35
@@ -64,6 +65,7 @@ var performance_diagnostics: FoundationPerformanceDiagnostics
 var combat_fx_pool: FoundationCombatFxPool
 var _performance_scenario := ""
 var _spawn_blockers: Array[AABB] = []
+var _zombie_spawn_sequence := 0
 
 func _ready() -> void:
 	flashlight_visibility_enabled = bool(ProjectSettings.get_setting("gameplay/flashlight_visibility_enabled", true))
@@ -497,14 +499,16 @@ func _spawn_enemies() -> void:
 	_spawn_enemy("boss", Vector3(0.6, 0.05, -16.2), true)
 
 func _spawn_assault_zombie(at: Vector3) -> void:
-	var enemy := _spawn_enemy("shambler", at)
+	_zombie_spawn_sequence += 1
+	var model_family := "distorted_face" if _zombie_spawn_sequence % DISTORTED_FACE_SPAWN_INTERVAL == 0 else "standard"
+	var enemy := _spawn_enemy("shambler", at, false, model_family)
 	spawn_director.register_enemy(enemy)
 	horde_far_visuals.register_enemy(enemy)
 	enemy.begin_spawn_assault(player)
 
-func _spawn_enemy(kind: String, at: Vector3, boss_target: bool = false) -> FoundationEnemy:
+func _spawn_enemy(kind: String, at: Vector3, boss_target: bool = false, model_family: String = "standard") -> FoundationEnemy:
 	var enemy := ENEMY_SCRIPT.new() as FoundationEnemy
-	enemy.configure(kind, boss_target)
+	enemy.configure(kind, boss_target, model_family)
 	enemy.position = at
 	enemy.combat_fx_pool = combat_fx_pool
 	enemy.telegraph_started.connect(_on_enemy_telegraph)

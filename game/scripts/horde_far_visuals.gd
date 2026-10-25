@@ -20,7 +20,7 @@ var _slot_enemy_ids: Array[int] = []
 var _refresh_time := 0.0
 var _scheduler_time := 0.0
 var _full_rig_count := 0
-var _spare_rigs: Array[Node3D] = []
+var _spare_rigs: Dictionary = {}
 var _rig_creations := 0
 var _rig_reuses := 0
 var _rig_overflow := 0
@@ -105,12 +105,15 @@ func _remove_enemy(id: int) -> void:
 func _acquire_rig(enemy: FoundationEnemy) -> bool:
 	if not _enemies.has(enemy.get_instance_id()) or enemy._model != null:
 		return enemy._model != null
+	var pool_key := enemy._model_pool_key()
+	var bucket: Array = _spare_rigs.get(pool_key, [])
 	var model: Node3D
-	if not _spare_rigs.is_empty():
-		model = _spare_rigs.pop_back()
+	if not bucket.is_empty():
+		model = bucket.pop_back() as Node3D
+		_spare_rigs[pool_key] = bucket
 		remove_child(model)
 		_rig_reuses += 1
-	elif get_resident_rig_count() < FULL_RIG_BUDGET:
+	elif get_resident_rig_count() < FULL_RIG_BUDGET or _evict_spare_rig_for(pool_key):
 		model = enemy._instantiate_detailed_model()
 		if model != null:
 			_rig_creations += 1
@@ -122,16 +125,40 @@ func _acquire_rig(enemy: FoundationEnemy) -> bool:
 	enemy._adopt_detailed_model(model)
 	return enemy._model != null
 
-func _release_rig(model: Node3D) -> void:
+func _evict_spare_rig_for(pool_key: String) -> bool:
+	for key_variant in _spare_rigs.keys():
+		var key := String(key_variant)
+		if key == pool_key:
+			continue
+		var bucket: Array = _spare_rigs[key]
+		if bucket.is_empty():
+			continue
+		var evicted := bucket.pop_back() as Node3D
+		_spare_rigs[key] = bucket
+		if is_instance_valid(evicted):
+			evicted.free()
+		return true
+	return false
+
+func _release_rig(model: Node3D, pool_key: String = "standard") -> void:
 	if is_queued_for_deletion():
 		model.free()
 		return
 	model.visible = false
 	add_child(model)
-	_spare_rigs.append(model)
+	var bucket: Array = _spare_rigs.get(pool_key, [])
+	bucket.append(model)
+	_spare_rigs[pool_key] = bucket
+
+func get_spare_rig_count() -> int:
+	var total := 0
+	for bucket_value in _spare_rigs.values():
+		var bucket: Array = bucket_value
+		total += bucket.size()
+	return total
 
 func get_resident_rig_count() -> int:
-	var total := _spare_rigs.size()
+	var total := get_spare_rig_count()
 	for enemy_variant in _enemies.values():
 		var enemy := enemy_variant as FoundationEnemy
 		if is_instance_valid(enemy) and enemy._model != null:
@@ -148,7 +175,7 @@ func get_dying_rig_count() -> int:
 
 func get_rig_pool_stats() -> Dictionary:
 	return {"resident": get_resident_rig_count(), "dying": get_dying_rig_count(),
-		"spare": _spare_rigs.size(), "created": _rig_creations,
+		"spare": get_spare_rig_count(), "created": _rig_creations,
 		"reused": _rig_reuses, "overflow": _rig_overflow}
 
 func _process(delta: float) -> void:
