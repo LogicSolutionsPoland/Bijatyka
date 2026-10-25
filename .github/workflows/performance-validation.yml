@@ -38,6 +38,13 @@ jobs:
           godot --headless --editor --path game --import --quit 2>&1 | tee "$RUNNER_TEMP/godot-import.log"
           if grep -E "SCRIPT ERROR:|ERROR: Failed to load" "$RUNNER_TEMP/godot-import.log"; then exit 1; fi
 
+      - name: Measure runtime combat effect creation baseline
+        run: |
+          set -o pipefail
+          godot --headless --path game --script res://tests/runtime_creation_benchmark.gd 2>&1 | tee "$RUNNER_TEMP/runtime-creation-benchmark.log"
+          grep -q "PASS: runtime creation baseline" "$RUNNER_TEMP/runtime-creation-benchmark.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/runtime-creation-benchmark.log"; then exit 1; fi
+
       - name: Run gameplay and controls checks
         run: |
           set -o pipefail
