@@ -35,7 +35,7 @@ DENIED_EXTENSIONS = {
 
 
 def _safe_path(filename: str) -> PurePosixPath:
-    if not filename or "\\x00" in filename or "\\" in filename:
+    if not filename or "\x00" in filename or "\\" in filename:
         raise ValueError(f"Unsafe archive path: {filename!r}")
     path = PurePosixPath(filename)
     if (
@@ -147,7 +147,7 @@ def stage(archive: Path, destination_root: Path, dry_run: bool = False) -> dict:
                     "sha256": hashlib.sha256(content).hexdigest(),
                 })
         (temporary / "manifest.json").write_text(
-            json.dumps(manifest, indent=2, ensure_ascii=False) + "\\n",
+            json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
             encoding="utf-8",
         )
         shutil.move(str(temporary), str(destination))
