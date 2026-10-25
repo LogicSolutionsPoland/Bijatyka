@@ -48,57 +48,52 @@ def _safe_path(filename: str) -> PurePosixPath:
     return path
 
 
-def _members(archive: Path):
-    """Yield (name, length, is_symlink, read_bytes) for regular files.
-
-    All metadata is checked before the first payload is extracted.
-    """
+def _open_archive(archive: Path):
     if archive.suffix.lower() == ".zip":
-        with ZipFile(archive) as zf:
-            for item in zf.infolist():
-                if item.is_dir():
-                    continue
-                is_link = stat.S_ISLNK(item.external_attr >> 16)
-                yield item.filename, item.file_size, is_link, lambda i=item: zf.read(i)
-    elif archive.suffix.lower() == ".rar":
+        return ZipFile(archive)
+    if archive.suffix.lower() == ".rar":
         try:
             import rarfile
         except ImportError as exc:
             raise RuntimeError(
                 "RAR support requires 'pip install rarfile' and unrar/unar/bsdtar"
             ) from exc
-        with rarfile.RarFile(archive) as rf:
-            for item in rf.infolist():
-                if item.is_dir():
-                    continue
-                is_link = bool(getattr(item, "is_symlink", lambda: False)())
-                yield item.filename, item.file_size, is_link, lambda i=item: rf.read(i)
-    else:
-        raise ValueError("Expected a .zip or .rar archive")
+        return rarfile.RarFile(archive)
+    raise ValueError("Expected a .zip or .rar archive")
 
 
 def inspect(archive: Path):
     checked = []
     seen = set()
     total = 0
-    for name, size, is_link, read in _members(archive):
-        rel = _safe_path(name)
-        if is_link:
-            raise ValueError(f"Archive contains a symbolic link: {name}")
-        if size < 0 or size > MAX_FILE_BYTES:
-            raise ValueError(f"Unexpected member size: {name} ({size})")
-        total += size
-        if total > MAX_TOTAL_BYTES:
-            raise ValueError("Archive exceeds 512 MiB uncompressed limit")
-        key = str(rel).casefold()
-        if key in seen:
-            raise ValueError(f"Duplicate or case-conflicting asset: {name}")
-        seen.add(key)
-        if len(seen) > MAX_FILES:
-            raise ValueError("Archive has too many files")
-        if rel.suffix.lower() in DENIED_EXTENSIONS:
-            raise ValueError(f"Executable or nested archive is not staged: {name}")
-        checked.append((rel, size, read))
+    with _open_archive(archive) as source:
+        for item in source.infolist():
+            if item.is_dir():
+                continue
+            name = item.filename
+            rel = _safe_path(name)
+            size = item.file_size
+            is_link = (
+                stat.S_ISLNK(item.external_attr >> 16)
+                if archive.suffix.lower() == ".zip"
+                else bool(getattr(item, "is_symlink", lambda: False)())
+            )
+            if is_link:
+                raise ValueError(f"Archive contains a symbolic link: {name}")
+            if size < 0 or size > MAX_FILE_BYTES:
+                raise ValueError(f"Unexpected member size: {name} ({size})")
+            total += size
+            if total > MAX_TOTAL_BYTES:
+                raise ValueError("Archive exceeds 512 MiB uncompressed limit")
+            key = str(rel).casefold()
+            if key in seen:
+                raise ValueError(f"Duplicate or case-conflicting asset: {name}")
+            seen.add(key)
+            if len(seen) > MAX_FILES:
+                raise ValueError("Archive has too many files")
+            if rel.suffix.lower() in DENIED_EXTENSIONS:
+                raise ValueError(f"Executable or nested archive is not staged: {name}")
+            checked.append((rel, size, name))
     if not checked:
         raise ValueError("Archive has no regular files")
     return checked, total
@@ -125,7 +120,7 @@ def stage(archive: Path, destination_root: Path, dry_run: bool = False) -> dict:
     }
     if dry_run:
         manifest["files"] = [
-            {"path": str(rel), "size": size} for rel, size, _ in entries
+            {"path": str(rel), "size": size} for rel, size, _name in entries
         ]
         return manifest
 
@@ -138,8 +133,9 @@ def stage(archive: Path, destination_root: Path, dry_run: bool = False) -> dict:
         prefix=f".{slug}-", dir=destination_root
     ) as tmp:
         temporary = Path(tmp)
-        for rel, size, read in entries:
-            content = read()
+        with _open_archive(archive) as source:
+            contents = [(rel, size, source.read(name)) for rel, size, name in entries]
+        for rel, size, content in contents:
             if len(content) != size:
                 raise ValueError(f"Decompressed member size mismatch: {rel}")
             target = temporary.joinpath(*rel.parts)
