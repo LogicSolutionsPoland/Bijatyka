@@ -10,6 +10,9 @@ const ENEMY_MODEL_YAW_OFFSET := PI
 const SHADOW_POLICY := preload("res://scripts/shadow_policy.gd")
 const GRAVITY := 24.0
 const RENDER_RADIUS := 30.0
+const SPAWN_ASSAULT_DURATION := 4.5
+const SPAWN_ASSAULT_SPEED_MULTIPLIER := 3.2
+const SPAWN_ASSAULT_HANDOFF_DISTANCE := 6.0
 
 @export_enum("shambler", "brute", "stalker", "boss") var enemy_variant := "shambler"
 @export var is_boss := false
@@ -41,6 +44,7 @@ var combat_target: Node3D
 var _decision_time := 0.0
 var _wander_time := 0.0
 var _wander_direction := Vector3.ZERO
+var _spawn_assault_time := 0.0
 # Rebuilt once per decision frame, shared by the whole population.
 static var _grid_frame := -1
 static var _grid: Dictionary = {}
@@ -122,6 +126,50 @@ func _wander(delta: float) -> void:
 func configure(kind: String, boss_target: bool = false) -> void:
 	enemy_variant = kind
 	is_boss = boss_target or kind == "boss"
+
+func begin_spawn_assault(target: FoundationPlayer) -> bool:
+	if is_boss or hp <= 0 or not is_instance_valid(target):
+		return false
+	_player = target
+	combat_target = target
+	state = "assault"
+	_spawn_assault_time = SPAWN_ASSAULT_DURATION
+	var direction := target.global_position - global_position
+	direction.y = 0.0
+	direction = direction.normalized()
+	# Set heading and speed before the first rendered frame: no visible turn on birth.
+	rotation.y = atan2(-direction.x, -direction.z)
+	velocity.x = direction.x * move_speed * SPAWN_ASSAULT_SPEED_MULTIPLIER
+	velocity.z = direction.z * move_speed * SPAWN_ASSAULT_SPEED_MULTIPLIER
+	_set_distance_detail(global_position.distance_to(target.global_position))
+	if _visual_root.visible:
+		_play_animation("Walk")
+	return true
+
+func _finish_spawn_assault() -> void:
+	if _spawn_assault_time <= 0.0 and state != "assault":
+		return
+	_spawn_assault_time = 0.0
+	if state == "assault":
+		state = "approach"
+		velocity.x = 0.0
+		velocity.z = 0.0
+	_decision_time = 0.0
+
+func _update_spawn_assault(delta: float) -> bool:
+	_spawn_assault_time = maxf(0.0, _spawn_assault_time - delta)
+	var offset := _player.global_position - global_position if is_instance_valid(_player) else Vector3.ZERO
+	offset.y = 0.0
+	if _spawn_assault_time <= 0.0 or offset.length() <= SPAWN_ASSAULT_HANDOFF_DISTANCE or is_on_wall():
+		_finish_spawn_assault()
+		return false
+	var direction := offset.normalized()
+	rotation.y = atan2(-direction.x, -direction.z)
+	velocity.x = direction.x * move_speed * SPAWN_ASSAULT_SPEED_MULTIPLIER * slow_factor
+	velocity.z = direction.z * move_speed * SPAWN_ASSAULT_SPEED_MULTIPLIER * slow_factor
+	if _visual_root.visible:
+		_play_animation("Walk")
+	return true
 
 func _ready() -> void:
 	add_to_group("enemies")
@@ -371,10 +419,16 @@ func _physics_process(delta: float) -> void:
 	var distance := global_position.distance_to(_player.global_position)
 	_set_distance_detail(distance)
 	if distance > 70.0:
+		if _spawn_assault_time > 0.0:
+			_finish_spawn_assault()
 		velocity.x = 0.0
 		velocity.z = 0.0
-		move_and_slide()
+		_move_and_check_assault()
 		return
+	# Cheap distance guard between staggered decisions prevents a fast burst from
+	# carrying through the player. Contact still requires the normal attack windup.
+	if _spawn_assault_time > 0.0 and Vector2(global_position.x - _player.global_position.x, global_position.z - _player.global_position.z).length() <= SPAWN_ASSAULT_HANDOFF_DISTANCE:
+		_finish_spawn_assault()
 	_ai_accumulator += delta
 	if is_boss:
 		_ai_interval = 0.0
@@ -385,12 +439,19 @@ func _physics_process(delta: float) -> void:
 	else:
 		_ai_interval = 0.10
 	if _ai_accumulator < _ai_interval:
-		move_and_slide()
+		_move_and_check_assault()
 		return
 	var step := _ai_accumulator
 	_ai_accumulator = 0.0
 	_update_ai(step, distance)
+	_move_and_check_assault()
+
+func _move_and_check_assault() -> void:
 	move_and_slide()
+	# Collision flags can clear on the next zero-velocity tick. Inspect them here,
+	# rather than waiting up to 0.45 seconds for a distant AI decision.
+	if _spawn_assault_time > 0.0 and is_on_wall():
+		_finish_spawn_assault()
 
 func _set_distance_detail(distance: float) -> void:
 	if _visual_root == null:
@@ -422,6 +483,8 @@ func _update_ai(delta: float, distance: float) -> void:
 		velocity.x = knockback.x
 		velocity.z = knockback.z
 		knockback = knockback.move_toward(Vector3.ZERO, delta * 14.0)
+		return
+	if _spawn_assault_time > 0.0 and _update_spawn_assault(delta):
 		return
 	_decision_time -= delta
 	if _decision_time <= 0.0 and state != "windup":
@@ -511,6 +574,7 @@ func _is_player_visible_to_player() -> bool:
 func receive_hit(damage: int, hit_direction: Vector3 = Vector3.ZERO, is_jump_hit: bool = false) -> int:
 	if hp <= 0 or damage <= 0:
 		return 0
+	_finish_spawn_assault()
 	var dealt := mini(hp, damage)
 	hp -= dealt
 	_update_health_display()
@@ -529,6 +593,7 @@ func receive_hit(damage: int, hit_direction: Vector3 = Vector3.ZERO, is_jump_hit
 	return dealt
 
 func apply_stun(duration: float) -> void:
+	_finish_spawn_assault()
 	stun_time = maxf(stun_time, duration)
 
 func apply_slow(factor: float, duration: float) -> void:

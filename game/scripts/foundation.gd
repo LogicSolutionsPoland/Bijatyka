@@ -5,6 +5,7 @@ const GAME_MUSIC := preload("res://assets/audio/menu_music.mp3")
 const PLAYER_SCENE := preload("res://scenes/player.tscn")
 const PLAYER_SCRIPT := preload("res://scripts/player_controller.gd")
 const ENEMY_SCRIPT := preload("res://scripts/enemy.gd")
+const CONCEALED_SPAWN := preload("res://scripts/concealed_spawn.gd")
 const HUD_SCRIPT := preload("res://scripts/mobile_hud.gd")
 const SHADOW_POLICY := preload("res://scripts/shadow_policy.gd")
 const RADIAL_GROUND_SHADER := preload("res://shaders/radial_ground.gdshader")
@@ -40,6 +41,8 @@ var _floor_material: ShaderMaterial
 var _boss_enemy: FoundationEnemy
 var burning_horizon: Node3D
 var game_music_player: AudioStreamPlayer
+var spawn_director: Node3D
+var _spawn_blockers: Array[AABB] = []
 
 func _ready() -> void:
 	_start_game_music()
@@ -222,6 +225,7 @@ func _add_arena_box(label: String, at: Vector3, dimensions: Vector3, material: M
 		collision.position = Vector3.ZERO
 		body.add_child(collision)
 		root = body
+		body.add_to_group("zombie_spawn_occluder")
 	else:
 		root = Node3D.new()
 	root.name = label
@@ -234,6 +238,9 @@ func _add_arena_box(label: String, at: Vector3, dimensions: Vector3, material: M
 	mesh_instance.material_override = material
 	root.add_child(mesh_instance)
 	add_child(root)
+	if not collidable and dimensions.y >= 1.0:
+		# Non-colliding skyline buildings still cannot contain new enemies.
+		_spawn_blockers.append(root.global_transform * AABB(-dimensions * 0.5, dimensions))
 
 func _add_ground_ring(label: String, at: Vector3, inner_radius: float, outer_radius: float, material: Material) -> void:
 	var ring_instance := MeshInstance3D.new()
@@ -407,23 +414,28 @@ func _apply_camera_look(yaw_delta: float, pitch_delta: float) -> void:
 		player.set_camera_yaw(_camera_yaw)
 
 func _spawn_enemies() -> void:
-	# The same lightweight LOD1 zombie asset keeps the horde cheap on Android.
-	for index in range(ZOMBIE_HORDE_SIZE):
-		var angle := TAU * float(index) / float(ZOMBIE_HORDE_SIZE) + 0.12
-		_spawn_enemy("shambler", _horde_spawn_position(angle))
+	spawn_director = CONCEALED_SPAWN.new()
+	spawn_director.name = "ConcealedForwardSpawns"
+	spawn_director.player = player
+	spawn_director.camera = camera
+	spawn_director.population_limit = ZOMBIE_HORDE_SIZE
+	spawn_director.spawn_distance = ZOMBIE_SPAWN_DISTANCE
+	spawn_director.visibility_radius = VISIBILITY_RADIUS
+	spawn_director.blocked_boxes = _spawn_blockers
+	spawn_director.spawn_requested.connect(_spawn_assault_zombie)
+	add_child(spawn_director)
+	# Fill across physics ticks under the same query budget used by replacements.
+	spawn_director.request_population()
 	# Keep one boss in the original arena; the HUD locator can point to it when
 	# the player moves beyond the 30 m render radius.
 	_spawn_enemy("boss", Vector3(0.6, 0.05, -16.2), true)
 
-func _horde_spawn_position(angle: float) -> Vector3:
-	var spawn := player.global_position + Vector3(cos(angle) * ZOMBIE_SPAWN_DISTANCE, 0.0, sin(angle) * ZOMBIE_SPAWN_DISTANCE)
-	if absf(spawn.x) > 94.0 or absf(spawn.z) > 94.0:
-		var inward := Vector2(-player.global_position.x, -player.global_position.z).normalized()
-		if inward.length_squared() > 0.01:
-			spawn = player.global_position + Vector3(inward.x * ZOMBIE_SPAWN_DISTANCE, 0.0, inward.y * ZOMBIE_SPAWN_DISTANCE)
-	return spawn
+func _spawn_assault_zombie(at: Vector3) -> void:
+	var enemy := _spawn_enemy("shambler", at)
+	spawn_director.register_enemy(enemy)
+	enemy.begin_spawn_assault(player)
 
-func _spawn_enemy(kind: String, at: Vector3, boss_target: bool = false) -> void:
+func _spawn_enemy(kind: String, at: Vector3, boss_target: bool = false) -> FoundationEnemy:
 	var enemy := ENEMY_SCRIPT.new() as FoundationEnemy
 	enemy.configure(kind, boss_target)
 	enemy.position = at
@@ -440,6 +452,7 @@ func _spawn_enemy(kind: String, at: Vector3, boss_target: bool = false) -> void:
 		label.outline_size = 6
 		label.modulate = Color(1.0, 0.18, 0.12)
 		enemy.attach_status_label(label)
+	return enemy
 
 func _on_hud_action(action: String) -> void:
 	if get_tree().paused:
@@ -486,13 +499,8 @@ func _on_enemy_defeated(enemy: Node) -> void:
 		_boss_enemy = null
 		hud.hide_boss_marker()
 		return
-	_spawn_horde_replacement()
-
-func _spawn_horde_replacement() -> void:
-	await get_tree().create_timer(1.0).timeout
-	if not is_instance_valid(player):
-		return
-	_spawn_enemy("shambler", _horde_spawn_position(randf() * TAU))
+	if is_instance_valid(spawn_director):
+		spawn_director.replace_enemy(enemy)
 
 func _update_boss_locator() -> void:
 	if hud == null or not is_instance_valid(_boss_enemy) or _boss_enemy.hp <= 0:
