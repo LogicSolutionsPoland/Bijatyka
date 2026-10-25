@@ -20,7 +20,7 @@ The headless frame p95 is measured by the benchmark harness wall clock. The engi
 | FPS / rendered frame time | N/A — headless run |
 | Draw calls / rendered objects | N/A — headless run |
 | Runtime model creation / reuse | Measured and emitted per scenario; no pool overflow in the captured runs |
-| Shader errors | Checked by the automated import and Compatibility render-probe workflow; final workflow result pending |
+| Shader errors | None reported by the successful import, shader compile, and Compatibility render-probe workflow |
 | Android GPU time, FPS, heat, battery | Not measured; no 30/60 FPS claim |
 
 The Compatibility software-rendered mask probe is reported separately from headless timings. Software Mesa does not represent Android GPU performance.
