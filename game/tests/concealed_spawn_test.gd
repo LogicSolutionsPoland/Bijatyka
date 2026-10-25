@@ -351,9 +351,10 @@ func _test_population_and_replacements() -> void:
 		check(enemy.state == "assault" and enemy._spawn_assault_time > 0.0, "every actual new horde member receives its initial burst")
 		check(not enemy._visual_root.visible, "actual birth cannot render beyond the visibility limit")
 	)
-	check(director._pending.size() == 200, "initial population is queued once")
 	director.request_population()
-	check(director._pending.size() == 200, "duplicate fill request cannot exceed the population cap")
+	check(director._pending.size() == 200, "200-zombie profiling stress population is queued once")
+	director.request_population()
+	check(director._pending.size() == 200, "duplicate fill request cannot exceed the profiling population cap")
 	var budgets_ok := true
 	for frame in range(500):
 		await physics_frame
