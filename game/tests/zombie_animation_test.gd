@@ -27,7 +27,7 @@ func _run() -> void:
 	_check_imported_clip_names_and_durations()
 	await _test_behavior_animation_connections()
 	if failures.is_empty():
-		print("PASS: %d zombie animation checks" % checks)
+		print("PASS: zombie animation (%d checks)" % checks)
 		quit(0)
 	else:
 		for failure in failures:
