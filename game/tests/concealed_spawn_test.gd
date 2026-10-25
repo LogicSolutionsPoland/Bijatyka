@@ -337,7 +337,9 @@ func _test_population_and_replacements() -> void:
 	arena._boss_enemy.set_physics_process(false)
 	var director = arena.spawn_director
 	director.set_physics_process(false)
-	check(Foundation.ZOMBIE_HORDE_SIZE == 15 and director._initial_population_pending == 15, "normal game starts with 15 ordinary zombies separate from the boss")
+	check(Foundation.ZOMBIE_HORDE_SIZE == 15 and director.population_limit == 15 and director._initial_population_pending == 15, "normal game starts with a strict 15-zombie population separate from the boss")
+	director.request_population()
+	check(director._pending.is_empty() and director._initial_population_pending == 15, "the normal spawn queue cannot schedule a 16th ordinary zombie")
 	director._initial_population_pending = 0
 	director._pending.clear()
 	director.population_limit = 200
