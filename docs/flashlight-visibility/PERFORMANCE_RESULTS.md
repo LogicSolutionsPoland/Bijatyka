@@ -24,3 +24,11 @@ The headless frame p95 is measured by the benchmark harness wall clock. The engi
 | Android GPU time, FPS, heat, battery | Not measured; no 30/60 FPS claim |
 
 The Compatibility software-rendered mask probe is reported separately from headless timings. Software Mesa does not represent Android GPU performance.
+
+The final validation run also collected one rendered desktop sample at 20 zombies on Mesa llvmpipe:
+
+| Renderer / population | Frames | FPS | Frame processing avg (ms) | Physics processing avg (ms) | Draw calls avg | Rendered objects avg | Android GPU time |
+|---|---:|---:|---:|---:|---:|---:|---|
+| GL Compatibility software desktop / 20 | 120 | 16.0 | 56.379 | 1.385 | 125.9 | 254.6 | N/A |
+
+This is a software-renderer diagnostic sample. It is not a mobile GPU or Android performance result, and rendered samples at 69, 100, and 200 zombies were not collected.
