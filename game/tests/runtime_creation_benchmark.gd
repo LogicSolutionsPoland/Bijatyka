@@ -3,6 +3,7 @@ extends SceneTree
 ## This measures call duration, not Android frame pacing or GPU/render time.
 
 const Player := preload("res://scripts/player_controller.gd")
+const Enemy := preload("res://scripts/enemy.gd")
 const WARMUP_CALLS := 4
 const SAMPLE_CALLS := 24
 
@@ -13,12 +14,16 @@ func _initialize() -> void:
 
 func _run() -> void:
 	var player := Player.new() as FoundationPlayer
+	var enemy := Enemy.new() as FoundationEnemy
 	root.add_child(player)
+	root.add_child(enemy)
 	await process_frame
 	await _measure("attack_sweep", func() -> void: player._spawn_attack_sweep("punch", "right"))
 	await _measure("attack_impact", func() -> void: player._spawn_attack_impact(Vector3(0.0, 1.0, -2.0), "punch"))
+	await _measure("zombie_hit_flash", func() -> void: enemy._show_impact_flash(false))
 	await _measure("spell_burst", func() -> void: player._spawn_spell_burst(Vector3(0.0, 1.0, -2.0), "fire"))
 	player.queue_free()
+	enemy.queue_free()
 	await process_frame
 	if failures.is_empty():
 		print("PASS: runtime creation baseline (synchronous effect construction timing only)")
