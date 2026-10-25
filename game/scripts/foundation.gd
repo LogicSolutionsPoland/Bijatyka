@@ -12,6 +12,7 @@ const COMBAT_FX_POOL := preload("res://scripts/combat_fx_pool.gd")
 const HUD_SCRIPT := preload("res://scripts/mobile_hud.gd")
 const SHADOW_POLICY := preload("res://scripts/shadow_policy.gd")
 const FLASHLIGHT_VISIBILITY := preload("res://scripts/flashlight_visibility.gd")
+const COMMUNITY_PROPS := preload("res://scripts/community_props.gd")
 const RADIAL_GROUND_SHADER := preload("res://shaders/radial_ground.gdshader")
 const RUIN_SURFACE_SHADER := preload("res://shaders/ruined_surface.gdshader")
 const ZOMBIE_HORDE_SIZE := 15
@@ -70,6 +71,11 @@ func _ready() -> void:
 	_start_game_music()
 	_build_environment()
 	_build_arena()
+	# Optional source-only environment pack visual preview. The default is OFF.
+	if bool(ProjectSettings.get_setting("gameplay/enable_community_environment_packs", false)):
+		var props := COMMUNITY_PROPS.new() as Node3D
+		props.name = "CommunityEnvironmentProps"
+		add_child(props)
 	player = PLAYER_SCENE.instantiate() as FoundationPlayer
 	player.name = "ThornboundPlayer"
 	player.position = PLAYER_BASE_POSITION
