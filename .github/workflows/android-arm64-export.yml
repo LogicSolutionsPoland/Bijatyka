@@ -1,0 +1,52 @@
+name: Android ARM64 APK export (manual)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export-android-arm64:
+    name: Export and upload Android ARM64 APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Godot 4.7.2 and Android export templates
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: true
+
+      - name: Verify Android build tools
+        run: |
+          set -eu
+          test -n "${ANDROID_HOME:-}"
+          test -d "$ANDROID_HOME"
+          java -version
+          godot --version
+
+      - name: Import Godot project and assets
+        run: |
+          set -o pipefail
+          godot --headless --editor --path game --import --quit 2>&1 | tee "$RUNNER_TEMP/android-import.log"
+          if grep -E "SCRIPT ERROR:|ERROR: Failed to load" "$RUNNER_TEMP/android-import.log"; then exit 1; fi
+
+      - name: Export Android ARM64 debug APK
+        run: |
+          set -o pipefail
+          mkdir -p build
+          godot --headless --path game --export-debug "Android ARM64" "$GITHUB_WORKSPACE/build/Bijatyka-android-arm64.apk" 2>&1 | tee "$RUNNER_TEMP/android-export.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/android-export.log"; then exit 1; fi
+          test -s "$GITHUB_WORKSPACE/build/Bijatyka-android-arm64.apk"
+
+      - name: Upload Android ARM64 APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bijatyka-android-arm64
+          path: build/Bijatyka-android-arm64.apk
+          if-no-files-found: error
