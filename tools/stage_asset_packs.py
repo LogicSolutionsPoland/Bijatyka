@@ -134,20 +134,20 @@ def stage(archive: Path, destination_root: Path, dry_run: bool = False) -> dict:
     ) as tmp:
         temporary = Path(tmp)
         with _open_archive(archive) as source:
-            contents = [(rel, size, source.read(name)) for rel, size, name in entries]
-        for rel, size, content in contents:
-            if len(content) != size:
-                raise ValueError(f"Decompressed member size mismatch: {rel}")
-            target = temporary.joinpath(*rel.parts)
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(content)
-            manifest["files"].append({
-                "path": str(rel),
-                "size": size,
-                "sha256": hashlib.sha256(content).hexdigest(),
-            })
+            for rel, size, member_name in entries:
+                content = source.read(member_name)
+                if len(content) != size:
+                    raise ValueError(f"Decompressed member size mismatch: {rel}")
+                target = temporary.joinpath(*rel.parts)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(content)
+                manifest["files"].append({
+                    "path": str(rel),
+                    "size": size,
+                    "sha256": hashlib.sha256(content).hexdigest(),
+                })
         (temporary / "manifest.json").write_text(
-            json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
+            json.dumps(manifest, indent=2, ensure_ascii=False) + "\\n",
             encoding="utf-8",
         )
         shutil.move(str(temporary), str(destination))
