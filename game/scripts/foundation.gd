@@ -42,6 +42,8 @@ var _status_timer := 0.0
 var _pending_notice := ""
 var _visibility_timer := 0.0
 var _floor_material: ShaderMaterial
+var _ruin_materials: Dictionary = {}
+var _emissive_materials: Dictionary = {}
 var _boss_enemy: FoundationEnemy
 var burning_horizon: Node3D
 var game_music_player: AudioStreamPlayer
@@ -309,12 +311,7 @@ func _add_quarantine_lamp(at: Vector3, tint: Color) -> void:
 	bulb_mesh.radius = 0.20
 	bulb_mesh.height = 0.40
 	bulb.mesh = bulb_mesh
-	var bulb_material := StandardMaterial3D.new()
-	bulb_material.albedo_color = tint
-	bulb_material.emission_enabled = true
-	bulb_material.emission = tint
-	bulb_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	bulb.material_override = bulb_material
+	bulb.material_override = _emissive_material(tint)
 	lamp.add_child(bulb)
 	var light := OmniLight3D.new()
 	light.light_color = tint
@@ -345,12 +342,7 @@ func _add_brazier(at: Vector3, flame_color: Color) -> void:
 	flame_mesh.radial_segments = 7
 	flame.mesh = flame_mesh
 	flame.position.y = 1.08
-	var flame_material := StandardMaterial3D.new()
-	flame_material.albedo_color = flame_color
-	flame_material.emission_enabled = true
-	flame_material.emission = flame_color
-	flame_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	flame.material_override = flame_material
+	flame.material_override = _emissive_material(flame_color)
 	brazier.add_child(flame)
 	var light := OmniLight3D.new()
 	light.position.y = 0.98
@@ -554,11 +546,26 @@ func _refresh_hud(_a: float = 0.0, _b: float = 0.0, _c: float = 0.0) -> void:
 	hud.update_status(player.health, player.MAX_HEALTH, player.rage.rage, player.rage.maximum_rage, player.rage.condemnation_threshold(), player.magic_energy, player.current_spell, player.rage.unlocked_spells)
 
 func _material(color: Color, roughness: float = 0.85, metallic: float = 0.0) -> ShaderMaterial:
+	var key := [color, roughness, metallic]
+	if _ruin_materials.has(key):
+		return _ruin_materials[key] as ShaderMaterial
 	var material := ShaderMaterial.new()
 	material.shader = RUIN_SURFACE_SHADER
 	material.set_shader_parameter("base_color", color)
 	material.set_shader_parameter("surface_roughness", roughness)
 	material.set_shader_parameter("surface_metallic", metallic)
+	_ruin_materials[key] = material
+	return material
+
+func _emissive_material(color: Color) -> StandardMaterial3D:
+	if _emissive_materials.has(color):
+		return _emissive_materials[color] as StandardMaterial3D
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.emission_enabled = true
+	material.emission = color
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_emissive_materials[color] = material
 	return material
 
 func _setup_performance_diagnostics() -> void:
