@@ -174,7 +174,7 @@ func _collect_horde_counts() -> Dictionary:
 		else:
 			result.outside += 1
 		if enemy._animation_player != null and enemy._animation_player.is_playing() and enemy._model != null:
-			var skeleton := enemy._model.find_child("*", "Skeleton3D", true, false)
-			if skeleton is Skeleton3D and skeleton.is_visible_in_tree():
+			var skeletons: Array[Node] = enemy._model.find_children("*", "Skeleton3D", true, false)
+			if not skeletons.is_empty() and skeletons[0] is Skeleton3D and (skeletons[0] as Skeleton3D).is_visible_in_tree():
 				result.skeletons += 1
 	return result
