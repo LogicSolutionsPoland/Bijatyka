@@ -128,7 +128,7 @@ func _run() -> void:
 		_check(normalized.y >= 0.75 and normalized.y <= 0.86, "camera keeps combat area ahead at %s" % [viewport_size])
 	root.size = saved_size
 
-	_check(Foundation.ZOMBIE_HORDE_SIZE == 69 and Foundation.ZOMBIE_PERFORMANCE_CAPACITY == 200, "game population remains 69 with 200-zombie stress capacity")
+	_check(Foundation.ZOMBIE_HORDE_SIZE == 15 and Foundation.ZOMBIE_PERFORMANCE_CAPACITY == 200, "game population remains 15 with 200-zombie debug-only stress capacity")
 	_check(game.burning_horizon.get_child_count() == 4, "Burning Horizon remains present while masked")
 	_check(game._boss_enemy != null and game._boss_enemy.hp > 0, "boss simulation remains independent from flashlight visibility")
 
