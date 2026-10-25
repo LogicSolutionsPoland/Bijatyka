@@ -59,6 +59,13 @@ jobs:
           grep -q "PASS: horde performance" "$RUNNER_TEMP/horde-performance-tests.log"
           if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/horde-performance-tests.log"; then exit 1; fi
 
+      - name: Run 20, 100, and 200 zombie headless comparison scenarios
+        run: |
+          set -o pipefail
+          godot --headless --path game --script res://tests/horde_scenario_benchmark.gd 2>&1 | tee "$RUNNER_TEMP/horde-scenario-benchmark.log"
+          grep -q "PASS: horde scenario benchmark" "$RUNNER_TEMP/horde-scenario-benchmark.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/horde-scenario-benchmark.log"; then exit 1; fi
+
       - name: Check Burning Horizon integration
         run: |
           set -o pipefail

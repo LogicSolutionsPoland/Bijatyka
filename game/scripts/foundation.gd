@@ -7,6 +7,7 @@ const PLAYER_SCRIPT := preload("res://scripts/player_controller.gd")
 const ENEMY_SCRIPT := preload("res://scripts/enemy.gd")
 const CONCEALED_SPAWN := preload("res://scripts/concealed_spawn.gd")
 const HORDE_FAR_VISUALS := preload("res://scripts/horde_far_visuals.gd")
+const PERFORMANCE_DIAGNOSTICS := preload("res://scripts/performance_diagnostics.gd")
 const HUD_SCRIPT := preload("res://scripts/mobile_hud.gd")
 const SHADOW_POLICY := preload("res://scripts/shadow_policy.gd")
 const RADIAL_GROUND_SHADER := preload("res://shaders/radial_ground.gdshader")
@@ -45,6 +46,8 @@ var burning_horizon: Node3D
 var game_music_player: AudioStreamPlayer
 var spawn_director: Node3D
 var horde_far_visuals: HordeFarVisuals
+var performance_diagnostics: FoundationPerformanceDiagnostics
+var _performance_scenario := ""
 var _spawn_blockers: Array[AABB] = []
 
 func _ready() -> void:
@@ -63,6 +66,7 @@ func _ready() -> void:
 	burning_horizon.follow_player(player.global_position)
 	_build_hud()
 	_spawn_enemies()
+	_setup_performance_diagnostics()
 	_update_distance_visibility()
 	_floor_material.set_shader_parameter("player_position", player.global_position)
 	SHADOW_POLICY.disable_in_tree(self)
@@ -548,3 +552,63 @@ func _material(color: Color, roughness: float = 0.85, metallic: float = 0.0) -> 
 	material.set_shader_parameter("surface_roughness", roughness)
 	material.set_shader_parameter("surface_metallic", metallic)
 	return material
+
+func _setup_performance_diagnostics() -> void:
+	# Keep all profiling UI and controls out of release gameplay.
+	if not OS.is_debug_build():
+		return
+	performance_diagnostics = PERFORMANCE_DIAGNOSTICS.new() as FoundationPerformanceDiagnostics
+	performance_diagnostics.name = "DevelopmentPerformanceDiagnostics"
+	performance_diagnostics.scenario_requested.connect(start_performance_scenario)
+	performance_diagnostics.stop_requested.connect(stop_performance_scenario)
+	add_child(performance_diagnostics)
+
+func start_performance_scenario(population: int, mode: String) -> bool:
+	if not [20, 100, 200].has(population) or not ["concentrated", "approach"].has(mode):
+		return false
+	if not is_instance_valid(spawn_director) or not is_instance_valid(player):
+		return false
+
+	# Scenario changes are transient and isolated to debug profiling. Clear only
+	# ordinary zombies; keep the boss, arena, camera, HUD, and gameplay systems.
+	spawn_director.set_physics_process(false)
+	spawn_director._live.clear()
+	spawn_director._pending.clear()
+	for enemy in get_tree().get_nodes_in_group("enemies"):
+		if enemy is FoundationEnemy and not enemy.is_boss:
+			enemy.queue_free()
+
+	spawn_director.population_limit = population
+	_performance_scenario = "%d/%s" % [population, mode]
+	# The spawn director's candidate selection and enemy initial state use the
+	# global RNG. A fixed seed makes comparison runs repeatable where practical.
+	seed(0xB1A7 + population + (1000 if mode == "approach" else 0))
+	if mode == "concentrated":
+		for index in range(population):
+			var angle := float(index) * 2.399963229728653
+			var radius := 3.5 + 8.5 * sqrt((float(index) + 0.5) / float(population))
+			var offset := Vector3(cos(angle) * radius, 0.05, sin(angle) * radius)
+			var enemy := _spawn_enemy("shambler", player.global_position + offset)
+			spawn_director.register_enemy(enemy)
+			horde_far_visuals.register_enemy(enemy)
+		spawn_director.set_physics_process(true)
+	else:
+		spawn_director.set_physics_process(true)
+		spawn_director.request_population()
+	return true
+
+func stop_performance_scenario() -> void:
+	if not is_instance_valid(spawn_director):
+		return
+	spawn_director.set_physics_process(false)
+	spawn_director._live.clear()
+	spawn_director._pending.clear()
+	for enemy in get_tree().get_nodes_in_group("enemies"):
+		if enemy is FoundationEnemy and not enemy.is_boss:
+			enemy.queue_free()
+	spawn_director.population_limit = ZOMBIE_HORDE_SIZE
+	_performance_scenario = ""
+	# Restore the ordinary endless 200-zombie population and 50 m approach.
+	seed(int(Time.get_ticks_usec() & 0x7fffffff))
+	spawn_director.request_population()
+	spawn_director.set_physics_process(true)
