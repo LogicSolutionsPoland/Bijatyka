@@ -11,7 +11,9 @@ const FORWARD_HALF_ANGLE := deg_to_rad(80.0)
 const RADIAL_SPREAD := 4.0
 const WORLD_LIMIT := 94.0
 const MIN_PLAYER_DISTANCE := 12.0
-const BASE_EXCLUSION_RADIUS := 6.0
+const BASE_EXCLUSION_RADIUS := 7.5
+const INITIAL_SPAWN_MIN_DISTANCE := 36.0
+const INITIAL_SPAWN_MAX_DISTANCE := 64.0
 const RECENT_SPACING := 2.0
 const RECENT_SECONDS := 8.0
 # Includes outstretched arms and the health display, not just the physics capsule.
@@ -27,6 +29,8 @@ var last_candidate_count := 0
 var last_spawn_count := 0
 var _live: Dictionary = {}
 var _pending: Array[float] = []
+var _initial_population_pending := 0
+var _initial_sample_index := 0
 var _recent: Array[Dictionary] = []
 var _clock := 0.0
 var _retry_time := 0.0
@@ -37,8 +41,12 @@ func _init() -> void:
 	_capsule.radius = 0.55
 	_capsule.height = 1.95
 
+func request_initial_population() -> void:
+	while _live.size() + _pending.size() + _initial_population_pending < population_limit:
+		_initial_population_pending += 1
+
 func request_population() -> void:
-	while _live.size() + _pending.size() < population_limit:
+	while _live.size() + _pending.size() + _initial_population_pending < population_limit:
 		_pending.append(_clock)
 
 func register_enemy(enemy: FoundationEnemy) -> void:
@@ -64,19 +72,26 @@ func _physics_process(delta: float) -> void:
 	last_spawn_count = 0
 	if not is_instance_valid(player) or not is_instance_valid(camera):
 		return
-	if _retry_time > 0.0 or _pending.is_empty() or _live.size() >= population_limit:
+	if _retry_time > 0.0 or (_pending.is_empty() and _initial_population_pending <= 0) or _live.size() >= population_limit:
 		return
 	while not _recent.is_empty() and float(_recent.front().time) < _clock - RECENT_SECONDS:
 		_recent.pop_front()
 	# One shared budget, even when many enemies die in the same frame.
 	while last_candidate_count < MAX_CANDIDATES_PER_TICK and last_spawn_count < MAX_SPAWNS_PER_TICK:
-		if _pending.is_empty() or _pending.front() > _clock or _live.size() >= population_limit:
+		var initial_spawn := _initial_population_pending > 0
+		if not initial_spawn and (_pending.is_empty() or _pending.front() > _clock):
+			break
+		if _live.size() >= population_limit:
 			break
 		last_candidate_count += 1
-		var at := _grounded_candidate(_sample_candidate())
-		if not at.is_finite() or not is_valid_spawn(at):
+		var candidate := _sample_initial_candidate() if initial_spawn else _sample_candidate()
+		var at := _grounded_candidate(candidate)
+		if not at.is_finite() or not is_valid_spawn(at, not initial_spawn):
 			continue
-		_pending.pop_front()
+		if initial_spawn:
+			_initial_population_pending -= 1
+		else:
+			_pending.pop_front()
 		_recent.append({"position": at, "time": _clock})
 		if _recent.size() > 64:
 			_recent.pop_front()
@@ -94,11 +109,27 @@ func forward_direction() -> Vector3:
 	return forward.normalized() if forward.length_squared() > 0.001 else Vector3.FORWARD
 
 func _sample_candidate() -> Vector3:
-	# Low discrepancy sampling spreads waves across the arc and its depth.
+	# Low discrepancy sampling spreads replacement waves across the forward arc.
 	_sample_index += 1
 	var angle := lerpf(-FORWARD_HALF_ANGLE, FORWARD_HALF_ANGLE, fmod(float(_sample_index) * 0.61803398875, 1.0))
 	var radius := spawn_distance + lerpf(-RADIAL_SPREAD, RADIAL_SPREAD, fmod(float(_sample_index) * 0.41421356237, 1.0))
 	return player.global_position + forward_direction().rotated(Vector3.UP, angle) * radius
+
+func _sample_initial_candidate() -> Vector3:
+	# Start with a full 360-degree annulus so the opening invasion is already
+	# distributed around the arena. Its 36–64 m band stays concealed and within
+	# the zombie AI's 70 m active radius.
+	_initial_sample_index += 1
+	var index := float(_initial_sample_index)
+	var angle := TAU * fmod(index * 0.61803398875, 1.0)
+	var radial_fraction := fmod(index * 0.7548776662466927, 1.0)
+	var radius_squared := lerpf(
+		INITIAL_SPAWN_MIN_DISTANCE * INITIAL_SPAWN_MIN_DISTANCE,
+		INITIAL_SPAWN_MAX_DISTANCE * INITIAL_SPAWN_MAX_DISTANCE,
+		radial_fraction
+	)
+	var radius := sqrt(radius_squared)
+	return player.global_position + Vector3(cos(angle) * radius, 0.0, sin(angle) * radius)
 
 func _grounded_candidate(at: Vector3) -> Vector3:
 	if absf(at.x) > WORLD_LIMIT or absf(at.z) > WORLD_LIMIT:
@@ -110,12 +141,14 @@ func _grounded_candidate(at: Vector3) -> Vector3:
 		return Vector3.INF
 	return hit.position + Vector3.UP * 0.05
 
-func is_valid_spawn(at: Vector3) -> bool:
+func is_valid_spawn(at: Vector3, require_forward: bool = true) -> bool:
 	if not at.is_finite() or absf(at.x) > WORLD_LIMIT or absf(at.z) > WORLD_LIMIT:
 		return false
 	var offset := at - player.global_position
 	offset.y = 0.0
-	if offset.length() < MIN_PLAYER_DISTANCE or offset.normalized().dot(forward_direction()) < cos(FORWARD_HALF_ANGLE):
+	if offset.length() < MIN_PLAYER_DISTANCE:
+		return false
+	if require_forward and offset.normalized().dot(forward_direction()) < cos(FORWARD_HALF_ANGLE):
 		return false
 	var base_offset := at - player.safe_base_position
 	base_offset.y = 0.0
