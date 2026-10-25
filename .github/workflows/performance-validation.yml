@@ -101,7 +101,7 @@ jobs:
           grep -q "PASS: resident rig and death lifecycle" "$RUNNER_TEMP/rig-budget-tests.log"
           if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/rig-budget-tests.log"; then exit 1; fi
 
-      - name: Run 20, 69, 100, and 200 zombie headless comparison scenarios
+      - name: Run 15, 20, 69, 100, and 200 zombie headless comparison scenarios
         run: |
           set -o pipefail
           godot --headless --path game --script res://tests/horde_scenario_benchmark.gd 2>&1 | tee "$RUNNER_TEMP/horde-scenario-benchmark.log"
