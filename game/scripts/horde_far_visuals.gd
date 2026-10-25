@@ -15,6 +15,7 @@ const FULL_RIG_BUDGET := FoundationEnemy.FULL_ANIMATION_BUDGET
 
 var player: Node3D
 var _enemies: Dictionary = {}
+var _slot_enemy_ids: Array[int] = []
 var _refresh_time := 0.0
 var _scheduler_time := 0.0
 var _full_rig_count := 0
@@ -32,6 +33,8 @@ func configure(capacity: int) -> void:
 	batch.mesh = silhouette
 	batch.instance_count = capacity
 	batch.visible_instance_count = 0
+	_slot_enemy_ids.resize(capacity)
+	_slot_enemy_ids.fill(-1)
 	multimesh = batch
 	# The MultiMesh AABB must cover moving actors; the default mesh bounds only
 	# cover the origin and would let the renderer incorrectly cull the whole batch.
@@ -98,10 +101,15 @@ func _process(delta: float) -> void:
 			continue
 		var facing := Basis(Vector3.UP, enemy.rotation.y)
 		multimesh.set_instance_transform(count, Transform3D(facing, enemy.global_position))
-		# Small tonal variation prevents the crowd from reading as one flat texture.
-		var tint := 0.80 + float(enemy.get_instance_id() % 5) * 0.055
-		var phase := float(enemy.get_instance_id() % 97) * 0.065
-		multimesh.set_instance_color(count, Color(tint, tint * 0.94, tint * 0.88, phase / TAU))
+		# Compact the visible set, but avoid redundant instance-color uploads while
+		# the same zombie remains in this slot. The shader reads stable per-zombie
+		# phase/speed from that color; transforms still refresh at 30 Hz.
+		var id := int(enemy.get_instance_id())
+		if _slot_enemy_ids[count] != id:
+			var tint := 0.80 + float(id % 5) * 0.055
+			var phase := float(id % 97) * 0.065
+			multimesh.set_instance_color(count, Color(tint, tint * 0.94, tint * 0.88, phase / TAU))
+			_slot_enemy_ids[count] = id
 		count += 1
 	multimesh.visible_instance_count = count
 
