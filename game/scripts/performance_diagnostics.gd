@@ -6,7 +6,7 @@ signal scenario_requested(population: int, mode: String)
 signal stop_requested
 
 const SAMPLE_INTERVAL := 0.5
-const POPULATIONS := [20, 69, 100, 200]
+const POPULATIONS := [15, 20, 69, 100, 200]
 const MODES := ["concentrated", "approach"]
 
 var _panel: PanelContainer
@@ -72,7 +72,7 @@ func _build_ui() -> void:
 			row.add_child(button)
 
 	var stop := Button.new()
-	stop.text = "Stop scenario / restore normal 69"
+	stop.text = "Stop scenario / restore normal 15"
 	stop.pressed.connect(func() -> void: stop_requested.emit())
 	column.add_child(stop)
 
