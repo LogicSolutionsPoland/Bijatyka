@@ -45,6 +45,8 @@ def _safe_path(filename: str) -> PurePosixPath:
         or ":" in path.parts[0]
     ):
         raise ValueError(f"Unsafe archive path: {filename!r}")
+    if len(path.parts) == 1 and path.name.casefold() == "manifest.json":
+        raise ValueError("Archive cannot supply the staging manifest file")
     return path
 
 
