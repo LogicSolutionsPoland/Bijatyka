@@ -72,7 +72,7 @@ func _ready() -> void:
 	_build_environment()
 	_build_arena()
 	# Optional source-only environment pack visual preview. The default is OFF.
-	if bool(ProjectSettings.get_setting("gameplay/enable_community_environment_packs", false)):
+	if bool(ProjectSettings.get_setting("gameplay/enable_community_environment_packs", ResourceLoader.exists("res://assets/environment/community/rocks/RocksPack.glb"))):
 		var props := COMMUNITY_PROPS.new() as Node3D
 		props.name = "CommunityEnvironmentProps"
 		add_child(props)
