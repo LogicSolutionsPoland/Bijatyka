@@ -1,0 +1,3 @@
+# Keep unlicensed local asset binaries out of public GitHub commits.
+*.glb
+asset_manifest.json
