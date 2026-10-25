@@ -53,8 +53,11 @@ func _run() -> void:
 			_check(second_active[0].get_visual_position().distance_to(second_position) < 0.001, "reuse overwrites stale position")
 			_check(second_active[0].is_in_group("attack_impact_fx"), "reuse restores active group membership")
 			_check(not second_active[0].has_collision_nodes(), "reuse cannot inherit a stale collision body")
+		pool.set_process(false)
 		for _frame in range(15):
+			pool._process(1.0 / 60.0)
 			await process_frame
+		pool.set_process(true)
 		_check(pool.get_active_count("attack_impact") == 0, "effect expiry releases the active slot")
 		_check(not first.is_effect_visible(), "expired effect remains hidden in the pool")
 
@@ -129,8 +132,8 @@ func _test_repeated_zombie_death_and_replacement(pool: FoundationCombatFxPool) -
 	enemy.receive_hit(1000, Vector3.FORWARD)
 	_check(enemy.hp == 0 and enemy.collision_layer == 0 and enemy.collision_mask == 0, "death disables targeting collision immediately")
 	await process_frame
-	var collision := enemy.get_node("CollisionShape3D") as CollisionShape3D
-	_check(collision.disabled, "deferred death collision disable completes")
+	var collision := enemy._collision_shape
+	_check(collision != null and collision.disabled, "deferred death collision disable completes")
 	enemy._complete_death()
 	enemy._complete_death()
 	enemy.defeated.emit(enemy)

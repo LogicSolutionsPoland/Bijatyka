@@ -27,10 +27,11 @@ func _run() -> void:
 	for _frame in range(24):
 		await process_frame
 	await process_frame
-	await _measure("attack_sweep", func() -> void: player._spawn_attack_sweep("punch", "right"))
-	await _measure("attack_impact", func() -> void: player._spawn_attack_impact(Vector3(0.0, 1.0, -2.0), "punch"))
-	await _measure("zombie_hit_flash", func() -> void: enemy._show_impact_flash(false))
-	await _measure("spell_burst", func() -> void: player._spawn_spell_burst(Vector3(0.0, 1.0, -2.0), "fire"))
+	pool.set_process(false)
+	await _measure("attack_sweep", func() -> void: player._spawn_attack_sweep("punch", "right"), pool)
+	await _measure("attack_impact", func() -> void: player._spawn_attack_impact(Vector3(0.0, 1.0, -2.0), "punch"), pool)
+	await _measure("zombie_hit_flash", func() -> void: enemy._show_impact_flash(false), pool)
+	await _measure("spell_burst", func() -> void: player._spawn_spell_burst(Vector3(0.0, 1.0, -2.0), "fire"), pool)
 	player.queue_free()
 	enemy.queue_free()
 	print("RUNTIME_FX_POOL_SAMPLE " + JSON.stringify(pool.get_profile_stats()))
@@ -44,7 +45,7 @@ func _run() -> void:
 		print("FAIL: runtime pooled effect benchmark (%d failures)" % failures.size())
 	quit(0 if failures.is_empty() else 1)
 
-func _measure(label: String, create_effect: Callable) -> void:
+func _measure(label: String, create_effect: Callable, pool: FoundationCombatFxPool) -> void:
 	var total_usec := 0
 	var maximum_usec := 0
 	for index in range(WARMUP_CALLS + SAMPLE_CALLS):
@@ -55,6 +56,7 @@ func _measure(label: String, create_effect: Callable) -> void:
 			total_usec += elapsed_usec
 			maximum_usec = maxi(maximum_usec, elapsed_usec)
 		for _frame in range(FRAMES_BETWEEN_CALLS):
+			pool._process(1.0 / 60.0)
 			await process_frame
 	var average_usec := float(total_usec) / float(SAMPLE_CALLS)
 	print("RUNTIME_CREATION_SAMPLE " + JSON.stringify({

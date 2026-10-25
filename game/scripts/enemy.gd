@@ -45,6 +45,7 @@ var _death_completed := false
 var _attack_animation := ""
 var _attack_contact_time := 0.0
 var _visual_root: Node3D
+var _collision_shape: CollisionShape3D
 var _status_label: Label3D
 var _health_bar_root: Node3D
 var _health_bar_fill: MeshInstance3D
@@ -197,11 +198,13 @@ func _ready() -> void:
 
 func _build_collision() -> void:
 	var collision := CollisionShape3D.new()
+	collision.name = "CollisionShape3D"
 	var capsule := CapsuleShape3D.new()
 	capsule.radius = 0.42 if not is_boss else 0.64
 	capsule.height = 1.85 if not is_boss else 2.55
 	collision.shape = capsule
 	collision.position.y = capsule.height * 0.5
+	_collision_shape = collision
 	add_child(collision)
 
 func _apply_variant() -> void:
@@ -676,9 +679,8 @@ func receive_hit(damage: int, hit_direction: Vector3 = Vector3.ZERO, is_jump_hit
 		set_physics_process(false)
 		collision_layer = 0
 		collision_mask = 0
-		var collision := get_node_or_null("CollisionShape3D") as CollisionShape3D
-		if collision != null:
-			collision.set_deferred("disabled", true)
+		if is_instance_valid(_collision_shape):
+			_collision_shape.set_deferred("disabled", true)
 		_death_animation = _death_animation_for_hit(hit_direction)
 		if _lod_band <= 1:
 			_set_full_animation_selected(true)
