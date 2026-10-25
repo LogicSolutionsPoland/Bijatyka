@@ -8,4 +8,4 @@ Shared 10 m spatial buckets avoid scanning all pairs for target selection. Decis
 
 Validation: gameplay regression suite plus targeted rival damage, retaliation, player priority, group alert, idle/wander and dead-target checks; headless scene smoke via Horde and visibility validation. No APK requested in this change.
 
-Local validation completed with Godot 4.7.2: import succeeded, 462/462 gameplay checks passed, and 600-frame headless scene smoke completed without script errors. Both runs report two ObjectDB instances leaked at shutdown; device performance and this shutdown warning remain unverified. GitHub push was blocked by automatic approval review pending explicit authorization; Actions has not run.
+Local validation completed with Godot 4.7.2: import succeeded, 462/462 gameplay checks passed, and 600-frame headless scene smoke completed without script errors. Both runs report two ObjectDB instances leaked at shutdown; device performance and this shutdown warning remain unverified. Publication was explicitly authorized by the user. The branch is published as codex/zombie-roaming-aggression; remote CI status is available in GitHub Actions.
