@@ -19,17 +19,18 @@ func _capture() -> void:
 	game.camera_arm.rotation.x = game._camera_pitch
 	game.player.rotation.y = 0.0
 	game.player.velocity = Vector3.ZERO
-	await _set_camera_and_settle(game, PI)
-	await _save("front")
 	await _set_camera_and_settle(game, 0.0)
+	await _save("front")
+	await _set_camera_and_settle(game, PI)
 	await _save("rear")
+	await _set_camera_and_settle(game, 0.0)
 	Input.action_press("move_forward")
 	await create_timer(0.45).timeout
 	await _save("movement")
 	Input.action_release("move_forward")
 	game.player.global_position = FoundationPlayerPosition(game)
 	game.player.rotation.y = 0.0
-	await _set_camera_and_settle(game, PI)
+	await _set_camera_and_settle(game, 0.0)
 	game.player.request_attack("punch", "right")
 	await create_timer(0.12).timeout
 	await _save("punch")
