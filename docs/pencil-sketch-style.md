@@ -9,6 +9,8 @@ scene. Broad diagonal pencil lines cross in deep shadows. Strokes use screen
 pixels rather than tiny model UV islands so they remain visible at the default
 Android 0.50x 3D render scale. The two-sided variant covers torn cloth.
 
+The boss's old pink body overlay is removed so its model receives the same
+graphite shading; its red warning marker, halo, and health display remain.
 The ground, ruin shader, and far-zombie crowd shader share the paper and lead
 values. Existing soot, grit, wear, and fractures become changes in graphite
 density. The flashlight's existing full-screen pass samples four nearby depth

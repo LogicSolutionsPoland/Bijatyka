@@ -344,8 +344,6 @@ func _adopt_detailed_model(model: Node3D) -> void:
 		_animation_player.speed_scale = 1.0
 		if not _animation_player.animation_finished.is_connected(_on_animation_finished):
 			_animation_player.animation_finished.connect(_on_animation_finished)
-	if is_boss:
-		_apply_variant_overlay()
 	if is_high_detail_visual_sample and _skeleton != null:
 		var detail_result: Dictionary = HIGH_DETAIL_ZOMBIE_RIG.attach(_visual_root, _skeleton)
 		if bool(detail_result.get("ok", false)):
@@ -461,22 +459,6 @@ func _show_impact_flash(is_jump_hit: bool) -> void:
 	tween.parallel().tween_property(material, "albedo_color:a", 0.0, 0.18)
 	tween.parallel().tween_property(material, "emission:a", 0.0, 0.18)
 	tween.tween_callback(flash.queue_free)
-
-func _apply_variant_overlay() -> void:
-	var tint := Color(0.43, 0.82, 0.47, 0.15)
-	if enemy_variant == "brute":
-		tint = Color(0.86, 0.44, 0.20, 0.20)
-	elif enemy_variant == "stalker":
-		tint = Color(0.20, 0.72, 0.76, 0.16)
-	elif is_boss:
-		tint = Color(0.82, 0.10, 0.16, 0.22)
-	var overlay := StandardMaterial3D.new()
-	overlay.albedo_color = tint
-	overlay.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	overlay.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
-	for node in _descendants(_model):
-		if node is GeometryInstance3D:
-			(node as GeometryInstance3D).material_overlay = overlay
 
 func _add_silhouette_piece() -> void:
 	var plate := MeshInstance3D.new()

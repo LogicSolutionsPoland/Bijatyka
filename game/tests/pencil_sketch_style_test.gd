@@ -51,6 +51,17 @@ func _run() -> void:
 	_check(enemy_counts.x > 0, "the animated high-detail zombie uses the pencil shader")
 	_check(enemy_counts.y > 0, "zombie albedo textures remain bound to shared pencil materials")
 	_check(enemy._fight_animations_ready, "pencil materials do not disrupt zombie fight animation retargeting")
+	var boss := ENEMY_SCRIPT.new() as FoundationEnemy
+	boss.configure("boss", true)
+	boss._player = player
+	boss.set_physics_process(false)
+	fixture.add_child(boss)
+	await process_frame
+	await process_frame
+	var boss_counts := _count_sketch_surfaces(boss)
+	_check(boss_counts.x > 0, "the boss is pencil shaded")
+	for mesh_node in boss._model.find_children("*", "MeshInstance3D", true, false):
+		_check((mesh_node as MeshInstance3D).material_overlay == null, "boss body has no tint overlay hiding graphite")
 
 	var stats: Dictionary = style_manager.call("get_style_stats")
 	_check(int(stats.get("styled_meshes", 0)) > 0, "runtime style manager caches processed mesh materials")
