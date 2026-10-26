@@ -7,6 +7,10 @@ uniform vec3 flashlight_forward = vec3(0.0, 0.0, -1.0);
 uniform float bright_radius = 22.0;
 uniform float max_radius = 30.0;
 uniform float player_keep_radius = 2.1;
+// Elliptical screen-space footprint measured from the annotated gameplay image.
+uniform vec2 oval_center_uv = vec2(0.44, 0.60);
+uniform vec2 oval_radius_uv = vec2(0.29, 0.22);
+uniform float oval_feather = 0.055;
 uniform bool flashlight_enabled = true;
 
 void vertex() {
@@ -45,8 +49,15 @@ void fragment() {
 		float sector_weight = smoothstep(-0.22, 0.22, signed_forward_distance);
 		float fade_position = clamp((distance_to_player - bright_radius) / (max_radius - bright_radius), 0.0, 1.0);
 		float range_weight = 1.0 - fade_position * fade_position * (3.0 - 2.0 * fade_position);
-		float player_weight = 1.0 - smoothstep(player_keep_radius * 0.72, player_keep_radius, distance_to_player);
-		float illuminated_weight = max(sector_weight * range_weight, player_weight);
+		// Keep only the oval view ahead of the player. The existing 30 m world
+		// limit and camera-facing sector remain safety boundaries.
+		vec2 oval_uv = (SCREEN_UV - oval_center_uv) / oval_radius_uv;
+		float oval_weight = 1.0 - smoothstep(1.0 - oval_feather, 1.0, length(oval_uv));
+		// Preserve the character without leaving a bright pool of floor outside
+		// the oval. The floor is at world y=0; player meshes rise above it.
+		float player_weight = (1.0 - smoothstep(player_keep_radius * 0.72, player_keep_radius, distance_to_player))
+			* smoothstep(0.005, 0.08, world_position.y);
+		float illuminated_weight = max(sector_weight * range_weight * oval_weight, player_weight);
 
 		ALBEDO = vec3(0.0);
 		ALPHA = 1.0 - illuminated_weight;
