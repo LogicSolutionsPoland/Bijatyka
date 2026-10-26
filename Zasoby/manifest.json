@@ -1,0 +1,293 @@
+{
+  "version": 1,
+  "project": "LogicSolutionsPoland/Bijatyka",
+  "generated_utc_date": "2026-10-26",
+  "purpose": "Inventory of external game asset source files, not binary payloads",
+  "files": [
+    {
+      "filename": "Bijatyka-Zasoby-HorrorEnvironmentVFX.zip",
+      "size_bytes": 144477594,
+      "category": "bundle",
+      "license_status": "review-required",
+      "import_status": "library-only",
+      "source_location": "ChatGPT Library /zasoby"
+    },
+    {
+      "filename": "FREEPSXUI.zip",
+      "size_bytes": 11824078,
+      "category": "ui",
+      "license_status": "review-required",
+      "import_status": "library-only",
+      "source_location": "ChatGPT Library /zasoby"
+    },
+    {
+      "filename": "SBS - Horror Texture Pack 512x512.rar",
+      "size_bytes": 68666492,
+      "category": "textures",
+      "license_status": "review-required",
+      "import_status": "library-only",
+      "source_location": "ChatGPT Library /zasoby",
+      "sha256": "29feed70b77a17b974cce79a4f343f5f4df8f56cec0af91335083bf4cceaae4"
+    },
+    {
+      "filename": "brackeys_vfx_bundle.zip",
+      "size_bytes": 28227919,
+      "category": "vfx",
+      "license_status": "CC0-reported",
+      "import_status": "library-only",
+      "source_location": "ChatGPT Library /zasoby",
+      "sha256": "ac0fbf5d5a07688a5d4d35fd0bbae783597d819a3d8a92893b05eb69ddb144c5"
+    },
+    {
+      "filename": "psx-first-person-arms-free-game-assets.zip",
+      "size_bytes": 4013463,
+      "category": "characters",
+      "license_status": "review-required",
+      "import_status": "library-only",
+      "source_location": "ChatGPT Library /zasoby"
+    },
+    {
+      "filename": "[AR] Post-Apocalyptic - Starter Pack.zip",
+      "size_bytes": 38902278,
+      "category": "environment",
+      "license_status": "no-source-redistribution",
+      "import_status": "library-only",
+      "source_location": "ChatGPT Library /zasoby",
+      "note": "Prior AtomicRealm catalog says source redistribution is prohibited; keep outside public Git."
+    },
+    {
+      "filename": "[FREE] Into The Wild.zip",
+      "size_bytes": 18487756,
+      "category": "environment",
+      "license_status": "no-source-redistribution",
+      "import_status": "library-only",
+      "source_location": "ChatGPT Library /zasoby",
+      "note": "Prior AtomicRealm catalog says source redistribution is prohibited; keep outside public Git."
+    },
+    {
+      "filename": "[FREE] Interiors.zip",
+      "size_bytes": 2364144,
+      "category": "environment",
+      "license_status": "no-source-redistribution",
+      "import_status": "library-only",
+      "source_location": "ChatGPT Library /zasoby",
+      "note": "Prior AtomicRealm catalog says source redistribution is prohibited; keep outside public Git."
+    },
+    {
+      "filename": "Stylized Nature MegaKit[Standard].zip",
+      "size_bytes": 104088529,
+      "category": "nature",
+      "license_status": "review-required",
+      "import_status": "library-only",
+      "source_location": "ChatGPT Library /zasoby"
+    },
+    {
+      "filename": "Meshy_AI_Bloodforged_Sentinel_1026102138_generate.blend",
+      "size_bytes": 941003,
+      "category": "characters",
+      "license_status": "review-required",
+      "import_status": "library-only",
+      "source_location": "ChatGPT Library /zasoby"
+    },
+    {
+      "filename": "Universal Base Characters[Standard].zip",
+      "size_bytes": 128968391,
+      "category": "characters",
+      "license_status": "review-required",
+      "import_status": "library-only",
+      "source_location": "ChatGPT Library /zasoby"
+    },
+    {
+      "filename": "Characters_psx_1.2.zip",
+      "size_bytes": 60924990,
+      "category": "characters",
+      "license_status": "review-required",
+      "import_status": "library-only",
+      "source_location": "ChatGPT Library /zasoby"
+    },
+    {
+      "filename": "Characters_psx.rar",
+      "size_bytes": 31656535,
+      "category": "characters",
+      "license_status": "review-required",
+      "import_status": "library-only",
+      "source_location": "ChatGPT Library /zasoby"
+    },
+    {
+      "filename": "psx-textures-vol-1-textures.zip",
+      "size_bytes": 4162601,
+      "category": "textures",
+      "license_status": "review-required",
+      "import_status": "library-only",
+      "source_location": "ChatGPT Library /zasoby"
+    },
+    {
+      "filename": "1-bit-godot-shader-free-project.zip",
+      "size_bytes": 208908,
+      "category": "shaders",
+      "license_status": "CC0-reported",
+      "import_status": "library-only",
+      "source_location": "ChatGPT Library /zasoby"
+    },
+    {
+      "filename": "pencil-godot-shader-free-project (1).zip",
+      "size_bytes": 214404,
+      "category": "shaders",
+      "license_status": "CC0-reported",
+      "import_status": "library-only",
+      "source_location": "ChatGPT Library /zasoby",
+      "note": "Pencil shaders already integrated in game/shaders/ on the base branch."
+    },
+    {
+      "filename": "Bijatyka_scenery_local.zip",
+      "size_bytes": 4386391,
+      "category": "bundle",
+      "license_status": "review-required",
+      "import_status": "library-only",
+      "source_location": "ChatGPT Library /zasoby"
+    },
+    {
+      "filename": "Hospital_assets.zip",
+      "size_bytes": 215402044,
+      "category": "environment",
+      "license_status": "review-required",
+      "import_status": "library-only",
+      "source_location": "ChatGPT Library /zasoby"
+    },
+    {
+      "filename": "Abandoned_House.rar",
+      "size_bytes": 21671640,
+      "category": "environment",
+      "license_status": "review-required",
+      "import_status": "library-only",
+      "source_location": "ChatGPT Library /zasoby",
+      "sha256": "24e27bf1157f5c201db06e990caeb366d673165a92db41e1f602aa54f8d1d97e"
+    },
+    {
+      "filename": "FantasyStylizedPack.rar",
+      "size_bytes": 25312246,
+      "category": "environment",
+      "license_status": "review-required",
+      "import_status": "library-only",
+      "source_location": "ChatGPT Library /zasoby"
+    },
+    {
+      "filename": "House.rar",
+      "size_bytes": 12821385,
+      "category": "environment",
+      "license_status": "review-required",
+      "import_status": "library-only",
+      "source_location": "ChatGPT Library /zasoby",
+      "sha256": "30cd11fb75170ecb373422a01b42801523cc820a00184a4243badfb9245d96d9"
+    },
+    {
+      "filename": "Sewer.rar",
+      "size_bytes": 6136972,
+      "category": "environment",
+      "license_status": "review-required",
+      "import_status": "library-only",
+      "source_location": "ChatGPT Library /zasoby",
+      "sha256": "91148780ff65dd245aea9af678a0560346201e69500363da83021c66379f3ab1"
+    },
+    {
+      "filename": "Metro_PSX.rar",
+      "size_bytes": 6949724,
+      "category": "environment",
+      "license_status": "review-required",
+      "import_status": "library-only",
+      "source_location": "ChatGPT Library /zasoby",
+      "sha256": "b1e0384ee52b31424821acd00c088b5821f0c2b92551410c96572287fc66a198"
+    },
+    {
+      "filename": "Roads.rar",
+      "size_bytes": 2887428,
+      "category": "environment",
+      "license_status": "review-required",
+      "import_status": "library-only",
+      "source_location": "ChatGPT Library /zasoby"
+    },
+    {
+      "filename": "TheWrapper V2.zip",
+      "size_bytes": 1171604,
+      "category": "characters",
+      "license_status": "review-required",
+      "import_status": "library-only",
+      "source_location": "ChatGPT Library /zasoby"
+    },
+    {
+      "filename": "Free Sample.zip",
+      "size_bytes": 129114,
+      "category": "misc",
+      "license_status": "review-required",
+      "import_status": "library-only",
+      "source_location": "ChatGPT Library /zasoby"
+    },
+    {
+      "filename": "male_casual.zip",
+      "size_bytes": 142832,
+      "category": "characters",
+      "license_status": "review-required",
+      "import_status": "library-only",
+      "source_location": "ChatGPT Library /zasoby"
+    },
+    {
+      "filename": "PSX Graveyard Demo.zip",
+      "size_bytes": 262449253,
+      "category": "reference",
+      "license_status": "review-required",
+      "import_status": "library-only",
+      "source_location": "ChatGPT Library /zasoby",
+      "note": "Demo/reference, not assumed reusable as distributable game assets."
+    },
+    {
+      "filename": "MeleeWeaponsPack.rar",
+      "size_bytes": 199532698,
+      "category": "weapons",
+      "license_status": "review-required",
+      "import_status": "library-only",
+      "source_location": "ChatGPT Library /zasoby"
+    },
+    {
+      "filename": "KayKit_FantasyWeaponsBits_1.0_FREE.zip",
+      "size_bytes": 3375694,
+      "category": "weapons",
+      "license_status": "review-required",
+      "import_status": "library-only",
+      "source_location": "ChatGPT Library /zasoby"
+    },
+    {
+      "filename": "Humane-Basics.rar",
+      "size_bytes": 1642834,
+      "category": "characters",
+      "license_status": "review-required",
+      "import_status": "library-only",
+      "source_location": "ChatGPT Library /zasoby"
+    },
+    {
+      "filename": "modele zombie.zip",
+      "size_bytes": 1255232,
+      "category": "characters",
+      "license_status": "review-required",
+      "import_status": "library-only",
+      "source_location": "ChatGPT Library /zasoby"
+    },
+    {
+      "filename": "KayKit_Character_Animations_1.1.zip",
+      "size_bytes": 14858957,
+      "category": "animations",
+      "license_status": "CC0-reported",
+      "import_status": "library-only",
+      "source_location": "ChatGPT Library /zasoby",
+      "note": "Extracted KayKit 1.1 animations are already in third_party/ on the base branch; do not duplicate."
+    },
+    {
+      "filename": "Universal Animation Library[Standard].zip",
+      "size_bytes": 15904933,
+      "category": "animations",
+      "license_status": "review-required",
+      "import_status": "library-only",
+      "source_location": "ChatGPT Library /zasoby",
+      "note": "Extracted Universal Animation Library is already in third_party/ on the base branch; review license before re-publication."
+    }
+  ]
+}
