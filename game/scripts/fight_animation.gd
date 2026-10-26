@@ -2,6 +2,7 @@ extends RefCounted
 class_name FightAnimationBuilder
 
 const LIBRARY_NAME := &"thornbound_combat"
+const PLAYER_ANIMATION_RETARGETER := preload("res://scripts/player_animation_retargeter.gd")
 const ATTACK_SIDES := ["left", "right"]
 const ATTACK_KINDS := ["punch", "kick"]
 
@@ -23,6 +24,9 @@ static func install(animation_player: AnimationPlayer, skeleton: Skeleton3D, att
     ]:
         if skeleton.find_bone(required_bone) < 0:
             return false
+
+    if PLAYER_ANIMATION_RETARGETER.install(animation_player, skeleton, attack_profiles):
+        return true
 
     var library := AnimationLibrary.new()
     for kind: String in ATTACK_KINDS:

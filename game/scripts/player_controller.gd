@@ -54,6 +54,7 @@ var _was_airborne := false
 var _animation_player: AnimationPlayer
 var _skeleton: Skeleton3D
 var _fight_animations_ready := false
+var _action_animation_name := ""
 var _camera_yaw := 0.0
 var _burns: Array[Dictionary] = []
 var _magic_hud_timer := 0.0
@@ -409,6 +410,7 @@ func _cast_spell(school: String) -> bool:
 	if target != null:
 		_spawn_spell_burst(target.global_position + Vector3(0.0, 1.0, 0.0), school)
 	magic_changed.emit(magic_energy, MAX_MAGIC, current_spell)
+	_play_temporary_animation("Cast")
 	return true
 
 func cast_spell_slot(slot: int) -> bool:
@@ -622,11 +624,27 @@ func _set_locomotion_animation(animation_name: String) -> void:
 	if _animation_player.current_animation != selected_animation or not _animation_player.is_playing():
 		_animation_player.play(selected_animation, LOCOMOTION_ANIMATION_BLEND_SECONDS)
 
+func _play_temporary_animation(animation_name: String) -> void:
+	if _animation_player == null or attack_phase != "ready" or dash_time > 0.0:
+		return
+	if not _animation_player.has_animation(animation_name):
+		return
+	_action_animation_name = animation_name
+	_set_locomotion_animation(animation_name)
+
 func _update_locomotion_animation() -> void:
 	if _animation_player == null or attack_phase != "ready":
 		return
-	if not is_on_floor():
+	if not _action_animation_name.is_empty():
+		if _animation_player.current_animation == StringName(_action_animation_name) and _animation_player.is_playing():
+			return
+		_action_animation_name = ""
+	if dash_time > 0.0:
+		_set_locomotion_animation("Sprint")
+	elif not is_on_floor():
 		_set_locomotion_animation("Jump")
+	elif Vector2(velocity.x, velocity.z).length() > 3.3:
+		_set_locomotion_animation("Sprint")
 	elif Vector2(velocity.x, velocity.z).length() > 0.4:
 		_set_locomotion_animation("Walk")
 	else:
@@ -644,6 +662,7 @@ func _reset_at_safe_base() -> void:
 	health = MAX_HEALTH
 	magic_energy = MAX_MAGIC
 	current_spell = ""
+	_action_animation_name = ""
 	attack_phase = "ready"
 	attack_kind = ""
 	attack_phase_time = 0.0
