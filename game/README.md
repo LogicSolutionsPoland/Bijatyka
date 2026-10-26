@@ -23,9 +23,9 @@ godot --headless --path game --script res://tests/test_runner.gd
 |---|---|---|---|
 | Move | WASD / arrows | Left stick | Drag on left half |
 | Camera | Drag on right half | Right stick | Swipe on right half |
-| Left punch | — | RB / R1 | Left PUNCH |
-| Right punch | J | — | Right PUNCH |
-| Left / right kick | K (right) | LB / L1, RT / R2 | Left / right KICK |
+| Left punch | — | LB / L1 | Left PUNCH |
+| Right punch | J | RB / R1 | Right PUNCH |
+| Left / right kick | K (right) | LT / L2, RT / R2 | Left / right KICK |
 | Blast | — | Y / Triangle (Fire school) | — |
 | Jump | Space | A / Cross | JUMP |
 | Dash | Shift | X / Square | DASH |
@@ -33,7 +33,7 @@ godot --headless --path game --script res://tests/test_runner.gd
 | Magic slots 1 / 2 / 3 / 4 | — | D-pad Up / Right / Down / Left | Four direct MAGIC slots |
 | Cycle unlocked spells | U | — | Use the desired MAGIC slot directly |
 
-Xbox X / PlayStation Square performs dash, while B / Circle casts the selected unlocked spell. D-pad directions cast and select their corresponding spell slots. RB / R1 performs left punch, and the RT / R2 trigger performs right kick. Y / Triangle casts Blast directly after the Fire aura is unlocked; it costs 15 magic, deals 20 fire damage, and applies the existing burn effect without changing the selected B spell. The trigger calibrates its resting axis value per controller and polls it each frame, so R2 works with both zero-rest and negative-rest axis conventions. Press and release thresholds make a tap attack once and a hold repeat at the melee cadence.
+Xbox X / PlayStation Square performs dash, while B / Circle casts the selected unlocked spell. D-pad directions cast and select their corresponding spell slots. LB / L1 performs left punch, RB / R1 performs right punch, LT / L2 performs left kick, and RT / R2 performs right kick. Y / Triangle casts Blast directly after the Fire aura is unlocked; it costs 15 magic, deals 20 fire damage, and applies the existing burn effect without changing the selected B spell. Both trigger axes calibrate their resting value per controller and poll it each frame, so L2 and R2 work with both zero-rest and negative-rest axis conventions. Press and release thresholds make a tap attack once and a hold repeat at the melee cadence.
 
 The touch buttons form two columns at the screen edges, in this exact order:
 
@@ -59,7 +59,7 @@ The imported Thornbound rig has no finger joints, so the existing hand meshes re
 
 The zombie rig is turned to face the same forward direction used by its approach and attack logic.
 
-The camera uses a right-shoulder viewpoint. The follow pivot sits **1.55 m** above the player's ground origin, with **4.1 m** spring-arm reach, a **12° downward** initial pitch and **66°** vertical field of view. The character stays to the left of screen center while the open center looks down the forward combat lane. The camera smoothly follows facing direction, the spring arm retracts near walls, and it ignores the player's own collision body. Heights are absolute offsets from the player origin, not an extra 1.5 m on top of another pivot.
+The camera uses a close right-shoulder viewpoint. The follow pivot sits **1.20 m** above the player's ground origin, with **2.5 m** spring-arm reach, a **16° downward** initial pitch and **66°** vertical field of view. The character stays to the left of screen center while the open center looks down the forward combat lane. The camera smoothly follows facing direction, the spring arm retracts near walls, and it ignores the player's own collision body. Heights are absolute offsets from the player origin, not an extra 1.5 m on top of another pivot.
 
 ## Carried-forward rules and current scope
 
