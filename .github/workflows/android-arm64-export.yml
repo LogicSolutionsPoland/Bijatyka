@@ -9,6 +9,7 @@ on:
       - codex/mobile-performance-apk-export-20261026
       - codex/mobile-zombies-5-fight-animations-20261026
       - codex/character-quality-slice-20261026
+      - codex/pencil-sketch-android-arm64-20261026
 
 permissions:
   contents: read
