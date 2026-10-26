@@ -86,6 +86,18 @@ void fragment() {
 	color = mix(color, color * vec3(1.18, 0.70, 0.48), rust_stain);
 	color = mix(color, base_color.rgb * 0.31, clamp(cracks, 0.0, 1.0) * 0.62);
 
+	vec2 sketch_position = on_x * weights.x + on_y * weights.y + on_z * weights.z;
+	vec2 hatch_position = sketch_position * 3.1;
+	float hatch_aa = max(fwidth(hatch_position.x + hatch_position.y) * 0.85, 0.035);
+	float hatch_a = 1.0 - smoothstep(0.0, hatch_aa,
+		abs(fract(hatch_position.x + hatch_position.y) - 0.5));
+	float hatch_b = 1.0 - smoothstep(0.0, hatch_aa,
+		abs(fract(hatch_position.x - hatch_position.y) - 0.5));
+	float shadow_hatching = max(hatch_a, hatch_b * 0.68) * (1.0 - smoothstep(0.24, 0.72, wear));
+	color *= 1.0 - shadow_hatching * 0.12;
+	float luminance = dot(color, vec3(0.299, 0.587, 0.114));
+	color = mix(vec3(luminance), color, 0.34);
+
 	ALBEDO = color;
 	ROUGHNESS = clamp(surface_roughness + (medium - 0.5) * 0.18, 0.58, 1.0);
 	METALLIC = surface_metallic;

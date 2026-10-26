@@ -80,6 +80,14 @@ void fragment() {
 	float haze = smoothstep(23.0, 30.0, radius);
 	color = mix(color, vec3(0.161, 0.105, 0.098), haze * 0.82);
 
+	vec2 sketch_position = ground_position * 0.72;
+	float hatch_a = step(0.93, fract(sketch_position.x + sketch_position.y));
+	float hatch_b = step(0.95, fract(sketch_position.x - sketch_position.y));
+	float shadow_hatching = max(hatch_a, hatch_b * 0.62) * (1.0 - smoothstep(0.22, 0.72, broad));
+	color *= 1.0 - shadow_hatching * 0.11;
+	float luminance = dot(color, vec3(0.299, 0.587, 0.114));
+	color = mix(vec3(luminance), color, 0.38);
+
 	ALBEDO = color;
 	EMISSION = vec3(0.92, 0.19, 0.025) * embers * 0.72;
 	ROUGHNESS = mix(0.86, 0.99, soot);

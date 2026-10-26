@@ -50,14 +50,14 @@ jobs:
           preset="Android ARM64"
           if [ "$GITHUB_REF_NAME" = "codex/fix-mobile-5fps-20261025" ]; then preset="Android ARM64 FPS Test"; fi
           if [ "$GITHUB_REF_NAME" = "codex/mobile-performance-apk-export-20261026" ]; then preset="Android ARM64 Performance Test"; fi
-          godot --headless --path game --export-debug "$preset" "$GITHUB_WORKSPACE/build/Bijatyka-android-arm64.apk" 2>&1 | tee "$RUNNER_TEMP/android-export.log"
+          godot --headless --path game --export-debug "$preset" "$GITHUB_WORKSPACE/build/Bijatyka-PencilSketch-ARM64.apk" 2>&1 | tee "$RUNNER_TEMP/android-export.log"
           if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/android-export.log"; then exit 1; fi
-          test -s "$GITHUB_WORKSPACE/build/Bijatyka-android-arm64.apk"
+          test -s "$GITHUB_WORKSPACE/build/Bijatyka-PencilSketch-ARM64.apk"
 
       - name: Verify architecture and packaged playable content
         run: |
           set -euo pipefail
-          apk="$GITHUB_WORKSPACE/build/Bijatyka-android-arm64.apk"
+          apk="$GITHUB_WORKSPACE/build/Bijatyka-PencilSketch-ARM64.apk"
           unzip -tqq "$apk"
           unzip -Z1 "$apk" > "$RUNNER_TEMP/apk-files.txt"
           for entry in \
@@ -73,6 +73,7 @@ jobs:
             assets/scripts/combat_fx_pool.gdc \
             assets/scripts/high_detail_zombie_rig.gdc \
             assets/scripts/character_motion.gdc \
+            assets/scripts/pencil_sketch_style.gdc \
             assets/scenes/foundation.tscn.remap \
             assets/scenes/player.tscn.remap \
             assets/assets/characters/thornbound/Retribution_Player_Thornbound_Warrior_MOBILE.glb.import \
@@ -80,6 +81,8 @@ jobs:
             assets/shaders/radial_ground.gdshader \
             assets/shaders/flashlight_visibility.gdshader \
             assets/shaders/horde_crowd_animation.gdshader \
+            assets/shaders/pencil_sketch.gdshader \
+            assets/shaders/pencil_sketch_double_sided.gdshader \
             assets/assets/audio/menu_music.mp3.import \
             assets/assets/zombies/brutal_v2/Retribution_Zombie_01_Brutal_V2_RIGGED_LOD1.glb.import \
             assets/assets/zombies/high_detail/Retribution_Zombie_Reconstructed.glb.import; do
@@ -96,10 +99,12 @@ jobs:
           if [ "$GITHUB_REF_NAME" = "codex/fix-mobile-5fps-20261025" ]; then package_name="org.logicsolutionspoland.bijatyka.fpstest"; fi
           if [ "$GITHUB_REF_NAME" = "codex/mobile-performance-apk-export-20261026" ]; then package_name="org.logicsolutionspoland.bijatyka.perftest2"; fi
           "$aapt_bin" dump badging "$apk" | grep -q "package: name='$package_name'"
+          "$aapt_bin" dump badging "$apk" | grep -q "versionCode='4' versionName='0.1.3-pencil-sketch'"
+          test "$(find "$GITHUB_WORKSPACE/build" -type f -name '*.apk' | wc -l)" -eq 1
 
       - name: Upload Android ARM64 APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Bijatyka-android-arm64
-          path: build/Bijatyka-android-arm64.apk
+          name: Bijatyka-PencilSketch-ARM64
+          path: build/Bijatyka-PencilSketch-ARM64.apk
           if-no-files-found: error

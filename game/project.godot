@@ -8,6 +8,9 @@ config/icon="res://assets/ui/retribution_mark.svg"
 run/main_scene="res://scenes/foundation.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 
+[autoload]
+PencilSketchStyle="*res://scripts/pencil_sketch_style.gd"
+
 [display]
 window/size/viewport_width=1280
 window/size/viewport_height=720

@@ -66,6 +66,13 @@ jobs:
           grep -q "PASS: playable Thornbound character quality" "$RUNNER_TEMP/player-character-quality.log"
           if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/player-character-quality.log"; then exit 1; fi
 
+      - name: Check optimized Pencil Sketch player and zombie materials
+        run: |
+          set -o pipefail
+          godot --headless --path game --script res://tests/pencil_sketch_style_test.gd 2>&1 | tee "$RUNNER_TEMP/pencil-sketch-tests.log"
+          grep -q "PASS: optimized Pencil Sketch materials" "$RUNNER_TEMP/pencil-sketch-tests.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/pencil-sketch-tests.log"; then exit 1; fi
+
       - name: Capture playable Thornbound in-game views
         run: |
           set -o pipefail
@@ -76,7 +83,7 @@ jobs:
       - name: Upload playable character screenshots
         uses: actions/upload-artifact@v4
         with:
-          name: Bijatyka-Thornbound-character-views
+          name: Bijatyka-PencilSketch-visual-QA
           path: build/character_views/*.png
           if-no-files-found: error
 
