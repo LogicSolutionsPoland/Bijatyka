@@ -45,6 +45,21 @@ jobs:
           godot --headless --editor --path game --import --quit 2>&1 | tee "$RUNNER_TEMP/android-import.log"
           if grep -E "SCRIPT ERROR:|ERROR: Failed to load" "$RUNNER_TEMP/android-import.log"; then exit 1; fi
 
+      - name: Verify visible pencil gameplay with GL Compatibility
+        run: |
+          set -o pipefail
+          xvfb-run -a -s "-screen 0 1600x1000x24" env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/pencil_render_probe.gd 2>&1 | tee "$RUNNER_TEMP/pencil-render.log"
+          grep -q "PASS: visible Pencil Sketch Compatibility gameplay" "$RUNNER_TEMP/pencil-render.log"
+          test -s build/pencil_visual_qa/gameplay.png
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/pencil-render.log"; then exit 1; fi
+
+      - name: Upload pencil gameplay image
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bijatyka-PencilSketch-gameplay-evidence
+          path: build/pencil_visual_qa/gameplay.png
+          if-no-files-found: error
+
       - name: Export Android ARM64 debug APK
         run: |
           set -o pipefail
