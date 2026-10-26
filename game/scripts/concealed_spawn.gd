@@ -21,7 +21,7 @@ const VISUAL_EXTENTS := Vector3(1.5, 1.6, 1.5)
 
 var player: FoundationPlayer
 var camera: Camera3D
-var population_limit := 15
+var population_limit := 5
 var spawn_distance := 50.0
 var visibility_radius := 30.0
 var blocked_boxes: Array[AABB] = []

@@ -127,7 +127,7 @@ func _build_ui() -> void:
 			row.add_child(button)
 
 	var stop := Button.new()
-	stop.text = "Stop scenario / restore normal 15"
+	stop.text = "Stop scenario / restore normal 5"
 	stop.pressed.connect(func() -> void: stop_requested.emit())
 	column.add_child(stop)
 

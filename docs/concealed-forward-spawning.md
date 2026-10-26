@@ -5,13 +5,13 @@ The existing wasteland, camera, controls, ordinary zombie combat, infighting and
 
 ## New zombies
 
-`concealed_spawn.gd` owns the initial fill and replacement queue. It maintains the existing cap of **200 ordinary zombies**, plus the existing separate boss. Death or unexpected removal queues exactly one replacement after **1 second**. Duplicate notifications are ignored. Initial fill is spread over physics ticks instead of instantiating 200 zombies in one frame.
+`concealed_spawn.gd` owns the initial fill and replacement queue. Normal gameplay caps the ordinary population at **5**, plus the separate boss. Debug profiling can temporarily raise the director limit for stress scenarios, up to **200** ordinary zombies. Death or unexpected removal queues exactly one replacement after **1 second**. Duplicate notifications are ignored. Initial fill is spread over physics ticks.
 
 The nominal arrival distance remains **50 m**. Candidates use a 46–54 m band so the full population can occupy a forward arc without stacking on a single circle. Horizontal movement determines forward when moving; otherwise the player's actual facing determines it. Camera yaw remains independent. The arc extends 80 degrees to either side of forward.
 
 Placement requires ground support, a walkable surface normal, the existing 94 m boundary inset, clearance for a capsule, and 4 m of initial dash clearance. The safe return position has a 6 m exclusion. Physics areas with a nonzero collision layer reserve spawn space, including areas on layers other than world/enemies. Non-colliding skyline boxes are also excluded. Recent births reserve 2 m around their location; live body occupancy is checked by physics.
 
-If no candidate is safe, the request remains queued and retries after 0.25 seconds. This can temporarily leave fewer than 200 living zombies when the player faces out of the arena. Turning inward resumes filling. There is no inward/rear fallback and no relocation of living enemies.
+If no candidate is safe, the request remains queued and retries after 0.25 seconds. This can temporarily leave fewer than the configured population limit when the player faces out of the arena. Turning inward resumes filling. There is no inward/rear fallback and no relocation of living enemies.
 
 ## Concealment
 

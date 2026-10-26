@@ -15,7 +15,7 @@ const FLASHLIGHT_VISIBILITY := preload("res://scripts/flashlight_visibility.gd")
 const RADIAL_GROUND_SHADER := preload("res://shaders/radial_ground.gdshader")
 const RUIN_SURFACE_SHADER := preload("res://shaders/ruined_surface.gdshader")
 const ARENA_MAP_SCRIPT := preload("res://scripts/arena_map_upgrade.gd")
-const ZOMBIE_HORDE_SIZE := 15
+const ZOMBIE_HORDE_SIZE := 5
 const ZOMBIE_PERFORMANCE_CAPACITY := 200
 const ZOMBIE_SPAWN_DISTANCE := 50.0
 const VISIBILITY_RADIUS := 30.0
@@ -747,7 +747,7 @@ func stop_performance_scenario() -> void:
 			enemy.queue_free()
 	spawn_director.population_limit = ZOMBIE_HORDE_SIZE
 	_performance_scenario = ""
-	# Restore the ordinary endless 15-zombie population with a concealed map spread.
+	# Restore the ordinary endless 5-zombie population with a concealed map spread.
 	seed(int(Time.get_ticks_usec() & 0x7fffffff))
 	spawn_director.request_initial_population()
 	spawn_director.set_physics_process(true)

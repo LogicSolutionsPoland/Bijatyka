@@ -272,14 +272,14 @@ func _test_initial_population_distribution() -> void:
 	var positions: Array[Vector3] = []
 	director.spawn_requested.connect(func(at: Vector3) -> void: positions.append(at))
 	director.request_initial_population()
-	check(director._initial_population_pending == 15, "opening population queues exactly 15 ordinary zombies")
+	check(director._initial_population_pending == 5, "opening population queues exactly 5 ordinary zombies")
 	var budgets_ok := true
 	for frame in range(120):
 		await physics_frame
 		budgets_ok = budgets_ok and director.last_candidate_count <= Director.MAX_CANDIDATES_PER_TICK and director.last_spawn_count <= Director.MAX_SPAWNS_PER_TICK
-		if positions.size() == 15:
+		if positions.size() == 5:
 			break
-	check(positions.size() == 15, "initial population finishes at exactly 15 zombies")
+	check(positions.size() == 5, "initial population finishes at exactly 5 zombies")
 	check(director._initial_population_pending == 0 and director._pending.is_empty(), "initial population does not create replacement debt")
 	check(budgets_ok, "initial map spread respects candidate and per-tick spawn budgets")
 	var sectors := [0, 0, 0, 0]
@@ -337,9 +337,9 @@ func _test_population_and_replacements() -> void:
 	arena._boss_enemy.set_physics_process(false)
 	var director = arena.spawn_director
 	director.set_physics_process(false)
-	check(Foundation.ZOMBIE_HORDE_SIZE == 15 and director.population_limit == 15 and director._initial_population_pending == 15, "normal game starts with a strict 15-zombie population separate from the boss")
+	check(Foundation.ZOMBIE_HORDE_SIZE == 5 and director.population_limit == 5 and director._initial_population_pending == 5, "normal game starts with a strict 5-zombie population separate from the boss")
 	director.request_population()
-	check(director._pending.is_empty() and director._initial_population_pending == 15, "the normal spawn queue cannot schedule a 16th ordinary zombie")
+	check(director._pending.is_empty() and director._initial_population_pending == 5, "the normal spawn queue cannot schedule a 6th ordinary zombie")
 	director._initial_population_pending = 0
 	director._pending.clear()
 	director.population_limit = 200
@@ -435,6 +435,6 @@ func _test_population_and_replacements() -> void:
 	check(director._live.size() == 200 and director._pending.is_empty(), "spawn queue recovers after the camera returns")
 	arena._boss_enemy.receive_hit(10000)
 	check(director._live.size() == 200 and director._pending.is_empty(), "boss defeat does not add a 201st ordinary zombie")
-	check(Foundation.ZOMBIE_HORDE_SIZE == 15 and Foundation.ZOMBIE_SPAWN_DISTANCE == 50.0 and Foundation.VISIBILITY_RADIUS == 30.0, "15-zombie cap, 50 m replacement distance and 30 m visibility remain intact")
+	check(Foundation.ZOMBIE_HORDE_SIZE == 5 and Foundation.ZOMBIE_SPAWN_DISTANCE == 50.0 and Foundation.VISIBILITY_RADIUS == 30.0, "5-zombie cap, 50 m replacement distance and 30 m visibility remain intact")
 	arena.queue_free()
 	await process_frame

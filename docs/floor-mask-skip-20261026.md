@@ -12,7 +12,7 @@ path.
 
 The development profiler adds **Floor skip ON/OFF**. Hold the top-right corner
 for 1.5 seconds or press F3. Compare 20 seconds ON, OFF, ON at the same camera
-position, with the mask ON, map ON, 0.67x rendering and normal 15 zombies.
+position, with the mask ON, map ON, 0.67x rendering and normal 5 zombies.
 Record FPS, frame processing, draw calls and device temperature after warmup.
 The **Mask OFF** comparison also turns floor skipping off so it still isolates
 the entire visibility pass. This optimization does not change zombie AI,

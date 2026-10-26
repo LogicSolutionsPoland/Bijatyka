@@ -6,7 +6,7 @@ reducing work on the lit floor: the mobile shader keeps its two smooth broad
 noise layers and original fracture lines, uses one cell hash for subtle fine
 grit, and derives the warm stain from the existing smooth layers. Desktop
 retains the original full-detail path. The 30 m edge, semicircle, player keep
-area, camera, 15-zombie population, controls, map and Burning Horizon stay as
+area, camera, 5-zombie population, controls, map and Burning Horizon stay as
 before.
 
 The desktop rendered comparison found little clear change from FAST floor
