@@ -27,14 +27,14 @@ const PLAYER_BASE_POSITION := Vector3(0.0, 0.05, -5.2)
 const PLAYER_BASE_SAFE_RADIUS := 6.35
 const PLAYER_BASE_BOUNDARY_RADIUS := 6.70
 const PLAYER_BASE_BOUNDARY_SEGMENTS := 48
-# Reference: wide over-the-shoulder combat view, with Thornbound left of center
+# Reference: close third-person shoulder framing; keep Thornbound large at screen-left with combat clear ahead.
 # and enough distance to keep a group of enemies in frame.
 # Height is measured above the player's ground origin, not added to an existing camera offset.
-const CAMERA_PIVOT_HEIGHT := 1.55
-const CAMERA_FOLLOW_DISTANCE := 4.1
-const CAMERA_TARGET_SCREEN_X := 0.38
+const CAMERA_PIVOT_HEIGHT := 1.20
+const CAMERA_FOLLOW_DISTANCE := 2.5
+const CAMERA_TARGET_SCREEN_X := 0.35
 const CAMERA_VERTICAL_FOV := 66.0
-const CAMERA_PITCH_DEGREES := -12.0
+const CAMERA_PITCH_DEGREES := -16.0
 const CAMERA_YAW_RADIANS_PER_PIXEL := 0.006
 const CAMERA_PITCH_RADIANS_PER_PIXEL := 0.004
 const GAMEPAD_LOOK_DEADZONE := 0.12
