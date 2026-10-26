@@ -28,7 +28,6 @@ const PLAYER_BASE_SAFE_RADIUS := 6.35
 const PLAYER_BASE_BOUNDARY_RADIUS := 6.70
 const PLAYER_BASE_BOUNDARY_SEGMENTS := 48
 # Reference: close third-person shoulder framing; keep Thornbound large at screen-left with combat clear ahead.
-# and enough distance to keep a group of enemies in frame.
 # Height is measured above the player's ground origin, not added to an existing camera offset.
 const CAMERA_PIVOT_HEIGHT := 1.20
 const CAMERA_FOLLOW_DISTANCE := 2.5
