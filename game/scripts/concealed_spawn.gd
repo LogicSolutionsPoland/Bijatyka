@@ -223,7 +223,7 @@ func _opaque_box(body: StaticBody3D, shape_index: int) -> bool:
 		if child is MeshInstance3D and child.mesh is BoxMesh and child.is_visible_in_tree() and child.global_position.distance_to(player.global_position) <= visibility_radius:
 			if not child.transform.is_equal_approx(collision.transform) or not child.mesh.size.is_equal_approx(collision.shape.size):
 				continue
-			var material := child.get_active_material(0)
+			var material: Material = child.get_active_material(0)
 			if material is BaseMaterial3D:
 				var base_material := material as BaseMaterial3D
 				if base_material.transparency == BaseMaterial3D.TRANSPARENCY_DISABLED:
