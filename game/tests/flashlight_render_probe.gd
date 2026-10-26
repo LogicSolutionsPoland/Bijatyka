@@ -17,7 +17,11 @@ func _run() -> void:
 	var player_position: Vector3 = game.player.global_position
 	game._boss_enemy.global_position = player_position + Vector3(3.0, 0.05, 5.0)
 	game._update_boss_locator()
-	var lit_probe := _add_probe(game, player_position + Vector3(0.0, 1.4, -8.0), Color(1.0, 0.05, 0.03))
+	# The annotated beam is deliberately narrow in screen space. Project this
+	# verification marker into its center rather than the old top-of-screen spot.
+	var lit_screen_point := game.camera.get_viewport().get_visible_rect().size * Vector2(0.44, 0.53)
+	var lit_world_point := game.camera.project_position(lit_screen_point, 5.0)
+	var lit_probe := _add_probe(game, lit_world_point, Color(1.0, 0.05, 0.03))
 	# The close shoulder camera no longer shows the old probe behind the
 	# character. Place it in view beyond the 30 m flashlight radius instead.
 	var dark_probe := _add_probe(game, player_position + Vector3(0.0, 1.2, -34.0), Color(0.02, 1.0, 0.04))
@@ -38,8 +42,8 @@ func _run() -> void:
 			var dark_pixel := _sample(image, dark_point)
 			var player_pixel := _sample(image, player_point)
 			print("FLASHLIGHT_RENDER_SAMPLE " + JSON.stringify({"renderer": "GL Compatibility software desktop", "render_scale": scale, "lit_pixel": lit_pixel, "dark_pixel": dark_pixel, "player_pixel": player_pixel, "lit_uv": lit_point / Vector2(image.get_width(), image.get_height()), "dark_uv": dark_point / Vector2(image.get_width(), image.get_height()), "player_uv": player_point / Vector2(image.get_width(), image.get_height())}))
-			_check(lit_pixel.r > 0.45 and lit_pixel.g < 0.35, "red object is visible inside the semicircle at %.2fx" % scale)
-			_check(dark_pixel.g < 0.12, "green object is black outside the semicircle at %.2fx" % scale)
+			_check(lit_pixel.r > 0.45 and lit_pixel.g < 0.35, "red object is visible inside the target flashlight oval at %.2fx" % scale)
+			_check(dark_pixel.g < 0.12, "green object is black outside the flashlight oval at %.2fx" % scale)
 			_check(maxf(player_pixel.r, maxf(player_pixel.g, player_pixel.b)) > 0.04, "player remains readable at %.2fx" % scale)
 	_check(game.hud._root != null and game.hud._root.visible, "HUD remains visible above the 3D darkness mask")
 	_check(game.hud._boss_marker != null and game.hud._boss_marker.visible, "red boss locator remains visible when the boss is outside the flashlight semicircle")

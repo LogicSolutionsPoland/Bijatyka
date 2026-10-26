@@ -11,6 +11,7 @@ on:
       - codex/character-quality-slice-20261026
       - codex/pencil-sketch-android-arm64-20261026
       - codex/pencil-sketch-compat-integration-20261026
+      - codex/flashlight-oval-beam-20261026
 
 permissions:
   contents: read
