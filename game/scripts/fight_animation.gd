@@ -5,10 +5,20 @@ const LIBRARY_NAME := &"thornbound_combat"
 const ATTACK_SIDES := ["left", "right"]
 const ATTACK_KINDS := ["punch", "kick"]
 
-static func clip_path(kind: String, side: String) -> StringName:
-    return StringName("%s/%s_%s" % [String(LIBRARY_NAME), side, kind])
+static func clip_path(kind: String, side: String, library_name: StringName = LIBRARY_NAME) -> StringName:
+    return StringName("%s/%s_%s" % [String(library_name), side, kind])
 
 static func install(animation_player: AnimationPlayer, skeleton: Skeleton3D, attack_profiles: Dictionary) -> bool:
+    return install_retargeted(animation_player, skeleton, attack_profiles, {}, LIBRARY_NAME, 1.0)
+
+static func install_retargeted(
+    animation_player: AnimationPlayer,
+    skeleton: Skeleton3D,
+    attack_profiles: Dictionary,
+    bone_map: Dictionary,
+    library_name: StringName,
+    forward_axis_sign: float
+) -> bool:
     if animation_player == null or skeleton == null:
         return false
     var animation_root := animation_player.get_node_or_null(animation_player.root_node)
@@ -16,12 +26,13 @@ static func install(animation_player: AnimationPlayer, skeleton: Skeleton3D, att
         animation_root = animation_player.get_parent()
     if animation_root == null or not animation_root.is_ancestor_of(skeleton):
         return false
-    for required_bone: String in [
+    for source_bone: String in [
         "Hips", "Spine", "Chest",
         "LeftUpperArm", "LeftForearm", "LeftHand", "LeftThigh", "LeftShin", "LeftFoot",
         "RightUpperArm", "RightForearm", "RightHand", "RightThigh", "RightShin", "RightFoot"
     ]:
-        if skeleton.find_bone(required_bone) < 0:
+        var target_bone := String(bone_map.get(source_bone, source_bone))
+        if skeleton.find_bone(target_bone) < 0:
             return false
 
     var library := AnimationLibrary.new()
@@ -30,24 +41,40 @@ static func install(animation_player: AnimationPlayer, skeleton: Skeleton3D, att
         if profile.is_empty():
             return false
         for side: String in ATTACK_SIDES:
-            var animation := _build_animation(skeleton, animation_root.get_path_to(skeleton), kind, side, profile)
+            var animation := _build_animation(
+                skeleton,
+                animation_root.get_path_to(skeleton),
+                kind,
+                side,
+                profile,
+                bone_map,
+                forward_axis_sign
+            )
             if animation.get_track_count() < 3:
                 return false
             var animation_name := StringName("%s_%s" % [side, kind])
             if library.add_animation(animation_name, animation) != OK:
                 return false
 
-    if animation_player.has_animation_library(LIBRARY_NAME):
-        animation_player.remove_animation_library(LIBRARY_NAME)
-    if animation_player.add_animation_library(LIBRARY_NAME, library) != OK:
+    if animation_player.has_animation_library(library_name):
+        animation_player.remove_animation_library(library_name)
+    if animation_player.add_animation_library(library_name, library) != OK:
         return false
     for kind: String in ATTACK_KINDS:
         for side: String in ATTACK_SIDES:
-            if not animation_player.has_animation(clip_path(kind, side)):
+            if not animation_player.has_animation(clip_path(kind, side, library_name)):
                 return false
     return true
 
-static func _build_animation(skeleton: Skeleton3D, skeleton_path: NodePath, kind: String, side: String, profile: Dictionary) -> Animation:
+static func _build_animation(
+    skeleton: Skeleton3D,
+    skeleton_path: NodePath,
+    kind: String,
+    side: String,
+    profile: Dictionary,
+    bone_map: Dictionary,
+    forward_axis_sign: float
+) -> Animation:
     var windup := float(profile.get("windup", 0.18))
     var active := float(profile.get("active", 0.14))
     var recovery := float(profile.get("recovery", 0.38))
@@ -74,16 +101,19 @@ static func _build_animation(skeleton: Skeleton3D, skeleton_path: NodePath, kind
     var poses := _pose_frames(kind, side)
     for raw_bone_name in poses.keys():
         var bone_name := String(raw_bone_name)
-        var bone_index := skeleton.find_bone(bone_name)
+        var target_bone_name := String(bone_map.get(bone_name, bone_name))
+        var bone_index := skeleton.find_bone(target_bone_name)
         if bone_index < 0:
             continue
         var rest_rotation := skeleton.get_bone_rest(bone_index).basis.get_rotation_quaternion()
         var track := animation.add_track(Animation.TYPE_ROTATION_3D)
-        animation.track_set_path(track, NodePath("%s:%s" % [str(skeleton_path), bone_name]))
+        animation.track_set_path(track, NodePath("%s:%s" % [str(skeleton_path), target_bone_name]))
         animation.track_set_interpolation_type(track, Animation.INTERPOLATION_CUBIC)
         var eulers: Array = poses[bone_name]
         for key_index in range(mini(key_times.size(), eulers.size())):
-            var local_rotation := (rest_rotation * Quaternion.from_euler(eulers[key_index])).normalized()
+            var local_euler: Vector3 = eulers[key_index]
+            local_euler.x *= forward_axis_sign
+            var local_rotation := (rest_rotation * Quaternion.from_euler(local_euler)).normalized()
             animation.rotation_track_insert_key(track, float(key_times[key_index]), local_rotation)
     return animation
 

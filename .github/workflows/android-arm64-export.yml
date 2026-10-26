@@ -7,6 +7,7 @@ on:
       - codex/arena-map-apk-export-20261025
       - codex/fix-mobile-5fps-20261025
       - codex/mobile-performance-apk-export-20261026
+      - codex/mobile-zombies-5-fight-animations-20261026
 
 permissions:
   contents: read

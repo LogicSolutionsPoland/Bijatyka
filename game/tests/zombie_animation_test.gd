@@ -101,7 +101,7 @@ func _test_behavior_animation_connections() -> void:
 	_check(enemy._select_attack_animation(target, 1.2, ["Attack_Swipe_R"]) == "Attack_Swipe_R", "missing desired clip falls back to an available swipe")
 
 	enemy._begin_attack_animation(target, 1.2, 0.4)
-	_check(animations.current_animation == "Attack_Swipe_R", "attack windup starts the selected swipe")
+	_check(animations.current_animation == "enemy_combat/right_kick", "attack windup uses the player kick retargeted to the zombie rig")
 	animations.advance(0.4)
 	_check(absf(animations.current_animation_position - enemy._attack_contact_time) < 0.025, "attack contact pose reaches the existing windup expiry")
 	enemy.combat_target = target
@@ -109,7 +109,7 @@ func _test_behavior_animation_connections() -> void:
 	_check(absf(animations.current_animation_position - enemy._attack_contact_time) < 0.01, "existing resolution event is corrected to the authored contact pose")
 
 	_check(not enemy._play_animation("Missing_Clip"), "missing animation fails safely")
-	_check(animations.current_animation == "Attack_Swipe_R", "missing clip leaves the current visual fallback intact")
+	_check(animations.current_animation == "enemy_combat/right_kick", "missing clip leaves the current visual fallback intact")
 	_check(enemy.receive_hit(5, Vector3(0.0, 0.0, 1.0)) == 5, "nonlethal hit still applies its existing damage")
 	_check(animations.current_animation == "Hit_React", "nonlethal hit plays Hit_React")
 

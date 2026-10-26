@@ -7,6 +7,23 @@ signal defeated(enemy: Node)
 
 const ENEMY_MODEL_PATH := "res://assets/zombies/brutal_v2/Retribution_Zombie_01_Brutal_V2_RIGGED_LOD1.glb"
 const ENEMY_MODEL_YAW_OFFSET := PI
+const FIGHT_ANIMATION_BUILDER := preload("res://scripts/fight_animation.gd")
+const ENEMY_FIGHT_LIBRARY := &"enemy_combat"
+const ENEMY_FIGHT_FORWARD_AXIS_SIGN := -1.0
+const ENEMY_BONE_MAP := {
+	"LeftUpperArm": "UpperArm_L",
+	"LeftForearm": "Forearm_L",
+	"LeftHand": "Hand_L",
+	"LeftThigh": "Thigh_L",
+	"LeftShin": "Shin_L",
+	"LeftFoot": "Foot_L",
+	"RightUpperArm": "UpperArm_R",
+	"RightForearm": "Forearm_R",
+	"RightHand": "Hand_R",
+	"RightThigh": "Thigh_R",
+	"RightShin": "Shin_R",
+	"RightFoot": "Foot_R",
+}
 const SHADOW_POLICY := preload("res://scripts/shadow_policy.gd")
 const GRAVITY := 24.0
 const RENDER_RADIUS := 30.0
@@ -39,6 +56,9 @@ var _player: FoundationPlayer
 var combat_fx_pool: Node
 var _model: Node3D
 var _animation_player: AnimationPlayer
+var _skeleton: Skeleton3D
+var _fight_animations_ready := false
+var _attack_sequence := 0
 var _death_animation := ""
 var _death_started := false
 var _death_completed := false
@@ -240,6 +260,12 @@ func _apply_variant() -> void:
 			telegraph_duration = 1.1
 			recovery_duration = 1.1
 
+func _fight_attack_profiles() -> Dictionary:
+	var windup := telegraph_duration if is_boss else telegraph_duration * 0.55
+	var recovery := recovery_duration if is_boss else recovery_duration * 0.65
+	var profile := {"windup": windup, "active": 0.04, "recovery": recovery}
+	return {"punch": profile.duplicate(), "kick": profile.duplicate()}
+
 func _build_visual() -> void:
 	_visual_root = Node3D.new()
 	_visual_root.name = "VisualRoot"
@@ -283,6 +309,19 @@ func _adopt_detailed_model(model: Node3D) -> void:
 	model.rotation = Vector3(0.0, ENEMY_MODEL_YAW_OFFSET, 0.0)
 	model.scale = Vector3.ONE * 1.38 if is_boss else (Vector3(1.16, 1.0, 1.15) if enemy_variant == "brute" else (Vector3(0.91, 1.03, 0.91) if enemy_variant == "stalker" else Vector3.ONE))
 	_animation_player = model.find_child("AnimationPlayer", true, false) as AnimationPlayer
+	_skeleton = null
+	var skeleton_nodes := model.find_children("*", "Skeleton3D", true, false)
+	if not skeleton_nodes.is_empty():
+		_skeleton = skeleton_nodes[0] as Skeleton3D
+	if _animation_player != null and _skeleton != null:
+		_fight_animations_ready = FIGHT_ANIMATION_BUILDER.install_retargeted(
+			_animation_player,
+			_skeleton,
+			_fight_attack_profiles(),
+			ENEMY_BONE_MAP,
+			ENEMY_FIGHT_LIBRARY,
+			ENEMY_FIGHT_FORWARD_AXIS_SIGN
+		)
 	if _animation_player != null:
 		for loop_name in ["Idle", "Walk", "Sprint"]:
 			if _animation_player.has_animation(loop_name):
@@ -303,6 +342,8 @@ func _release_detailed_model() -> void:
 		if _animation_player.animation_finished.is_connected(_on_animation_finished):
 			_animation_player.animation_finished.disconnect(_on_animation_finished)
 	_animation_player = null
+	_skeleton = null
+	_fight_animations_ready = false
 	_model = null
 	_full_animation_selected = false
 	_update_visual_visibility()
@@ -659,6 +700,7 @@ func _update_ai(delta: float, distance: float) -> void:
 		elif distance <= attack_range and _clear_sight(combat_target):
 			state = "windup"
 			state_time = telegraph_duration if is_boss else telegraph_duration * 0.55
+			_attack_sequence += 1
 			_attack_latched = true
 			velocity.x = 0.0
 			velocity.z = 0.0
@@ -754,18 +796,33 @@ func _is_high_speed_chase() -> bool:
 	return _spawn_assault_time > 0.0 or (not is_boss and move_speed * 1.45 >= 4.5)
 
 func _attack_clip_contact_time(animation_name: String) -> float:
+	if _animation_player != null and _animation_player.has_animation(animation_name):
+		var clip := _animation_player.get_animation(animation_name)
+		var marker_time := clip.get_marker_time(&"contact")
+		if marker_time > 0.0:
+			return marker_time
 	match animation_name:
 		"Attack_Swipe_L", "Attack_Swipe_R": return 0.36666667
 		"Attack_Bite": return 0.53333336
 	return 0.0
 
 func _select_attack_animation(target: Node3D, distance: float, available: Array[String] = []) -> String:
+	if _fight_animations_ready:
+		var side_name := "right"
+		if is_instance_valid(target):
+			var offset := target.global_position - global_position
+			side_name = "left" if global_basis.x.dot(offset) < 0.0 else "right"
+		var kind := _fight_attack_kind(distance)
+		var player_clip := String(FIGHT_ANIMATION_BUILDER.clip_path(kind, side_name, ENEMY_FIGHT_LIBRARY))
+		if available.is_empty() or available.has(player_clip):
+			return player_clip
+
 	var desired := "Attack_Swipe_L"
 	if distance <= attack_range * 0.68:
 		desired = "Attack_Bite"
 	elif is_instance_valid(target):
-		var offset := target.global_position - global_position
-		var side := global_basis.x.dot(offset)
+		var legacy_offset := target.global_position - global_position
+		var side := global_basis.x.dot(legacy_offset)
 		desired = "Attack_Swipe_L" if side < 0.0 else "Attack_Swipe_R"
 	var candidates: Array[String] = [desired, "Attack_Swipe_L", "Attack_Swipe_R", "Attack_Bite"]
 	if available.is_empty():
@@ -775,12 +832,28 @@ func _select_attack_animation(target: Node3D, distance: float, available: Array[
 			return candidate
 	return ""
 
+func _fight_attack_kind(distance: float) -> String:
+	if distance <= attack_range * 0.68:
+		return "punch"
+	if enemy_variant == "stalker":
+		return "kick"
+	if enemy_variant == "brute" or is_boss:
+		return "kick" if _attack_sequence % 2 == 1 else "punch"
+	return "kick" if _attack_sequence % 3 == 2 else "punch"
+
 func _begin_attack_animation(target: Node3D, distance: float, windup_time: float) -> void:
 	var available: Array[String] = []
 	if _animation_player != null:
-		for candidate in ["Attack_Swipe_L", "Attack_Swipe_R", "Attack_Bite"]:
-			if _animation_player.has_animation(candidate):
-				available.append(candidate)
+		if _fight_animations_ready:
+			for kind in ["punch", "kick"]:
+				for side in ["left", "right"]:
+					var candidate := String(FIGHT_ANIMATION_BUILDER.clip_path(kind, side, ENEMY_FIGHT_LIBRARY))
+					if _animation_player.has_animation(candidate):
+						available.append(candidate)
+		else:
+			for candidate in ["Attack_Swipe_L", "Attack_Swipe_R", "Attack_Bite"]:
+				if _animation_player.has_animation(candidate):
+					available.append(candidate)
 	_attack_animation = _select_attack_animation(target, distance, available)
 	_attack_contact_time = _attack_clip_contact_time(_attack_animation)
 	var speed := _attack_contact_time / maxf(0.01, windup_time) if _attack_contact_time > 0.0 else 1.0
