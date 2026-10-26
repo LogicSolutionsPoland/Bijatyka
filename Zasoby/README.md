@@ -9,3 +9,7 @@ Trzy otrzymane paczki modeli postapokaliptycznych są skatalogowane w [AtomicRea
 Własne lokalne kopie ZIP przechowuj w `Zasoby/AtomicRealm/`. Pliki w tym podfolderze są pomijane przez Git, poza dokumentacją i `.gitignore`.
 
 Dopuszczalne jest wykorzystanie i modyfikacja modeli we własnej grze; przed publicznym udostępnieniem plików źródłowych zawsze sprawdź warunki oryginalnej licencji.
+
+## Horror Environment & VFX
+
+Sześć paczek: opuszczony dom, dom z kolizjami, kanały, metro PSX, tekstury horror 512×512 oraz Brackeys VFX. Lista plików, sumy SHA-256 i status licencji: [HorrorEnvironmentVFX/README.md](HorrorEnvironmentVFX/README.md). Źródłowe archiwa pozostają lokalne, poza publicznym Git.
