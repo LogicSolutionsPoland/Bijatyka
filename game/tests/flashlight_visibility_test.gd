@@ -33,6 +33,17 @@ func _run() -> void:
 	_check(is_equal_approx(manager.get_radial_weight(22.0), 1.0), "illumination stays bright through 22 m")
 	_check(manager.get_radial_weight(26.0) > 0.0 and manager.get_radial_weight(26.0) < 1.0, "outer 22–30 m band fades smoothly")
 	_check(is_zero_approx(manager.get_radial_weight(30.0)), "illumination reaches black at 30 m")
+	# The visible window now matches the red-oval screenshot; near-player
+	# geometry is handled by a separate height-gated exception.
+	_check(manager.get_oval_weight(VisibilityManager.OVAL_CENTER_UV) > 0.999, "center of the elliptical flashlight is fully lit")
+	_check(is_zero_approx(manager.get_oval_weight(Vector2(0.02, 0.60))), "left side outside the red oval is black")
+	_check(is_zero_approx(manager.get_oval_weight(Vector2(0.90, 0.60))), "right side outside the red oval is black")
+	_check(is_zero_approx(manager.get_oval_weight(Vector2(0.44, 0.10))), "top outside the red oval is black")
+	_check(is_zero_approx(manager.get_oval_weight(Vector2(0.44, 0.95))), "bottom outside the red oval is black")
+	var feather_point := VisibilityManager.OVAL_CENTER_UV + Vector2(VisibilityManager.OVAL_RADIUS_UV.x * 0.97, 0.0)
+	_check(manager.get_oval_weight(feather_point) > 0.0 and manager.get_oval_weight(feather_point) < 1.0, "the outline has a short feather instead of a hard pixel edge")
+	_check((manager._material.get_shader_parameter("oval_center_uv") as Vector2).distance_to(VisibilityManager.OVAL_CENTER_UV) < 0.001, "runtime mask receives the target beam center")
+	_check((manager._material.get_shader_parameter("oval_radius_uv") as Vector2).distance_to(VisibilityManager.OVAL_RADIUS_UV) < 0.001, "runtime mask receives the target beam radius")
 
 	manager.set_aim_yaw(PI * 0.5)
 	_check(manager.is_point_in_sector(game.player.global_position + Vector3(-10, 0, 0)), "positive camera yaw lights the camera's leftward view")
