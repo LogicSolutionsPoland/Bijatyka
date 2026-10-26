@@ -4,6 +4,7 @@ const PLAYER_SCRIPT := preload("res://scripts/player_controller.gd")
 const ENEMY_SCRIPT := preload("res://scripts/enemy.gd")
 const STYLE_SCRIPT := preload("res://scripts/pencil_sketch_style.gd")
 const PENCIL_SHADER := preload("res://shaders/pencil_sketch.gdshader")
+const PENCIL_DOUBLE_SIDED_SHADER := preload("res://shaders/pencil_sketch_double_sided.gdshader")
 
 var failures: Array[String] = []
 var checks := 0
@@ -73,11 +74,11 @@ func _count_sketch_surfaces(node: Node) -> Vector2i:
 		if mesh_instance.mesh == null:
 			continue
 		for surface_index in range(mesh_instance.mesh.get_surface_count()):
-			var material := mesh_instance.get_active_material(surface_index)
-			if not material is ShaderMaterial or (material as ShaderMaterial).shader != PENCIL_SHADER:
+			var material := mesh_instance.get_active_material(surface_index) as ShaderMaterial
+			if material == null or not [PENCIL_SHADER, PENCIL_DOUBLE_SIDED_SHADER].has(material.shader):
 				continue
 			styled += 1
-			var sketch_material := material as ShaderMaterial
+			var sketch_material := material
 			if bool(sketch_material.get_shader_parameter("use_albedo_texture")) \
 					and sketch_material.get_shader_parameter("albedo_texture") is Texture2D:
 				textured += 1
