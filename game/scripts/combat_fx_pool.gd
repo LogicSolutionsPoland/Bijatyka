@@ -84,7 +84,14 @@ func play_zombie_hit_flash(at: Vector3, is_jump_hit: bool) -> bool:
 	var effect := acquire_effect("zombie_hit_flash")
 	if effect == null:
 		return false
-	effect.begin_hit_flash(at, is_jump_hit)
+	# Face the blood-splatter billboard toward the player and place it just
+	# outside the zombie mesh so its depth test does not hide the sprite.
+	var impact_position := at
+	if is_instance_valid(visibility_origin):
+		var toward_viewer := visibility_origin.global_position - at
+		if toward_viewer.length_squared() > 0.0001:
+			impact_position += toward_viewer.normalized() * 0.35
+	effect.begin_hit_flash(impact_position, is_jump_hit)
 	return true
 
 func acquire_effect(kind: String) -> FoundationTransientCombatFx:
