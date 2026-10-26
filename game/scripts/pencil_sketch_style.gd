@@ -1,7 +1,6 @@
 extends Node
 
-const SINGLE_SIDED_SHADER: Shader = preload("res://shaders/pencil_sketch.gdshader")
-const DOUBLE_SIDED_SHADER: Shader = preload("res://shaders/pencil_sketch_double_sided.gdshader")
+const PENCIL := preload("res://scripts/pencil.gd")
 const STYLE_META := &"_pencil_sketch_materials_processed"
 const OPAQUE_META := &"_pencil_sketch_opaque_material"
 
@@ -38,7 +37,9 @@ func _apply_to_mesh(instance_id: int) -> void:
 	var object: Object = instance_from_id(instance_id)
 	if not is_instance_valid(object) or not object is MeshInstance3D:
 		return
-	var mesh := object as MeshInstance3D
+	apply_mesh(object as MeshInstance3D)
+
+func apply_mesh(mesh: MeshInstance3D) -> void:
 	if mesh.mesh == null or mesh.has_meta(STYLE_META):
 		return
 
@@ -70,7 +71,7 @@ func _styled_material(source: Material) -> ShaderMaterial:
 	var base := source as StandardMaterial3D
 	if base.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED:
 		return null
-	if base.shading_mode == BaseMaterial3D.SHADING_MODE_UNSHADED or base.emission_enabled:
+	if base.shading_mode == BaseMaterial3D.SHADING_MODE_UNSHADED or base.emission_enabled or base.blend_mode == BaseMaterial3D.BLEND_MODE_ADD:
 		return null
 	if base.next_pass != null:
 		return null
@@ -80,14 +81,26 @@ func _styled_material(source: Material) -> ShaderMaterial:
 	if _material_cache.has(cache_key):
 		return _material_cache[cache_key] as ShaderMaterial
 
-	var styled := ShaderMaterial.new()
-	styled.shader = DOUBLE_SIDED_SHADER if is_double_sided else SINGLE_SIDED_SHADER
+	var styled := PENCIL.from_material(base)
 	styled.set_meta(OPAQUE_META, true)
-	styled.set_shader_parameter("albedo_tint", base.albedo_color)
-	styled.set_shader_parameter("use_albedo_texture", base.albedo_texture != null)
-	if base.albedo_texture != null:
-		styled.set_shader_parameter("albedo_texture", base.albedo_texture)
-	styled.set_shader_parameter("use_vertex_color", base.vertex_color_use_as_albedo)
+	# The supplied material draws its lines from the directional key light.
+	# A small wash preserves the detailed source textures as the graphite reads.
+	styled.set_shader_parameter(&"wash", 0.16)
+	styled.set_shader_parameter(&"blotch", 0.08)
+	styled.set_shader_parameter(&"shadow_color", Color(0.72, 0.72, 0.75))
+	styled.set_shader_parameter(&"graphite_color", Color(0.10, 0.10, 0.13))
+	styled.set_shader_parameter(&"graphite_strength", 0.96)
+	styled.set_shader_parameter(&"hatch_space", 0)
+	styled.set_shader_parameter(&"hatch_spacing", 6.5)
+	styled.set_shader_parameter(&"crosshatch", 0.68)
+	styled.set_shader_parameter(&"waver", 0.50)
+	styled.set_shader_parameter(&"roughness", 0.34)
+	var outline := styled.next_pass as ShaderMaterial
+	outline.set_shader_parameter(&"outline_width", 4.0)
+	outline.set_shader_parameter(&"outline_color", Color(0.09, 0.09, 0.12))
+	outline.set_shader_parameter(&"outline_variation", 0.45)
+	outline.set_shader_parameter(&"outline_fade_start", 16.0)
+	outline.set_shader_parameter(&"outline_fade_end", 34.0)
 	_material_cache[cache_key] = styled
 	return styled
 

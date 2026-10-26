@@ -3,6 +3,7 @@ extends Node3D
 ## All geometry is procedural, has no collision, and uses the existing weathering shader.
 
 const RUIN_SURFACE_SHADER := preload("res://shaders/ruined_surface.gdshader")
+const PENCIL := preload("res://scripts/pencil.gd")
 var _static_box_batches: Dictionary = {}
 
 func _ready() -> void:
@@ -177,6 +178,7 @@ func _surface(color: Color, roughness: float, metallic: float = 0.0) -> ShaderMa
 	material.set_shader_parameter("base_color", color)
 	material.set_shader_parameter("surface_roughness", roughness)
 	material.set_shader_parameter("surface_metallic", metallic)
+	material.next_pass = PENCIL.make_outline(2.8, Color(0.09, 0.09, 0.12))
 	return material
 
 func _glow(color: Color) -> StandardMaterial3D:

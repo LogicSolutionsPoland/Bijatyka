@@ -1,8 +1,8 @@
 extends SceneTree
 
 const Foundation := preload("res://scripts/foundation.gd")
-const PENCIL_SHADER := preload("res://shaders/pencil_sketch.gdshader")
-const PENCIL_DOUBLE_SIDED_SHADER := preload("res://shaders/pencil_sketch_double_sided.gdshader")
+const PENCIL_SHADER := preload("res://shaders/pencil.gdshader")
+const PENCIL_DOUBLE_SIDED_SHADER := preload("res://shaders/pencil_double_sided.gdshader")
 
 var failures: Array[String] = []
 var checks := 0
@@ -74,7 +74,7 @@ func _run() -> void:
 				styled_count += 1
 				if source_material != null and source_material.albedo_texture != null:
 					var rendered_texture := active_material.get_shader_parameter("albedo_texture") as Texture2D
-					if bool(active_material.get_shader_parameter("use_albedo_texture")) and rendered_texture == source_material.albedo_texture:
+					if rendered_texture == source_material.albedo_texture:
 						textured_count += 1
 	_check(mesh_count >= 8, "player detail is split across multiple material meshes (%d)" % mesh_count)
 	_check(skinned_count >= 8, "all visible character pieces are skinned (%d)" % skinned_count)

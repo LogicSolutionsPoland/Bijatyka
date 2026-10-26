@@ -3,8 +3,10 @@ extends SceneTree
 const PLAYER_SCRIPT := preload("res://scripts/player_controller.gd")
 const ENEMY_SCRIPT := preload("res://scripts/enemy.gd")
 const STYLE_SCRIPT := preload("res://scripts/pencil_sketch_style.gd")
-const PENCIL_SHADER := preload("res://shaders/pencil_sketch.gdshader")
-const PENCIL_DOUBLE_SIDED_SHADER := preload("res://shaders/pencil_sketch_double_sided.gdshader")
+const PENCIL_SHADER := preload("res://shaders/pencil.gdshader")
+const PENCIL_DOUBLE_SIDED_SHADER := preload("res://shaders/pencil_double_sided.gdshader")
+const OUTLINE_SHADER := preload("res://shaders/pencil_outline.gdshader")
+const SCREEN_SHADER := preload("res://shaders/pencil_screen.gdshader")
 
 var failures: Array[String] = []
 var checks := 0
@@ -14,7 +16,8 @@ func _initialize() -> void:
 
 func _run() -> void:
 	_check(String(ProjectSettings.get_setting("autoload/PencilSketchStyle", "")) == "*res://scripts/pencil_sketch_style.gd", "Pencil Sketch is enabled by its project autoload")
-	_check(ResourceLoader.exists("res://shaders/pencil_sketch_double_sided.gdshader"), "double-sided animated fabric shader is present")
+	_check(ResourceLoader.exists("res://shaders/pencil_double_sided.gdshader"), "double-sided animated fabric shader is present")
+	_check(Pencil.shader_for_screen(false, "gl_compatibility") == SCREEN_SHADER.resource_path, "GL Compatibility selects the supplied depth screen shader")
 	var style_manager := root.get_node_or_null("PencilSketchStyle")
 	if style_manager == null:
 		style_manager = STYLE_SCRIPT.new()
@@ -79,9 +82,10 @@ func _count_sketch_surfaces(node: Node) -> Vector2i:
 				continue
 			styled += 1
 			_check(material.has_meta(&"_pencil_sketch_opaque_material"), "styled opaque surface retains its spawn-occluder material marker")
+			_check(material.next_pass is ShaderMaterial and material.next_pass.shader == OUTLINE_SHADER, "animated surface has the source inverted-hull pencil outline")
+			_check(float(material.get_shader_parameter(&"graphite_strength")) > 0.9, "graphite is strong enough for the default view")
 			var sketch_material := material
-			if bool(sketch_material.get_shader_parameter("use_albedo_texture")) \
-					and sketch_material.get_shader_parameter("albedo_texture") is Texture2D:
+			if sketch_material.get_shader_parameter("albedo_texture") is Texture2D:
 				textured += 1
 	return Vector2i(styled, textured)
 

@@ -87,6 +87,21 @@ jobs:
           path: build/character_views/*.png
           if-no-files-found: error
 
+      - name: Render visible Pencil Sketch gameplay in GL Compatibility
+        run: |
+          set -o pipefail
+          xvfb-run -a -s "-screen 0 1600x1000x24" env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/pencil_render_probe.gd 2>&1 | tee "$RUNNER_TEMP/pencil-render.log"
+          grep -q "PASS: visible Pencil Sketch Compatibility gameplay" "$RUNNER_TEMP/pencil-render.log"
+          test -s build/pencil_visual_qa/gameplay.png
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/pencil-render.log"; then exit 1; fi
+
+      - name: Upload Pencil Sketch gameplay evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bijatyka-PencilSketch-gameplay-evidence
+          path: build/pencil_visual_qa/gameplay.png
+          if-no-files-found: error
+
       - name: Check flashlight sector, camera framing, and aim controls
         run: |
           set -o pipefail
