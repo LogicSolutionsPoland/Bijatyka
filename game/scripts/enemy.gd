@@ -290,7 +290,9 @@ func _ensure_detailed_model() -> void:
 			elif enemy_variant == "stalker":
 				_model.scale = Vector3(0.91, 1.03, 0.91)
 			_animation_player = _model.find_child("AnimationPlayer", true, false) as AnimationPlayer
-			_skeleton = _model.find_child("Skeleton3D", true, false) as Skeleton3D
+			var skeleton_nodes := _model.find_children("*", "Skeleton3D", true, false)
+			if not skeleton_nodes.is_empty():
+				_skeleton = skeleton_nodes[0] as Skeleton3D
 			if _animation_player != null and _skeleton != null:
 				_fight_animations_ready = FIGHT_ANIMATION_BUILDER.install_retargeted(
 					_animation_player,
