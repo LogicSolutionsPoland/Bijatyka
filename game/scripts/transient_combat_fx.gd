@@ -51,7 +51,8 @@ func _build_impact(impact_sphere: SphereMesh, impact_shard: BoxMesh, hit_flash: 
 		_hit_sprite.hframes = 6
 		_hit_sprite.vframes = 5
 		_hit_sprite.frame = BLOOD_FIRST_FRAME
-		_hit_sprite.pixel_size = 0.027
+		# The optimized atlas is 138x100: each 23x20 frame spans ~0.92m.
+		_hit_sprite.pixel_size = 0.040
 		_hit_sprite.position = Vector3(0.0, 1.0, 0.0)
 		_hit_sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 		_hit_sprite.shaded = false
