@@ -48,7 +48,22 @@ void fragment() {
 		float player_weight = 1.0 - smoothstep(player_keep_radius * 0.72, player_keep_radius, distance_to_player);
 		float illuminated_weight = max(sector_weight * range_weight, player_weight);
 
+		// Use the existing fullscreen flashlight pass for graphite silhouettes.
+		// A second depth difference rejects the smooth slope of the ground and
+		// responds to object boundaries without another draw or mesh shell.
+		float edge_ink = 0.0;
+		if (illuminated_weight > 0.08) {
+			vec2 pixel = 1.5 / vec2(textureSize(depth_texture, 0));
+			float left_depth = textureLod(depth_texture, SCREEN_UV - vec2(pixel.x, 0.0), 0.0).r;
+			float right_depth = textureLod(depth_texture, SCREEN_UV + vec2(pixel.x, 0.0), 0.0).r;
+			float up_depth = textureLod(depth_texture, SCREEN_UV - vec2(0.0, pixel.y), 0.0).r;
+			float down_depth = textureLod(depth_texture, SCREEN_UV + vec2(0.0, pixel.y), 0.0).r;
+			float difference = max(abs(left_depth + right_depth - 2.0 * depth),
+				abs(up_depth + down_depth - 2.0 * depth));
+			float threshold = max(0.00002, (1.0 - depth) * 0.025);
+			edge_ink = smoothstep(threshold, threshold * 3.0, difference) * 0.82;
+		}
 		ALBEDO = vec3(0.0);
-		ALPHA = 1.0 - illuminated_weight;
+		ALPHA = max(1.0 - illuminated_weight, edge_ink * illuminated_weight);
 	}
 }

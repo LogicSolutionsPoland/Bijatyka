@@ -5,10 +5,6 @@ uniform sampler2D albedo_texture : source_color, filter_linear_mipmap, repeat_en
 uniform vec4 albedo_tint : source_color = vec4(1.0);
 uniform bool use_albedo_texture = false;
 uniform bool use_vertex_color = false;
-uniform float hatch_density : hint_range(32.0, 160.0, 1.0) = 92.0;
-uniform float hatch_strength : hint_range(0.0, 0.35, 0.01) = 0.18;
-uniform float contour_strength : hint_range(0.0, 0.75, 0.01) = 0.48;
-uniform float color_retention : hint_range(0.0, 1.0, 0.01) = 0.44;
 uniform vec3 sketch_light_direction = vec3(-0.42, 0.82, 0.38);
 
 varying vec3 sketch_light_direction_view;
@@ -27,27 +23,28 @@ void fragment() {
 	}
 
 	vec3 normal = normalize(NORMAL);
-	vec3 view_direction = normalize(VIEW);
-	float diffuse = max(dot(normal, normalize(sketch_light_direction_view)), 0.0);
-	float tone_band = diffuse < 0.20 ? 0.26
-		: diffuse < 0.46 ? 0.46
-		: diffuse < 0.74 ? 0.70
-		: 0.94;
-	float tone = 0.22 + tone_band * 0.72;
+	float light = max(dot(normal, normalize(sketch_light_direction_view)), 0.0);
+	float source_value = dot(source.rgb, vec3(0.299, 0.587, 0.114));
+	float shade = clamp(0.86 - light * 0.65 + (0.48 - source_value) * 0.18, 0.0, 1.0);
 
-	vec2 hatch_uv = UV * hatch_density;
-	float hatch_aa = max(fwidth(hatch_uv.x + hatch_uv.y) * 0.85, 0.035);
-	float diagonal_a = abs(fract(hatch_uv.x + hatch_uv.y) - 0.5);
-	float diagonal_b = abs(fract(hatch_uv.x - hatch_uv.y) - 0.5);
-	float line_a = 1.0 - smoothstep(0.0, hatch_aa, diagonal_a);
-	float line_b = 1.0 - smoothstep(0.0, hatch_aa, diagonal_b);
-	float shadow_a = 1.0 - smoothstep(0.18, 0.58, diffuse);
-	float shadow_b = 1.0 - smoothstep(0.04, 0.30, diffuse);
-	float hatching = clamp(max(line_a * shadow_a, line_b * shadow_b), 0.0, 1.0);
+	// Screen-sized strokes remain legible at the default half-resolution mobile render.
+	// Crosshatching appears only in deeper shade, like repeated pencil passes.
+	vec2 pencil = FRAGCOORD.xy * 0.14;
+	float aa_a = max(fwidth(pencil.x + pencil.y * 0.66), 0.035);
+	float aa_b = max(fwidth(pencil.x - pencil.y * 0.72), 0.035);
+	float stroke_a = 1.0 - smoothstep(0.055, 0.055 + aa_a,
+		abs(fract(pencil.x + pencil.y * 0.66) - 0.5));
+	float stroke_b = 1.0 - smoothstep(0.055, 0.055 + aa_b,
+		abs(fract(pencil.x - pencil.y * 0.72) - 0.5));
+	float strokes = stroke_a * smoothstep(0.15, 0.52, shade)
+		+ stroke_b * smoothstep(0.40, 0.78, shade);
 
-	float contour = pow(1.0 - clamp(abs(dot(normal, view_direction)), 0.0, 1.0), 3.0);
-	float ink_coverage = clamp(1.0 - hatching * hatch_strength - contour * contour_strength, 0.16, 1.0);
-	float luminance = dot(source.rgb, vec3(0.299, 0.587, 0.114));
-	vec3 graphite_color = mix(vec3(luminance), source.rgb, color_retention);
-	ALBEDO = graphite_color * tone * ink_coverage;
+	float contour = pow(1.0 - clamp(abs(dot(normal, normalize(VIEW))), 0.0, 1.0), 2.1);
+	float graphite = clamp(0.06 + shade * 0.32 + (1.0 - source_value) * 0.12
+		+ strokes * 0.50 + contour * 0.64, 0.0, 0.94);
+	vec3 paper = vec3(0.91, 0.895, 0.86);
+	vec3 lead = vec3(0.075, 0.078, 0.087);
+	vec3 drawn = mix(paper, lead, graphite);
+	// Only a trace of the material hue remains; magic and emissive FX keep color.
+	ALBEDO = mix(drawn, drawn * (0.75 + source.rgb * 0.25), 0.07);
 }

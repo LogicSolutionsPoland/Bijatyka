@@ -1,19 +1,34 @@
-# Pencil Sketch 3D style
+# Pencil drawn 3D style
 
-## Runtime style
+## What appears in the game
 
-The default project autoload applies one shared spatial shader material per source material to opaque, lit StandardMaterial3D surfaces. It keeps the original albedo texture and tint, reduces saturation, quantizes a simple camera-stable light into four graphite tones, adds UV-space crosshatching in shadows, and darkens view-facing edges for an ink contour. A double-sided variant preserves surfaces such as the torn cloak.
+The default autoload converts opaque, lit character and prop materials to a
+warm paper and dark graphite palette. Player and zombie textures still inform
+shading, but the original saturated diffuse colors no longer dominate the
+scene. Broad diagonal pencil lines cross in deep shadows. Strokes use screen
+pixels rather than tiny model UV islands so they remain visible at the default
+Android 0.50x 3D render scale. The two-sided variant covers torn cloth.
 
-The style runs on the animated player, normal zombie rigs, and the reconstructed close-range zombie without changing their meshes, skeletons, animations, collision, or controls. Materials that are emissive, transparent, unshaded, or already use a custom shader are left intact so the Burning Horizon, flashlight composite, and red, orange, and magic effects keep their intended accents.
+The ground, ruin shader, and far-zombie crowd shader share the paper and lead
+values. Existing soot, grit, wear, and fractures become changes in graphite
+density. The flashlight's existing full-screen pass samples four nearby depth
+values inside the lit area to draw silhouettes and contact edges without a
+second pass or duplicate geometry. Darkness beyond the forward sector remains
+black. Emissive fire, magic, combat feedback, and HUD retain color and
+readability.
 
-The existing ruined-surface and radial-ground shaders add restrained desaturation and world-space hatching. The distant zombie MultiMesh keeps one draw and receives matching graphite tones and contours in its existing crowd shader. No full-screen effect, outline pass, extra geometry, or additional draw call was added.
+## Validation
 
-## Android budget
+Godot 4.7.2 imports and the material integration test check the player and
+zombie skeletons, textures, and pencil material assignment. The performance
+workflow compiles the Compatibility shaders, captures five actual scene views,
+and checks flashlight visibility. The Android export checks for one ARM64 APK
+at version 0.1.4-pencil-drawn. The preceding 0.1.3 shader was too subtle:
+near-black map colors swallowed its marks, and dense UV hatching disappeared
+when scaled for a phone. This revision addresses both causes.
 
-Character style shaders use one optional albedo sample, one shared material instance per source material, a few scalar operations, and anti-aliased procedural lines. They do not sample normal or roughness maps. Existing textures and geometric detail remain in place; the shader simplifies lighting and specular work.
-
-## Validation and limits
-
-The Compatibility renderer shader compile, actual scene capture, existing gameplay/combat/spawning/flashlight tests, and the ARM64 package checks run in GitHub Actions. CI CPU timings and software-rendered screenshots are not Android GPU measurements. A real device is needed to measure phone frame pacing, heat, and battery impact.
-
-The edge contour is a Fresnel-style darkening in the material shader rather than a second-pass geometric outline. Hatching follows the source UVs on models and world axes on the arena surfaces. Emissive visual effects intentionally retain their authored colors.
+The extra depth samples do cost fragment work inside the flashlight sector.
+CI software rendering cannot establish Android frame rate, heat, or battery
+impact; those need a physical device test. Geometry and map detail are still
+the existing models and procedural ruins, and transparent/emissive surfaces
+retain their authored materials.
