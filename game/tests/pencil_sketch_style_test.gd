@@ -2,6 +2,7 @@ extends SceneTree
 
 const PLAYER_SCRIPT := preload("res://scripts/player_controller.gd")
 const ENEMY_SCRIPT := preload("res://scripts/enemy.gd")
+const STYLE_SCRIPT := preload("res://scripts/pencil_sketch_style.gd")
 const PENCIL_SHADER := preload("res://shaders/pencil_sketch.gdshader")
 
 var failures: Array[String] = []
@@ -11,8 +12,14 @@ func _initialize() -> void:
 	call_deferred("_run")
 
 func _run() -> void:
-	_check(PencilSketchStyle.is_enabled(), "Pencil Sketch is enabled by its project autoload")
+	_check(String(ProjectSettings.get_setting("autoload/PencilSketchStyle", "")) == "*res://scripts/pencil_sketch_style.gd", "Pencil Sketch is enabled by its project autoload")
 	_check(ResourceLoader.exists("res://shaders/pencil_sketch_double_sided.gdshader"), "double-sided animated fabric shader is present")
+	var style_manager := root.get_node_or_null("PencilSketchStyle")
+	if style_manager == null:
+		style_manager = STYLE_SCRIPT.new()
+		style_manager.name = "PencilSketchStyle"
+		root.add_child(style_manager)
+	await process_frame
 
 	var fixture := Node3D.new()
 	root.add_child(fixture)
@@ -44,7 +51,7 @@ func _run() -> void:
 	_check(enemy_counts.y > 0, "zombie albedo textures remain bound to shared pencil materials")
 	_check(enemy._fight_animations_ready, "pencil materials do not disrupt zombie fight animation retargeting")
 
-	var stats := PencilSketchStyle.get_style_stats()
+	var stats: Dictionary = style_manager.call("get_style_stats")
 	_check(int(stats.get("styled_meshes", 0)) > 0, "runtime style manager caches processed mesh materials")
 	_check(int(stats.get("shared_materials", 0)) > 0, "pencil variants are shared instead of duplicated per actor")
 
