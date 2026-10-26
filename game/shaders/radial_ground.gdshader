@@ -57,12 +57,6 @@ void fragment() {
 		? broad * 0.62 + middle * 0.38
 		: value_noise(ground_position * 0.17 + vec2(-5.2, 7.8));
 	float rust = smoothstep(0.72, 0.90, rust_noise);
-	vec3 concrete = floor_color * (0.74 + broad * 0.47);
-	concrete += (middle - 0.5) * vec3(0.045, 0.043, 0.040);
-	concrete *= 0.94 + fine * 0.13;
-	vec3 color = mix(concrete, vec3(0.026, 0.029, 0.035), soot * 0.69);
-	color = mix(color, vec3(0.15, 0.057, 0.030), rust * (1.0 - soot) * 0.24);
-
 	vec2 crack_grid = ground_position * 0.34;
 	vec2 cell = floor(crack_grid);
 	vec2 local = fract(crack_grid);
@@ -73,22 +67,22 @@ void fragment() {
 	float crack_y = (1.0 - smoothstep(0.006, 0.026, abs(local.y - 0.5 - shift_y)))
 		* step(0.38, hash21(cell + vec2(2.9, 14.1)));
 	float cracks = max(crack_x, crack_y);
-	color = mix(color, vec3(0.018, 0.019, 0.022), cracks * 0.62);
-
 	float ember_cell = hash21(floor(ground_position * 2.0));
 	float embers = step(0.994, ember_cell) * (1.0 - smoothstep(14.0, 27.0, radius));
 	float haze = smoothstep(23.0, 30.0, radius);
-	color = mix(color, vec3(0.161, 0.105, 0.098), haze * 0.82);
-
-	vec2 sketch_position = ground_position * 0.72;
-	float hatch_a = step(0.93, fract(sketch_position.x + sketch_position.y));
-	float hatch_b = step(0.95, fract(sketch_position.x - sketch_position.y));
-	float shadow_hatching = max(hatch_a, hatch_b * 0.62) * (1.0 - smoothstep(0.22, 0.72, broad));
-	color *= 1.0 - shadow_hatching * 0.11;
-	float luminance = dot(color, vec3(0.299, 0.587, 0.114));
-	color = mix(vec3(luminance), color, 0.38);
-
-	ALBEDO = color;
+	// Remap the previous near-black concrete to paper. Preserve its soot,
+	// cracks and wear as graphite density instead of hiding pencil marks in black.
+	vec2 pencil = FRAGCOORD.xy * 0.14;
+	float hatch_a = 1.0 - smoothstep(0.055, 0.21,
+		abs(fract(pencil.x + pencil.y * 0.66) - 0.5));
+	float hatch_b = 1.0 - smoothstep(0.055, 0.21,
+		abs(fract(pencil.x - pencil.y * 0.72) - 0.5));
+	float shadow_hatching = hatch_a * smoothstep(0.25, 0.72, soot + 1.0 - broad)
+		+ hatch_b * smoothstep(0.72, 1.25, soot + 1.0 - broad);
+	float graphite = clamp(0.11 + (1.0 - broad) * 0.15 + soot * 0.24
+		+ (1.0 - fine) * 0.055 + rust * 0.08 + haze * 0.10
+		+ cracks * 0.55 + shadow_hatching * 0.24, 0.0, 0.92);
+	ALBEDO = mix(vec3(0.91, 0.895, 0.86), vec3(0.075, 0.078, 0.087), graphite);
 	EMISSION = vec3(0.92, 0.19, 0.025) * embers * 0.72;
 	ROUGHNESS = mix(0.86, 0.99, soot);
 	METALLIC = 0.035;
