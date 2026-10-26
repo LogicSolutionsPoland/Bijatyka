@@ -1,11 +1,17 @@
 extends Node
 class_name FoundationTransientCombatFx
+const BLOOD_IMPACT_TEXTURE := preload("res://assets/combat_vfx/blood_impact_6x5.png")
+const BLOOD_IMPACT_COLUMNS := 6
+const BLOOD_IMPACT_ROWS := 5
+const BLOOD_IMPACT_FRAME_SIZE := Vector2i(69, 60)
+const HIT_FLASH_DURATION := 0.50
 ## Reusable visual-only combat effect. It never owns a target or a collision body.
 
 var effect_kind := ""
 var _visual: Node
 var _material: StandardMaterial3D
 var _impact_meshes: Array[MeshInstance3D] = []
+var _hit_sprite: AnimatedSprite3D
 var _sweep: Node2D
 var _sweep_glow: Line2D
 var _sweep_core: Line2D
@@ -36,18 +42,36 @@ func _build_impact(impact_sphere: SphereMesh, impact_shard: BoxMesh, hit_flash: 
 	root.name = "PooledHitFlash" if hit_flash else "PooledCombatImpact"
 	add_child(root)
 	_visual = root
-	_material = _new_effect_material()
 	if hit_flash:
-		var flash := MeshInstance3D.new()
-		flash.name = "Flash"
-		flash.mesh = impact_sphere
-		flash.position = Vector3(0.0, 1.0, 0.0)
-		flash.scale = Vector3.ONE * 1.2
-		flash.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		flash.material_override = _material
-		root.add_child(flash)
-		_impact_meshes.append(flash)
+		var frames := SpriteFrames.new()
+		frames.clear_all()
+		frames.set_animation_speed(&"default", 60.0)
+		frames.set_animation_loop_mode(&"default", SpriteFrames.LOOP_NONE)
+		for row in range(BLOOD_IMPACT_ROWS):
+			for column in range(BLOOD_IMPACT_COLUMNS):
+				var atlas := AtlasTexture.new()
+				atlas.atlas = BLOOD_IMPACT_TEXTURE
+				var frame_origin := Vector2(
+					float(column * BLOOD_IMPACT_FRAME_SIZE.x),
+					float(row * BLOOD_IMPACT_FRAME_SIZE.y)
+				)
+				var frame_size := Vector2(
+					float(BLOOD_IMPACT_FRAME_SIZE.x),
+					float(BLOOD_IMPACT_FRAME_SIZE.y)
+				)
+				atlas.region = Rect2(frame_origin, frame_size)
+				atlas.filter_clip = true
+				frames.add_frame(&"default", atlas)
+		_hit_sprite = AnimatedSprite3D.new()
+		_hit_sprite.name = "BloodImpact"
+		_hit_sprite.sprite_frames = frames
+		_hit_sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		_hit_sprite.pixel_size = 0.0012
+		_hit_sprite.position = Vector3(0.0, 1.0, 0.0)
+		_hit_sprite.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		root.add_child(_hit_sprite)
 		return
+	_material = _new_effect_material()
 	for index in range(9):
 		var piece := MeshInstance3D.new()
 		piece.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -125,14 +149,14 @@ func begin_attack_impact(at: Vector3, color: Color) -> void:
 	add_to_group("attack_impact_fx")
 
 func begin_hit_flash(at: Vector3, is_jump_hit: bool) -> void:
-	_begin(at, 0.18)
+	_begin(at, HIT_FLASH_DURATION)
 	_base_color = Color(1.0, 0.72, 0.24) if is_jump_hit else Color(1.0, 0.86, 0.68)
 	var root := _visual as Node3D
 	root.global_position = at - Vector3(0.0, 1.0, 0.0)
 	root.scale = Vector3.ONE
-	_material.albedo_color = Color(_base_color.r, _base_color.g, _base_color.b, 0.92)
-	_material.emission = _base_color
-	_material.emission_energy_multiplier = 1.0
+	_hit_sprite.set_frame_and_progress(0, 0.0)
+	_hit_sprite.modulate = Color(1.0, 0.82, 0.60, 0.92) if is_jump_hit else Color(1.0, 1.0, 1.0, 0.92)
+	_hit_sprite.play(&"default")
 
 func begin_spell_burst(at: Vector3, color: Color) -> void:
 	_begin(at, 0.22)
@@ -191,7 +215,9 @@ func advance(delta: float) -> bool:
 			_material.albedo_color = Color(_base_color.r, _base_color.g, _base_color.b, 1.0 - progress)
 		"zombie_hit_flash":
 			(_visual as Node3D).scale = Vector3.ONE * lerpf(1.0, 2.2, eased)
-			_material.albedo_color = Color(_base_color.r, _base_color.g, _base_color.b, 0.92 * (1.0 - progress))
+			var sprite_tint := _hit_sprite.modulate
+			sprite_tint.a = 0.92 * (1.0 - progress)
+			_hit_sprite.modulate = sprite_tint
 		"spell_burst":
 			(_visual as Node3D).scale = Vector3.ONE * lerpf(1.0, 2.8, progress)
 			_material.albedo_color = Color(_base_color.r, _base_color.g, _base_color.b, 1.0 - progress)
@@ -200,6 +226,10 @@ func advance(delta: float) -> bool:
 func deactivate() -> void:
 	if is_in_group("attack_impact_fx"):
 		remove_from_group("attack_impact_fx")
+	if _hit_sprite != null:
+		_hit_sprite.stop()
+		_hit_sprite.set_frame_and_progress(0, 0.0)
+		_hit_sprite.modulate = Color.WHITE
 	_active = false
 	_age = 0.0
 	_duration = 0.0
@@ -236,6 +266,8 @@ func get_visual_position() -> Vector3:
 	return (_visual as Node3D).global_position if _visual is Node3D else Vector3.ZERO
 
 func get_visual_alpha() -> float:
+	if _hit_sprite != null:
+		return _hit_sprite.modulate.a
 	return _material.albedo_color.a if _material != null else 1.0
 
 func get_visual_scale() -> Vector3:
