@@ -1,0 +1,4 @@
+# Third-party source archives: keep local until licenses verified.
+*
+!.gitignore
+!README.md
