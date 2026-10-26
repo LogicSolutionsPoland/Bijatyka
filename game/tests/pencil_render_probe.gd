@@ -29,6 +29,15 @@ func _run() -> void:
 		var enemy := enemies[index]
 		enemy.set_physics_process(false)
 		enemy.global_position = game.player.global_position + Vector3((index - 2) * 2.25, 0.0, -8.0 - float(index % 2) * 1.7)
+		# The normal horde scheduler promotes these actors as they enter 16 m.
+		# Promote synchronously so this frozen screenshot exercises the same rigs.
+		enemy.set_flashlight_render_visible(true)
+		enemy._set_distance_detail(enemy.global_position.distance_to(game.player.global_position))
+		enemy._set_full_animation_selected(true)
+	for frame in range(3):
+		await process_frame
+	for index in range(5):
+		var enemy := enemies[index]
 		var styled := false
 		for visual in enemy.find_children("*", "MeshInstance3D", true, false):
 			var mesh := visual as MeshInstance3D

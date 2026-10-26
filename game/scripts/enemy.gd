@@ -28,6 +28,7 @@ const ENEMY_BONE_MAP := {
 	"RightFoot": "Foot_R",
 }
 const SHADOW_POLICY := preload("res://scripts/shadow_policy.gd")
+const PENCIL := preload("res://scripts/pencil.gd")
 const GRAVITY := 24.0
 const RENDER_RADIUS := 30.0
 const DETAILED_RADIUS := 18.0
@@ -316,6 +317,9 @@ func _adopt_detailed_model(model: Node3D) -> void:
 	_model = model
 	_visual_root.add_child(model)
 	model.visible = true
+	# Distant ordinary zombies acquire or reuse their detailed rig later. Style
+	# that rig at adoption so its first visible frame already has graphite.
+	PENCIL.convert(model)
 	model.position = Vector3.ZERO
 	# The imported rig faces +Z; enemy movement and targeting use -Z as forward.
 	model.rotation = Vector3(0.0, ENEMY_MODEL_YAW_OFFSET, 0.0)

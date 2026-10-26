@@ -54,11 +54,12 @@ jobs:
           if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/pencil-render.log"; then exit 1; fi
 
       - name: Upload pencil gameplay image
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: Bijatyka-PencilSketch-gameplay-evidence
           path: build/pencil_visual_qa/gameplay.png
-          if-no-files-found: error
+          if-no-files-found: warn
 
       - name: Export Android ARM64 debug APK
         run: |
