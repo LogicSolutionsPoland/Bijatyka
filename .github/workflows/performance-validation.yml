@@ -59,6 +59,27 @@ jobs:
           grep -q "PASS: player martial animation" "$RUNNER_TEMP/player-animation-tests.log"
           if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/player-animation-tests.log"; then exit 1; fi
 
+      - name: Check playable Thornbound character rig, detail, and action clips
+        run: |
+          set -o pipefail
+          godot --headless --path game --script res://tests/player_character_quality_test.gd 2>&1 | tee "$RUNNER_TEMP/player-character-quality.log"
+          grep -q "PASS: playable Thornbound character quality" "$RUNNER_TEMP/player-character-quality.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/player-character-quality.log"; then exit 1; fi
+
+      - name: Capture playable Thornbound in-game views
+        run: |
+          set -o pipefail
+          xvfb-run -a -s "-screen 0 1600x1000x24" env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/player_character_capture.gd 2>&1 | tee "$RUNNER_TEMP/player-character-captures.log"
+          grep -q "CAPTURED_PLAYER_VIEWS=" "$RUNNER_TEMP/player-character-captures.log"
+          for view in front rear movement punch kick; do test -s "build/character_views/$view.png"; done
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/player-character-captures.log"; then exit 1; fi
+      - name: Upload playable character screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bijatyka-Thornbound-character-views
+          path: build/character_views/*.png
+          if-no-files-found: error
+
       - name: Check flashlight sector, camera framing, and aim controls
         run: |
           set -o pipefail

@@ -11,6 +11,7 @@ signal jump_impact(target: Node)
 
 const RAGE_SCRIPT := preload("res://scripts/rage_progression.gd")
 const FIGHT_ANIMATION_BUILDER := preload("res://scripts/fight_animation.gd")
+const CHARACTER_MOTION := preload("res://scripts/character_motion.gd")
 const PLAYER_MODEL_PATH := "res://assets/characters/thornbound/Retribution_Player_Thornbound_Warrior_MOBILE.glb"
 const GRAVITY := 24.0
 const MAX_HEALTH := 100
@@ -54,6 +55,8 @@ var _was_airborne := false
 var _animation_player: AnimationPlayer
 var _skeleton: Skeleton3D
 var _fight_animations_ready := false
+var _character_motion_ready := false
+var _character_action_time := 0.0
 var _camera_yaw := 0.0
 var _burns: Array[Dictionary] = []
 var _magic_hud_timer := 0.0
@@ -97,6 +100,7 @@ func _load_player_visual() -> void:
 			_animation_player = model.find_child("AnimationPlayer", true, false) as AnimationPlayer
 			_skeleton = model.find_child("Skeleton3D", true, false) as Skeleton3D
 			_fight_animations_ready = FIGHT_ANIMATION_BUILDER.install(_animation_player, _skeleton, ATTACKS)
+			_character_motion_ready = CHARACTER_MOTION.install(_animation_player, _skeleton)
 			_set_locomotion_animation("Idle")
 	else:
 		_add_debug_visual()
@@ -116,6 +120,7 @@ func _add_debug_visual() -> void:
 func _physics_process(delta: float) -> void:
 	if rage.current_soul_condemned:
 		return
+	_character_action_time = maxf(0.0, _character_action_time - delta)
 	_read_desktop_input(delta)
 	_update_attack(delta)
 	_update_burns(delta)
@@ -144,6 +149,7 @@ func _physics_process(delta: float) -> void:
 		_was_airborne = true
 	if _was_airborne and is_on_floor():
 		_was_airborne = false
+		_play_character_action("Landing", float(CHARACTER_MOTION.ACTIONS.get("Landing", 0.38)))
 		if jump_impact_armed:
 			jump_impact_armed = false
 			_resolve_jump_impact()
@@ -198,6 +204,10 @@ func _update_movement(delta: float) -> void:
 	if direction.length_squared() > 0.01:
 		direction = direction.normalized()
 		var target_yaw := atan2(-direction.x, -direction.z)
+		var turn_delta := wrapf(target_yaw - rotation.y, -PI, PI)
+		if _character_action_time <= 0.0 and absf(turn_delta) > 0.72:
+			var turn_action := "Turn_Left" if turn_delta > 0.0 else "Turn_Right"
+			_play_character_action(turn_action, float(CHARACTER_MOTION.ACTIONS.get(turn_action, 0.28)))
 		rotation.y = lerp_angle(rotation.y, target_yaw, minf(1.0, delta * 16.0))
 	var speed := 4.8 * movement_slow_factor
 	velocity.x = direction.x * speed
@@ -337,6 +347,7 @@ func try_dash(direction: Vector3 = Vector3.ZERO) -> bool:
 	if dash_direction.length_squared() < 0.01:
 		dash_direction = Vector3.FORWARD
 	dash_time = DASH_DURATION
+	_play_character_action("Dash", DASH_DURATION)
 	return true
 
 func interrupt_by_zombie(slow_seconds: float = 0.7, recovery_penalty: float = 0.45) -> void:
@@ -346,13 +357,20 @@ func interrupt_by_zombie(slow_seconds: float = 0.7, recovery_penalty: float = 0.
 		attack_phase = "recovery"
 		attack_phase_time = maxf(attack_phase_time, recovery_penalty)
 		_attack_recovery_locked = true
+	_play_character_action("Hit", float(CHARACTER_MOTION.ACTIONS.get("Hit", 0.34)))
 	interrupted.emit(slow_seconds)
 
 func take_boss_damage(amount: int) -> void:
 	if rage.current_soul_condemned or amount <= 0:
 		return
+	var was_alive := health > 0
 	health = maxi(0, health - amount)
 	health_changed.emit(health, MAX_HEALTH)
+	if was_alive:
+		if health == 0:
+			_play_character_action("Defeat", float(CHARACTER_MOTION.ACTIONS.get("Defeat", 1.25)))
+		else:
+			_play_character_action("Hit", float(CHARACTER_MOTION.ACTIONS.get("Hit", 0.34)))
 
 func cycle_spell() -> bool:
 	var available: Array[String] = rage.unlocked_spells
@@ -408,6 +426,8 @@ func _cast_spell(school: String) -> bool:
 			health_changed.emit(health, MAX_HEALTH)
 	if target != null:
 		_spawn_spell_burst(target.global_position + Vector3(0.0, 1.0, 0.0), school)
+	var action_name := "Magic_" + school.capitalize()
+	_play_character_action(action_name, float(CHARACTER_MOTION.ACTIONS.get(action_name, 0.62)))
 	magic_changed.emit(magic_energy, MAX_MAGIC, current_spell)
 	return true
 
@@ -623,7 +643,7 @@ func _set_locomotion_animation(animation_name: String) -> void:
 		_animation_player.play(selected_animation, LOCOMOTION_ANIMATION_BLEND_SECONDS)
 
 func _update_locomotion_animation() -> void:
-	if _animation_player == null or attack_phase != "ready":
+	if _animation_player == null or attack_phase != "ready" or _character_action_time > 0.0:
 		return
 	if not is_on_floor():
 		_set_locomotion_animation("Jump")
@@ -631,6 +651,15 @@ func _update_locomotion_animation() -> void:
 		_set_locomotion_animation("Walk")
 	else:
 		_set_locomotion_animation("Idle")
+
+func _play_character_action(action_name: String, duration: float) -> void:
+	if not _character_motion_ready or _animation_player == null:
+		return
+	var clip := CHARACTER_MOTION.clip_path(action_name)
+	if not _animation_player.has_animation(clip):
+		return
+	_character_action_time = maxf(0.0, duration)
+	_animation_player.play(clip, ATTACK_ANIMATION_BLEND_SECONDS)
 
 func _on_selection_resolved(_milestone: int, aura_id: String) -> void:
 	current_spell = aura_id
