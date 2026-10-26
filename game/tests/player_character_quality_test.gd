@@ -1,6 +1,8 @@
 extends SceneTree
 
 const Foundation := preload("res://scripts/foundation.gd")
+const PENCIL_SHADER := preload("res://shaders/pencil_sketch.gdshader")
+const PENCIL_DOUBLE_SIDED_SHADER := preload("res://shaders/pencil_sketch_double_sided.gdshader")
 
 var failures: Array[String] = []
 var checks := 0
@@ -51,6 +53,7 @@ func _run() -> void:
 
 	var mesh_count := 0
 	var skinned_count := 0
+	var styled_count := 0
 	var textured_count := 0
 	var triangles := 0
 	for node in player.visual_root.find_children("*", "MeshInstance3D", true, false):
@@ -65,14 +68,20 @@ func _run() -> void:
 			var indices := arrays[Mesh.ARRAY_INDEX] as PackedInt32Array
 			var vertices := arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array
 			triangles += int(indices.size() / 3) if not indices.is_empty() else int(vertices.size() / 3)
-			var material := instance.get_active_material(surface) as StandardMaterial3D
-			if material != null and material.albedo_texture != null:
-				textured_count += 1
+			var source_material := instance.mesh.surface_get_material(surface) as StandardMaterial3D
+			var active_material := instance.get_active_material(surface) as ShaderMaterial
+			if active_material != null and [PENCIL_SHADER, PENCIL_DOUBLE_SIDED_SHADER].has(active_material.shader):
+				styled_count += 1
+				if source_material != null and source_material.albedo_texture != null:
+					var rendered_texture := active_material.get_shader_parameter("albedo_texture") as Texture2D
+					if bool(active_material.get_shader_parameter("use_albedo_texture")) and rendered_texture == source_material.albedo_texture:
+						textured_count += 1
 	_check(mesh_count >= 8, "player detail is split across multiple material meshes (%d)" % mesh_count)
 	_check(skinned_count >= 8, "all visible character pieces are skinned (%d)" % skinned_count)
-	_check(textured_count >= 8, "player PBR surfaces keep embedded texture maps (%d)" % textured_count)
+	_check(styled_count >= 8, "detailed player surfaces use the default pencil shaders (%d)" % styled_count)
+	_check(textured_count >= 8, "pencil shaders keep each embedded player albedo map bound (%d)" % textured_count)
 	_check(triangles >= 50000, "player silhouette mesh remains detailed (>50k triangles; %d)" % triangles)
-	print("PLAYER_QUALITY_REPORT five_zombies=%d meshes=%d skinned=%d textured_surfaces=%d triangles=%d actions=%d" % [Foundation.ZOMBIE_HORDE_SIZE, mesh_count, skinned_count, textured_count, triangles, ThornboundMotion.ACTIONS.size()])
+	print("PLAYER_QUALITY_REPORT five_zombies=%d meshes=%d skinned=%d styled_surfaces=%d textured_surfaces=%d triangles=%d actions=%d" % [Foundation.ZOMBIE_HORDE_SIZE, mesh_count, skinned_count, styled_count, textured_count, triangles, ThornboundMotion.ACTIONS.size()])
 	_finish(game)
 
 func _check(condition: bool, description: String) -> void:
