@@ -28,11 +28,17 @@ func _queue_mesh(mesh: MeshInstance3D) -> void:
 	if _pending_mesh_ids.has(instance_id):
 		return
 	_pending_mesh_ids[instance_id] = true
-	call_deferred("_apply_to_mesh", mesh, instance_id)
+	# Defer only the ID so a scene freed before the callback does not pass a
+	# stale MeshInstance3D argument through Godot's deferred-call type check.
+	call_deferred("_apply_to_mesh", instance_id)
 
-func _apply_to_mesh(mesh: MeshInstance3D, instance_id: int) -> void:
+func _apply_to_mesh(instance_id: int) -> void:
 	_pending_mesh_ids.erase(instance_id)
-	if not is_instance_valid(mesh) or mesh.mesh == null or mesh.has_meta(STYLE_META):
+	var object: Object = instance_from_id(instance_id)
+	if not is_instance_valid(object) or not object is MeshInstance3D:
+		return
+	var mesh := object as MeshInstance3D
+	if mesh.mesh == null or mesh.has_meta(STYLE_META):
 		return
 
 	var changed := false
