@@ -34,9 +34,13 @@
       "size_bytes": 28227919,
       "category": "vfx",
       "license_status": "CC0-reported",
-      "import_status": "library-only",
+      "import_status": "partial: one derived atlas used in game",
       "source_location": "ChatGPT Library /zasoby",
-      "sha256": "ac0fbf5d5a07688a5d4d35fd0bbae783597d819a3d8a92893b05eb69ddb144c5"
+      "sha256": "ac0fbf5d5a07688a5d4d35fd0bbae783597d819a3d8a92893b05eb69ddb144c5",
+      "selected_assets_imported": [
+        "game/assets/vfx/brackeys_blood_impact_6x5.png"
+      ],
+      "note": "One CC0 sprite sheet is integrated into the pooled zombie hit effect. Original 28MB ZIP remains library-only."
     },
     {
       "filename": "psx-first-person-arms-free-game-assets.zip",
