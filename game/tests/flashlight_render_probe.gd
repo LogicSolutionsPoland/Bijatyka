@@ -18,7 +18,9 @@ func _run() -> void:
 	game._boss_enemy.global_position = player_position + Vector3(3.0, 0.05, 5.0)
 	game._update_boss_locator()
 	var lit_probe := _add_probe(game, player_position + Vector3(0.0, 1.4, -8.0), Color(1.0, 0.05, 0.03))
-	var dark_probe := _add_probe(game, player_position + Vector3(2.4, 1.2, 1.8), Color(0.02, 1.0, 0.04))
+	# The close shoulder camera no longer shows the old probe behind the
+	# character. Place it in view beyond the 30 m flashlight radius instead.
+	var dark_probe := _add_probe(game, player_position + Vector3(0.0, 1.2, -34.0), Color(0.02, 1.0, 0.04))
 	for scale in [1.0, Foundation.MOBILE_3D_RENDER_SCALE]:
 		root.scaling_3d_scale = scale
 		for frame in range(6):
