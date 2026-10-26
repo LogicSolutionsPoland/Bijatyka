@@ -65,8 +65,8 @@ func _test_gamepad_input_map() -> void:
 		_check(found, "%s maps to the expected gamepad stick axis" % String(action))
 	var expected_buttons := {
 		&"pad_jump": [JOY_BUTTON_A], &"pad_dash": [JOY_BUTTON_X], &"pad_cast_spell": [JOY_BUTTON_B],
-		&"pad_punch_left": [JOY_BUTTON_RIGHT_SHOULDER], &"pad_blast": [JOY_BUTTON_Y],
-		&"pad_kick_left": [JOY_BUTTON_LEFT_SHOULDER],
+		&"pad_punch_left": [JOY_BUTTON_LEFT_SHOULDER], &"pad_punch_right": [JOY_BUTTON_RIGHT_SHOULDER],
+		&"pad_blast": [JOY_BUTTON_Y],
 		&"pad_spell_0": [JOY_BUTTON_DPAD_UP], &"pad_spell_1": [JOY_BUTTON_DPAD_RIGHT],
 		&"pad_spell_2": [JOY_BUTTON_DPAD_DOWN], &"pad_spell_3": [JOY_BUTTON_DPAD_LEFT]
 	}
@@ -74,10 +74,12 @@ func _test_gamepad_input_map() -> void:
 	for row in Hud.ACTION_ROWS:
 		for action: String in row:
 			routed_actions.append(action)
-	_check(expected_buttons.size() == routed_actions.size() and Hud.GAMEPAD_ACTIONS.size() == routed_actions.size() + 1, "gamepad includes all digital controls plus direct magic and Blast actions")
-	var trigger_events := InputMap.action_get_events(&"pad_kick_right")
-	_check(trigger_events.size() == 1 and trigger_events[0] is InputEventJoypadMotion and (trigger_events[0] as InputEventJoypadMotion).axis == JOY_AXIS_TRIGGER_RIGHT and is_equal_approx((trigger_events[0] as InputEventJoypadMotion).axis_value, 1.0), "R2 / RT maps to the right trigger axis")
-	_check(Hud.GAMEPAD_ACTIONS.get(&"pad_kick_right", "") == "kick_right", "R2 routes to the right touch kick")
+	_check(expected_buttons.size() == routed_actions.size() and Hud.GAMEPAD_ACTIONS.size() == routed_actions.size() + 2, "gamepad includes every touch action plus selected-spell cast and Blast")
+	var left_trigger_events := InputMap.action_get_events(&"pad_kick_left")
+	_check(left_trigger_events.size() == 1 and left_trigger_events[0] is InputEventJoypadMotion and (left_trigger_events[0] as InputEventJoypadMotion).axis == JOY_AXIS_TRIGGER_LEFT and is_equal_approx((left_trigger_events[0] as InputEventJoypadMotion).axis_value, 1.0), "L2 / LT maps to the left trigger axis")
+	var right_trigger_events := InputMap.action_get_events(&"pad_kick_right")
+	_check(right_trigger_events.size() == 1 and right_trigger_events[0] is InputEventJoypadMotion and (right_trigger_events[0] as InputEventJoypadMotion).axis == JOY_AXIS_TRIGGER_RIGHT and is_equal_approx((right_trigger_events[0] as InputEventJoypadMotion).axis_value, 1.0), "R2 / RT maps to the right trigger axis")
+	_check(Hud.GAMEPAD_ACTIONS.get(&"pad_kick_left", "") == "kick_left" and Hud.GAMEPAD_ACTIONS.get(&"pad_kick_right", "") == "kick_right", "L2 and R2 route to their matching touch kicks")
 	for action: StringName in expected_buttons:
 		var events := InputMap.action_get_events(action)
 		var actual: Array[int] = []
@@ -339,10 +341,10 @@ func _send_pad(button: int, down: bool) -> void:
 	event.pressed = down
 	root.push_input(event, true)
 
-func _send_trigger(amount: float, device: int = 0) -> void:
+func _send_trigger(amount: float, device: int = 0, axis: int = JOY_AXIS_TRIGGER_RIGHT) -> void:
 	var event := InputEventJoypadMotion.new()
 	event.device = device
-	event.axis = JOY_AXIS_TRIGGER_RIGHT
+	event.axis = axis
 	event.axis_value = amount
 	root.push_input(event, true)
 
@@ -543,7 +545,7 @@ func _test_gamepad_controls() -> void:
 	var buttons := {
 		JOY_BUTTON_A: "jump", JOY_BUTTON_B: "cast_spell",
 		JOY_BUTTON_X: "dash", JOY_BUTTON_Y: "blast",
-		JOY_BUTTON_LEFT_SHOULDER: "kick_left", JOY_BUTTON_RIGHT_SHOULDER: "punch_left",
+		JOY_BUTTON_LEFT_SHOULDER: "punch_left", JOY_BUTTON_RIGHT_SHOULDER: "punch_right",
 		JOY_BUTTON_DPAD_UP: "spell_0", JOY_BUTTON_DPAD_RIGHT: "spell_1",
 		JOY_BUTTON_DPAD_DOWN: "spell_2", JOY_BUTTON_DPAD_LEFT: "spell_3"
 	}
@@ -568,9 +570,16 @@ func _test_gamepad_controls() -> void:
 	_check(player.dash_time == 0.0 and player.magic_energy == energy_before_locked_b, "B cannot dash or spend energy while magic is locked")
 	_send_pad(JOY_BUTTON_B, false)
 
+	var attacks_before_l1 := player.attack_count
+	_send_pad(JOY_BUTTON_LEFT_SHOULDER, true)
+	_check(player.attack_count == attacks_before_l1 + 1 and player.attack_kind == "punch" and player.attack_side == "left", "L1 triggers left punch and not left kick")
+	_send_pad(JOY_BUTTON_LEFT_SHOULDER, false)
+	for step in range(4):
+		player._update_attack(1.0)
+
 	var attacks_before_r1 := player.attack_count
 	_send_pad(JOY_BUTTON_RIGHT_SHOULDER, true)
-	_check(player.attack_count == attacks_before_r1 + 1 and player.attack_kind == "punch" and player.attack_side == "left", "R1 triggers left punch and not right kick")
+	_check(player.attack_count == attacks_before_r1 + 1 and player.attack_kind == "punch" and player.attack_side == "right", "R1 triggers right punch and not right kick")
 	_send_pad(JOY_BUTTON_RIGHT_SHOULDER, false)
 	for step in range(4):
 		player._update_attack(1.0)
@@ -601,6 +610,17 @@ func _test_gamepad_controls() -> void:
 		_check(routed.size() == before + 5, "%s stops repeating on release" % buttons[button])
 		for step in range(4):
 			player._update_attack(1.0)
+
+	var before_left_trigger := routed.size()
+	_send_trigger(0.4, 0, JOY_AXIS_TRIGGER_LEFT)
+	_check(routed.size() == before_left_trigger, "partial L2 pull below threshold does not kick")
+	_send_trigger(0.7, 0, JOY_AXIS_TRIGGER_LEFT)
+	_check(routed.size() == before_left_trigger + 1 and routed.back() == "kick_left" and player.attack_kind == "kick" and player.attack_side == "left", "L2 starts one left kick")
+	_send_trigger(0.0, 0, JOY_AXIS_TRIGGER_LEFT)
+	hud._process(0.4)
+	_check(routed.size() == before_left_trigger + 1, "releasing L2 stops repeats")
+	for step in range(4):
+		player._update_attack(1.0)
 
 	var before_trigger := routed.size()
 	var attacks_before_trigger := player.attack_count
@@ -634,6 +654,14 @@ func _test_gamepad_controls() -> void:
 		player._update_attack(1.0)
 
 	var before_negative_rest := routed.size()
+	hud._left_trigger_rest_values[0] = -1.0
+	_send_trigger(0.0, 0, JOY_AXIS_TRIGGER_LEFT)
+	_check(routed.size() == before_negative_rest + 1 and routed.back() == "kick_left" and player.attack_side == "left", "L2 works on controllers whose trigger rests at -1")
+	_send_trigger(-1.0, 0, JOY_AXIS_TRIGGER_LEFT)
+	hud._left_trigger_rest_values[0] = 0.0
+	for step in range(4):
+		player._update_attack(1.0)
+
 	hud._right_trigger_rest_values[0] = -1.0
 	_send_trigger(0.0)
 	_check(routed.size() == before_negative_rest + 1 and routed.back() == "kick_right" and player.attack_side == "right", "R2 works on controllers whose trigger rests at -1")
@@ -703,7 +731,7 @@ func _test_gamepad_controls() -> void:
 	arena._update_gamepad_camera(0.1)
 	_check(player.move_input().x > 0.0 and player.move_input().y < 0.0, "left stick supports diagonal movement during an attack")
 	_check(arena._camera_yaw < yaw_before and arena._camera_pitch > pitch_before, "right stick simultaneously turns and tilts upward")
-	_check(routed.size() == before_combo + 1 and player.attack_side == "left", "both sticks and an R1 punch can operate together")
+	_check(routed.size() == before_combo + 1 and player.attack_side == "right", "both sticks and an R1 punch can operate together")
 	_send_pad(JOY_BUTTON_RIGHT_SHOULDER, false)
 	Input.action_release(&"move_forward")
 	Input.action_release(&"move_right")
