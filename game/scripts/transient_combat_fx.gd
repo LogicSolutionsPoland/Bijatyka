@@ -41,7 +41,6 @@ func _build_impact(impact_sphere: SphereMesh, impact_shard: BoxMesh, hit_flash: 
 	root.name = "PooledHitFlash" if hit_flash else "PooledCombatImpact"
 	add_child(root)
 	_visual = root
-	_material = _new_effect_material()
 	if hit_flash:
 		# One billboard instead of per-hit meshes/particles: the sprite is built
 		# once per pooled effect and only its atlas frame changes on contact.
@@ -58,8 +57,8 @@ func _build_impact(impact_sphere: SphereMesh, impact_shard: BoxMesh, hit_flash: 
 		_hit_sprite.shaded = false
 		_hit_sprite.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		root.add_child(_hit_sprite)
-		_material = null
 		return
+	_material = _new_effect_material()
 	for index in range(9):
 		var piece := MeshInstance3D.new()
 		piece.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
