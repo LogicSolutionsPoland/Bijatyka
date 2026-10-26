@@ -1,10 +1,15 @@
 extends Node
 class_name FoundationTransientCombatFx
+
+const BLOOD_IMPACT_ATLAS := preload("res://assets/vfx/brackeys_blood_impact_6x5.png")
+const BLOOD_FIRST_FRAME := 1
+const BLOOD_LAST_FRAME := 23
 ## Reusable visual-only combat effect. It never owns a target or a collision body.
 
 var effect_kind := ""
 var _visual: Node
 var _material: StandardMaterial3D
+var _hit_sprite: Sprite3D
 var _impact_meshes: Array[MeshInstance3D] = []
 var _sweep: Node2D
 var _sweep_glow: Line2D
@@ -38,15 +43,21 @@ func _build_impact(impact_sphere: SphereMesh, impact_shard: BoxMesh, hit_flash: 
 	_visual = root
 	_material = _new_effect_material()
 	if hit_flash:
-		var flash := MeshInstance3D.new()
-		flash.name = "Flash"
-		flash.mesh = impact_sphere
-		flash.position = Vector3(0.0, 1.0, 0.0)
-		flash.scale = Vector3.ONE * 1.2
-		flash.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		flash.material_override = _material
-		root.add_child(flash)
-		_impact_meshes.append(flash)
+		# One billboard instead of per-hit meshes/particles: the sprite is built
+		# once per pooled effect and only its atlas frame changes on contact.
+		_hit_sprite = Sprite3D.new()
+		_hit_sprite.name = "BrackeysBloodImpact"
+		_hit_sprite.texture = BLOOD_IMPACT_ATLAS
+		_hit_sprite.hframes = 6
+		_hit_sprite.vframes = 5
+		_hit_sprite.frame = BLOOD_FIRST_FRAME
+		_hit_sprite.pixel_size = 0.027
+		_hit_sprite.position = Vector3(0.0, 1.0, 0.0)
+		_hit_sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		_hit_sprite.shaded = false
+		_hit_sprite.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		root.add_child(_hit_sprite)
+		_material = null
 		return
 	for index in range(9):
 		var piece := MeshInstance3D.new()
@@ -125,14 +136,12 @@ func begin_attack_impact(at: Vector3, color: Color) -> void:
 	add_to_group("attack_impact_fx")
 
 func begin_hit_flash(at: Vector3, is_jump_hit: bool) -> void:
-	_begin(at, 0.18)
-	_base_color = Color(1.0, 0.72, 0.24) if is_jump_hit else Color(1.0, 0.86, 0.68)
+	_begin(at, 0.28)
 	var root := _visual as Node3D
 	root.global_position = at - Vector3(0.0, 1.0, 0.0)
-	root.scale = Vector3.ONE
-	_material.albedo_color = Color(_base_color.r, _base_color.g, _base_color.b, 0.92)
-	_material.emission = _base_color
-	_material.emission_energy_multiplier = 1.0
+	root.scale = Vector3.ONE * (1.14 if is_jump_hit else 1.0)
+	_hit_sprite.frame = BLOOD_FIRST_FRAME
+	_hit_sprite.modulate = Color.WHITE
 
 func begin_spell_burst(at: Vector3, color: Color) -> void:
 	_begin(at, 0.22)
@@ -190,8 +199,11 @@ func advance(delta: float) -> bool:
 			(_visual as Node3D).scale = Vector3.ONE * lerpf(0.72, 2.0, eased)
 			_material.albedo_color = Color(_base_color.r, _base_color.g, _base_color.b, 1.0 - progress)
 		"zombie_hit_flash":
-			(_visual as Node3D).scale = Vector3.ONE * lerpf(1.0, 2.2, eased)
-			_material.albedo_color = Color(_base_color.r, _base_color.g, _base_color.b, 0.92 * (1.0 - progress))
+			# Brackeys sheet: frames 1-23 contain the animation, while the
+			# trailing empty frames are intentionally excluded.
+			var frame_count := BLOOD_LAST_FRAME - BLOOD_FIRST_FRAME + 1
+			_hit_sprite.frame = mini(BLOOD_LAST_FRAME, BLOOD_FIRST_FRAME + int(progress * float(frame_count)))
+			_hit_sprite.modulate.a = 1.0 - smoothstep(0.68, 1.0, progress)
 		"spell_burst":
 			(_visual as Node3D).scale = Vector3.ONE * lerpf(1.0, 2.8, progress)
 			_material.albedo_color = Color(_base_color.r, _base_color.g, _base_color.b, 1.0 - progress)
@@ -217,6 +229,9 @@ func deactivate() -> void:
 	if _material != null:
 		_material.albedo_color = _base_color
 		_material.emission = _base_color
+	if _hit_sprite != null:
+		_hit_sprite.frame = BLOOD_FIRST_FRAME
+		_hit_sprite.modulate = Color.WHITE
 	_set_visual_visible(false)
 
 func _set_visual_visible(is_visible: bool) -> void:
@@ -236,6 +251,8 @@ func get_visual_position() -> Vector3:
 	return (_visual as Node3D).global_position if _visual is Node3D else Vector3.ZERO
 
 func get_visual_alpha() -> float:
+	if _hit_sprite != null:
+		return _hit_sprite.modulate.a
 	return _material.albedo_color.a if _material != null else 1.0
 
 func get_visual_scale() -> Vector3:
