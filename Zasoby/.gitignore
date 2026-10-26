@@ -1,0 +1,6 @@
+# Archive sources are intentionally local until redistribution is verified.
+/local/
+*.zip
+*.rar
+*.7z
+*.blend
