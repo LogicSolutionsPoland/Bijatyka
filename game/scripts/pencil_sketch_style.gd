@@ -3,6 +3,7 @@ extends Node
 const SINGLE_SIDED_SHADER: Shader = preload("res://shaders/pencil_sketch.gdshader")
 const DOUBLE_SIDED_SHADER: Shader = preload("res://shaders/pencil_sketch_double_sided.gdshader")
 const STYLE_META := &"_pencil_sketch_materials_processed"
+const OPAQUE_META := &"_pencil_sketch_opaque_material"
 
 var _material_cache: Dictionary = {}
 var _pending_mesh_ids: Dictionary = {}
@@ -81,6 +82,7 @@ func _styled_material(source: Material) -> ShaderMaterial:
 
 	var styled := ShaderMaterial.new()
 	styled.shader = DOUBLE_SIDED_SHADER if is_double_sided else SINGLE_SIDED_SHADER
+	styled.set_meta(OPAQUE_META, true)
 	styled.set_shader_parameter("albedo_tint", base.albedo_color)
 	styled.set_shader_parameter("use_albedo_texture", base.albedo_texture != null)
 	if base.albedo_texture != null:

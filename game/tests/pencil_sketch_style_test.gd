@@ -78,6 +78,7 @@ func _count_sketch_surfaces(node: Node) -> Vector2i:
 			if material == null or not [PENCIL_SHADER, PENCIL_DOUBLE_SIDED_SHADER].has(material.shader):
 				continue
 			styled += 1
+			_check(material.has_meta(&"_pencil_sketch_opaque_material"), "styled opaque surface retains its spawn-occluder material marker")
 			var sketch_material := material
 			if bool(sketch_material.get_shader_parameter("use_albedo_texture")) \
 					and sketch_material.get_shader_parameter("albedo_texture") is Texture2D:
