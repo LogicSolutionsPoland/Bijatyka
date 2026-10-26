@@ -81,7 +81,7 @@ void fragment() {
 		+ hatch_b * smoothstep(0.72, 1.25, soot + 1.0 - broad);
 	float graphite = clamp(0.11 + (1.0 - broad) * 0.15 + soot * 0.24
 		+ (1.0 - fine) * 0.055 + rust * 0.08 + haze * 0.10
-		+ cracks * 0.55 + shadow_hatching * 0.35, 0.0, 0.92);
+		+ cracks * 0.55 + shadow_hatching * 0.24, 0.0, 0.92);
 	ALBEDO = mix(vec3(0.91, 0.895, 0.86), vec3(0.075, 0.078, 0.087), graphite);
 	EMISSION = vec3(0.92, 0.19, 0.025) * embers * 0.72;
 	ROUGHNESS = mix(0.86, 0.99, soot);

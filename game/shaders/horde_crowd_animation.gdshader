@@ -32,17 +32,17 @@ void vertex() {
 void fragment() {
 	vec3 normal = normalize(NORMAL);
 	float diffuse = max(dot(normal, normalize(sketch_light_direction_view)), 0.0);
-	float shade = clamp(0.86 - diffuse * 0.65, 0.0, 1.0);
+	float shade = clamp(0.68 - diffuse * 0.44, 0.0, 1.0);
 	vec2 pencil = FRAGCOORD.xy * 0.14;
 	float line_a = 1.0 - smoothstep(0.055, 0.21,
 		abs(fract(pencil.x + pencil.y * 0.66) - 0.5));
 	float line_b = 1.0 - smoothstep(0.055, 0.21,
 		abs(fract(pencil.x - pencil.y * 0.72) - 0.5));
-	float hatching = line_a * smoothstep(0.15, 0.52, shade)
-		+ line_b * smoothstep(0.40, 0.78, shade);
+	float hatching = line_a * smoothstep(0.30, 0.65, shade)
+		+ line_b * smoothstep(0.65, 0.90, shade);
 	float contour = pow(1.0 - clamp(abs(dot(normal, normalize(VIEW))), 0.0, 1.0), 2.1);
-	float ink = clamp(0.08 + shade * 0.34 + hatching * 0.50
-		+ contour * 0.64, 0.0, 0.94);
+	float ink = clamp(0.08 + shade * 0.34 + hatching * 0.30
+		+ contour * 0.58, 0.0, 0.94);
 	ALBEDO = mix(vec3(0.91, 0.895, 0.86), vec3(0.075, 0.078, 0.087), ink);
 	ROUGHNESS = 1.0;
 }

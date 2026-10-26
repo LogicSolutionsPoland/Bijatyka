@@ -91,7 +91,7 @@ void fragment() {
 	float shadow_hatching = hatch_a * smoothstep(0.10, 0.52, shade)
 		+ hatch_b * smoothstep(0.45, 0.82, shade);
 	float graphite = clamp(0.09 + shade * 0.31 + (1.0 - grit) * 0.065
-		+ rust_stain * 0.15 + cracks * 0.51 + shadow_hatching * 0.42,
+		+ rust_stain * 0.15 + cracks * 0.51 + shadow_hatching * 0.29,
 		0.0, 0.94);
 	ALBEDO = mix(vec3(0.91, 0.895, 0.86), vec3(0.075, 0.078, 0.087), graphite);
 	ROUGHNESS = clamp(surface_roughness + (medium - 0.5) * 0.18, 0.58, 1.0);

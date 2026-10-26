@@ -25,7 +25,7 @@ void fragment() {
 	vec3 normal = normalize(NORMAL);
 	float light = max(dot(normal, normalize(sketch_light_direction_view)), 0.0);
 	float source_value = dot(source.rgb, vec3(0.299, 0.587, 0.114));
-	float shade = clamp(0.86 - light * 0.65 + (0.48 - source_value) * 0.18, 0.0, 1.0);
+	float shade = clamp(0.68 - light * 0.44 + (0.48 - source_value) * 0.08, 0.0, 1.0);
 
 	// Screen-sized strokes remain legible at the default half-resolution mobile render.
 	// Crosshatching appears only in deeper shade, like repeated pencil passes.
@@ -36,12 +36,12 @@ void fragment() {
 		abs(fract(pencil.x + pencil.y * 0.66) - 0.5));
 	float stroke_b = 1.0 - smoothstep(0.055, 0.055 + aa_b,
 		abs(fract(pencil.x - pencil.y * 0.72) - 0.5));
-	float strokes = stroke_a * smoothstep(0.15, 0.52, shade)
-		+ stroke_b * smoothstep(0.40, 0.78, shade);
+	float strokes = stroke_a * smoothstep(0.30, 0.65, shade)
+		+ stroke_b * smoothstep(0.65, 0.90, shade);
 
 	float contour = pow(1.0 - clamp(abs(dot(normal, normalize(VIEW))), 0.0, 1.0), 2.1);
-	float graphite = clamp(0.06 + shade * 0.32 + (1.0 - source_value) * 0.12
-		+ strokes * 0.50 + contour * 0.64, 0.0, 0.94);
+	float graphite = clamp(0.06 + shade * 0.32 + (1.0 - source_value) * 0.10
+		+ strokes * 0.30 + contour * 0.58, 0.0, 0.94);
 	vec3 paper = vec3(0.91, 0.895, 0.86);
 	vec3 lead = vec3(0.075, 0.078, 0.087);
 	vec3 drawn = mix(paper, lead, graphite);
