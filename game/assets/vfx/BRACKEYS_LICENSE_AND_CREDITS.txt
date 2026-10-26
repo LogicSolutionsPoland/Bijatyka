@@ -1,0 +1,18 @@
+Brackeys VFX bundle / predrawn / blood_impact_6x5.png
+
+Original distribution: brackeys_vfx_bundle.zip
+Original file: predrawn/blood_impact_6x5.png
+Derivative: resized using nearest-neighbour to 138x100 pixels from original 414x300.
+License: Creative Commons Zero (CC0).
+
+The original bundle includes:
+"All assets in the pack have been repackaged and some have been modified by Brackeys."
+
+Credits supplied with the bundle:
+Particle textures: Picster (https://github.com/RPicster/Godot-particle-and-vfx-textures)
+and Kenney (https://kenney.nl/assets/particle-pack)
+Flipbooks: Thomas Iche (https://unity.com/blog/engine-platform/free-vfx-image-sequences-flipbooks)
+Pre-drawn spritesheets: CodeManu (https://codemanu.itch.io/vfx-free-pack)
+
+Original license document: brackeys_vfx_bundle/LICENSE & CREDITS.txt
+All assets in the bundle are marked CC0.
