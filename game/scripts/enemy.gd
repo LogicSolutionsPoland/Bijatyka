@@ -303,7 +303,7 @@ func _ensure_detailed_model() -> void:
 			_build_debug_variant()
 		return
 	SHADOW_POLICY.disable_in_tree(_visual_root)
-	_set_quality_shadow_enabled(_quality_shadows_enabled)
+	set_quality_shadow_enabled(_quality_shadows_enabled)
 
 func _instantiate_detailed_model() -> Node3D:
 	if _detailed_scene == null and ResourceLoader.exists(ENEMY_MODEL_PATH):
@@ -357,7 +357,7 @@ func _adopt_detailed_model(model: Node3D) -> void:
 		else:
 			push_warning("High-detail zombie sample could not attach: %s" % String(detail_result.get("error", "unknown error")))
 	SHADOW_POLICY.disable_in_tree(model)
-	_set_quality_shadow_enabled(_quality_shadows_enabled)
+	set_quality_shadow_enabled(_quality_shadows_enabled)
 	_update_high_detail_visual_lod(_distance_to_player())
 
 func _release_detailed_model() -> void:
