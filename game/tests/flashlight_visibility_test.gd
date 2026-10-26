@@ -147,8 +147,15 @@ func _run() -> void:
 	_check(Foundation.ZOMBIE_HORDE_SIZE == 15 and Foundation.ZOMBIE_PERFORMANCE_CAPACITY == 200, "game population remains 15 with 200-zombie debug-only stress capacity")
 	_check(game.burning_horizon.get_child_count() == 4, "Burning Horizon remains present while masked")
 	_check(game._boss_enemy != null and game._boss_enemy.hp > 0, "boss simulation remains independent from flashlight visibility")
-	_check(is_equal_approx(Foundation.MOBILE_3D_RENDER_SCALE, 0.67), "mobile 3D defaults to a lower cost bilinear render scale")
+	_check(is_equal_approx(Foundation.MOBILE_3D_RENDER_SCALE, 0.50), "mobile performance preset starts at half-resolution 3D")
 	if OS.is_debug_build() and game.performance_diagnostics != null:
+		var local_lights := game.find_children("*", "OmniLight3D", true, false)
+		_check(local_lights.size() == 4, "four unshadowed local lights remain available for quality comparison")
+		_check(game._local_lights_enabled != OS.has_feature("mobile"), "mobile starts without local light passes and desktop retains them")
+		game.performance_diagnostics.local_lights_comparison_requested.emit(false)
+		_check(local_lights.all(func(light: Node) -> bool: return not (light as OmniLight3D).visible), "profiler disables all local lights without removing the bulbs")
+		game.performance_diagnostics.local_lights_comparison_requested.emit(true)
+		_check(local_lights.all(func(light: Node) -> bool: return (light as OmniLight3D).visible), "profiler restores all local lights")
 		_check(bool(game._floor_material.get_shader_parameter("floor_fast_detail")) == OS.has_feature("mobile"), "phone defaults to lower-cost floor detail while desktop preserves full detail")
 		game.performance_diagnostics.floor_detail_comparison_requested.emit(true)
 		_check(bool(game._floor_material.get_shader_parameter("floor_fast_detail")), "profiler enables the fast floor for A/B comparison")
@@ -165,6 +172,8 @@ func _run() -> void:
 		var original_scale := root.scaling_3d_scale
 		game.performance_diagnostics.render_scale_requested.emit(0.5)
 		_check(is_equal_approx(root.scaling_3d_scale, 0.5), "debug profiler can compare half-resolution 3D rendering")
+		game.performance_diagnostics.render_scale_requested.emit(0.67)
+		_check(is_equal_approx(root.scaling_3d_scale, 0.67), "debug profiler can compare the previous 0.67x rendering")
 		game.performance_diagnostics.render_scale_requested.emit(1.0)
 		_check(is_equal_approx(root.scaling_3d_scale, 1.0), "debug profiler can compare full-resolution 3D rendering")
 		root.scaling_3d_scale = original_scale

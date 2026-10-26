@@ -21,7 +21,8 @@ const ZOMBIE_SPAWN_DISTANCE := 50.0
 const VISIBILITY_RADIUS := 30.0
 # Bilinear 3D scaling keeps the touch HUD at native resolution. The fullscreen
 # depth-based flashlight and the arena are rendered at this scale on phones.
-const MOBILE_3D_RENDER_SCALE := 0.67
+const MOBILE_3D_RENDER_SCALE := 0.50
+const MOBILE_BALANCED_RENDER_SCALE := 0.67
 const PLAYER_BASE_CENTER := Vector3(0.0, 0.0, -5.2)
 const PLAYER_BASE_POSITION := Vector3(0.0, 0.05, -5.2)
 const PLAYER_BASE_SAFE_RADIUS := 6.35
@@ -59,6 +60,7 @@ var _floor_material: ShaderMaterial
 var _floor_skip_enabled := true
 var _mask_comparison_visible := true
 var _floor_fast_detail_enabled := false
+var _local_lights_enabled := true
 var _ruin_materials: Dictionary = {}
 var _emissive_materials: Dictionary = {}
 var _boss_enemy: FoundationEnemy
@@ -76,6 +78,7 @@ func _ready() -> void:
 	if OS.has_feature("mobile"):
 		get_viewport().scaling_3d_scale = MOBILE_3D_RENDER_SCALE
 		_floor_fast_detail_enabled = true
+		_local_lights_enabled = false
 	flashlight_visibility_enabled = bool(ProjectSettings.get_setting("gameplay/flashlight_visibility_enabled", true))
 	_start_game_music()
 	_build_environment()
@@ -377,6 +380,7 @@ func _add_quarantine_lamp(at: Vector3, tint: Color) -> void:
 	light.light_energy = 0.72
 	light.omni_range = 9.0
 	light.shadow_enabled = false
+	light.visible = _local_lights_enabled
 	lamp.add_child(light)
 
 func _add_brazier(at: Vector3, flame_color: Color) -> void:
@@ -409,6 +413,7 @@ func _add_brazier(at: Vector3, flame_color: Color) -> void:
 	light.light_energy = 0.82
 	light.omni_range = 8.0
 	light.shadow_enabled = false
+	light.visible = _local_lights_enabled
 	brazier.add_child(light)
 
 func _build_camera() -> void:
@@ -610,7 +615,7 @@ func _apply_distance_visibility(node: Node) -> void:
 	elif node is GeometryInstance3D or node is Label3D:
 		node.visible = node.global_position.distance_squared_to(player.global_position) <= VISIBILITY_RADIUS * VISIBILITY_RADIUS
 	elif node is OmniLight3D or node is SpotLight3D:
-		node.visible = node.global_position.distance_squared_to(player.global_position) <= VISIBILITY_RADIUS * VISIBILITY_RADIUS
+		node.visible = _local_lights_enabled and node.global_position.distance_squared_to(player.global_position) <= VISIBILITY_RADIUS * VISIBILITY_RADIUS
 	for child in node.get_children():
 		_apply_distance_visibility(child)
 
@@ -656,10 +661,12 @@ func _setup_performance_diagnostics() -> void:
 	performance_diagnostics.floor_skip_comparison_requested.connect(_set_debug_floor_skip_enabled)
 	performance_diagnostics.floor_detail_comparison_requested.connect(_set_debug_floor_fast_detail_enabled)
 	performance_diagnostics.set_initial_floor_detail_mode(_floor_fast_detail_enabled)
+	performance_diagnostics.local_lights_comparison_requested.connect(_set_debug_local_lights_enabled)
+	performance_diagnostics.set_initial_local_lights_mode(_local_lights_enabled)
 	add_child(performance_diagnostics)
 
 func _set_debug_render_scale(scale: float) -> void:
-	if OS.is_debug_build() and [0.5, MOBILE_3D_RENDER_SCALE, 1.0].has(scale):
+	if OS.is_debug_build() and [MOBILE_3D_RENDER_SCALE, MOBILE_BALANCED_RENDER_SCALE, 1.0].has(scale):
 		get_viewport().scaling_3d_scale = scale
 
 func _set_debug_mask_visible(is_visible: bool) -> void:
@@ -677,6 +684,11 @@ func _set_debug_floor_fast_detail_enabled(is_enabled: bool) -> void:
 	if OS.is_debug_build() and _floor_material != null:
 		_floor_fast_detail_enabled = is_enabled
 		_floor_material.set_shader_parameter("floor_fast_detail", is_enabled)
+
+func _set_debug_local_lights_enabled(is_enabled: bool) -> void:
+	if OS.is_debug_build():
+		_local_lights_enabled = is_enabled
+		_update_distance_visibility()
 
 func _update_floor_skip_enabled() -> void:
 	if _floor_material != null:

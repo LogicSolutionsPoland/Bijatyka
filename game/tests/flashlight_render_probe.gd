@@ -21,7 +21,7 @@ func _run() -> void:
 	# The close shoulder camera no longer shows the old probe behind the
 	# character. Place it in view beyond the 30 m flashlight radius instead.
 	var dark_probe := _add_probe(game, player_position + Vector3(0.0, 1.2, -34.0), Color(0.02, 1.0, 0.04))
-	for scale in [1.0, Foundation.MOBILE_3D_RENDER_SCALE]:
+	for scale in [1.0, Foundation.MOBILE_BALANCED_RENDER_SCALE, Foundation.MOBILE_3D_RENDER_SCALE]:
 		root.scaling_3d_scale = scale
 		for frame in range(6):
 			await process_frame

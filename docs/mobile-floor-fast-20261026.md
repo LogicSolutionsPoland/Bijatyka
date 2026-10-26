@@ -9,16 +9,23 @@ retains the original full-detail path. The 30 m edge, semicircle, player keep
 area, camera, 15-zombie population, controls, map and Burning Horizon stay as
 before.
 
-The debug profiler shows **Floor FAST** on Android and **Floor FULL** on
-desktop; tap it to switch between the paths. On the phone, hold the empty
-top-right corner for 1.5 seconds, keep the same camera position, 0.67x scale,
-Mask ON, Map ON, and 15 normal zombies. After warmup, record three 20-second
-readings in this order: FAST, FULL, FAST. Record FPS, frame processing, physics,
-draw calls, rendered objects, phone model and whether the floor looks good.
-The prior **Floor skip** control should stay ON for both modes.
+The desktop rendered comparison found little clear change from FAST floor
+alone: 79.31 ms FULL, 78.94 ms FAST, then 86.71 ms FULL. Turning off four
+local lights measured 72.60 ms versus 82.19 ms with them on; mask OFF was
+77.23 ms versus 81.98 ms ON. These are 60-frame software desktop samples with
+the scene frozen, not Android GPU results. To test a stronger phone preset,
+Android now starts at **0.50x 3D scale**, with local light passes OFF and floor
+FAST. The lamp and brazier meshes remain emissive, and the white forward
+flashlight, 30 m visibility and 2D HUD remain.
 
-The Compatibility software-rendered probe now records alternating full/fast
-floor, local-light, and mask costs on a frozen scene. These results can identify
-promising Android experiments, but only the phone comparison can establish a
-mobile FPS gain. If scale and mask toggles were tested, use those readings to
-decide whether the next change belongs in rendering or CPU/physics work.
+The debug profiler can switch **Floor FAST/FULL**, **Lights OFF/ON** and 3D
+scale between 0.50x, 0.67x and 1.00x. On the phone, hold the empty top-right
+corner for 1.5 seconds. At one camera position, Mask ON, Map ON and 15 normal
+zombies, warm up and compare 20 seconds each at 0.50x, 0.67x and 1.00x.
+Then at 0.50x compare Lights OFF/ON/OFF and Floor FAST/FULL/FAST. Record FPS,
+frame processing, physics, draw calls, rendered objects, phone model and
+whether the floor and lamps look good. Keep **Floor skip ON** throughout.
+
+Only the phone comparison can establish an Android FPS gain. If changing scale
+has little effect while the game remains slow, inspect animation, AI and
+physics on device before further reducing visual detail.

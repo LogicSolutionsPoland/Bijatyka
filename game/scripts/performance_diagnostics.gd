@@ -9,6 +9,7 @@ signal mask_comparison_requested(is_visible: bool)
 signal map_comparison_requested(is_visible: bool)
 signal floor_skip_comparison_requested(is_enabled: bool)
 signal floor_detail_comparison_requested(is_fast: bool)
+signal local_lights_comparison_requested(is_enabled: bool)
 
 const SAMPLE_INTERVAL := 0.5
 const POPULATIONS := [15, 20, 69, 100, 200]
@@ -28,11 +29,18 @@ var _floor_skip_enabled := true
 var _floor_skip_button: Button
 var _floor_fast_detail_enabled := false
 var _floor_detail_button: Button
+var _local_lights_enabled := true
+var _local_lights_button: Button
 
 func set_initial_floor_detail_mode(is_fast: bool) -> void:
 	_floor_fast_detail_enabled = is_fast
 	if _floor_detail_button != null:
 		_floor_detail_button.text = "Floor FAST" if is_fast else "Floor FULL"
+
+func set_initial_local_lights_mode(is_enabled: bool) -> void:
+	_local_lights_enabled = is_enabled
+	if _local_lights_button != null:
+		_local_lights_button.text = "Lights ON" if is_enabled else "Lights OFF"
 
 func _ready() -> void:
 	layer = 100
@@ -95,6 +103,10 @@ func _build_ui() -> void:
 	_floor_detail_button.text = "Floor FAST" if _floor_fast_detail_enabled else "Floor FULL"
 	_floor_detail_button.pressed.connect(_toggle_floor_detail_comparison)
 	column.add_child(_floor_detail_button)
+	_local_lights_button = Button.new()
+	_local_lights_button.text = "Lights ON" if _local_lights_enabled else "Lights OFF"
+	_local_lights_button.pressed.connect(_toggle_local_lights_comparison)
+	column.add_child(_local_lights_button)
 
 	for mode in MODES:
 		var mode_label := Label.new()
@@ -180,6 +192,12 @@ func _toggle_floor_detail_comparison() -> void:
 	_floor_fast_detail_enabled = not _floor_fast_detail_enabled
 	_floor_detail_button.text = "Floor FAST" if _floor_fast_detail_enabled else "Floor FULL"
 	floor_detail_comparison_requested.emit(_floor_fast_detail_enabled)
+	_update_readout()
+
+func _toggle_local_lights_comparison() -> void:
+	_local_lights_enabled = not _local_lights_enabled
+	_local_lights_button.text = "Lights ON" if _local_lights_enabled else "Lights OFF"
+	local_lights_comparison_requested.emit(_local_lights_enabled)
 	_update_readout()
 
 func _update_readout() -> void:
