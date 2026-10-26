@@ -2,16 +2,12 @@ extends RefCounted
 
 const ATTACK_LIBRARY_NAME := &"thornbound_combat"
 const PREVIEW_LIBRARY_NAME := &"player_animation_preview"
-const KAYKIT_COMBAT := preload("res://assets/animations/kaykit/Rig_Medium_CombatMelee.glb")
-const KAYKIT_MOVEMENT := preload("res://assets/animations/kaykit/Rig_Medium_MovementBasic.glb")
-const UNIVERSAL_ANIMATIONS := preload("res://assets/animations/universal/UAL1_Standard.glb")
-const FORWARD := Vector3(0.0, 0.0, -1.0)
-
-const SOURCE_SCENES := {
-	"kaykit_combat": KAYKIT_COMBAT,
-	"kaykit_movement": KAYKIT_MOVEMENT,
-	"ual": UNIVERSAL_ANIMATIONS
+const SOURCE_SCENE_PATHS := {
+	"kaykit_combat": "res://assets/animations/kaykit/Rig_Medium_CombatMelee.glb",
+	"kaykit_movement": "res://assets/animations/kaykit/Rig_Medium_MovementBasic.glb",
+	"ual": "res://assets/animations/universal/UAL1_Standard.glb"
 }
+const FORWARD := Vector3(0.0, 0.0, -1.0)
 
 const BONE_MAP := {
 	"root": "Root",
@@ -69,15 +65,21 @@ static func install(animation_player: AnimationPlayer, target_skeleton: Skeleton
 			return false
 
 	var source_contexts: Dictionary = {}
-	for source_id in SOURCE_SCENES.keys():
-		var source_scene: Node = SOURCE_SCENES[source_id].instantiate()
+	for source_id in SOURCE_SCENE_PATHS.keys():
+		var source_path := String(SOURCE_SCENE_PATHS[source_id])
+		var source_pack := ResourceLoader.load(source_path, "PackedScene", ResourceLoader.CACHE_MODE_IGNORE) as PackedScene
+		if source_pack == null:
+			_release_sources(source_contexts)
+			return false
+		var source_scene: Node = source_pack.instantiate()
+		source_pack = null
 		if source_scene == null:
 			_release_sources(source_contexts)
 			return false
 		target_root.add_child(source_scene)
 		_disable_rendering(source_scene)
-		var source_player := source_scene.find_child("AnimationPlayer", true, false) as AnimationPlayer
-		var source_skeleton := source_scene.find_child("Skeleton3D", true, false) as Skeleton3D
+		var source_player := _find_animation_player(source_scene)
+		var source_skeleton := _find_skeleton(source_scene)
 		if source_player == null or source_skeleton == null:
 			source_scene.queue_free()
 			_release_sources(source_contexts)
@@ -127,7 +129,6 @@ static func install(animation_player: AnimationPlayer, target_skeleton: Skeleton
 	}
 	var combat_library := AnimationLibrary.new()
 	for clip_key in attack_specs.keys():
-		var side := "left" if String(clip_key).begins_with("left_") else "right"
 		var kind := "punch" if String(clip_key).ends_with("_punch") else "kick"
 		var profile: Dictionary = attack_profiles.get(kind, {})
 		if profile.is_empty():
@@ -367,6 +368,24 @@ static func _swap_side(bone_name: String) -> String:
 	if bone_name.begins_with("Right"):
 		return "Left" + bone_name.substr(5)
 	return bone_name
+
+static func _find_animation_player(root: Node) -> AnimationPlayer:
+	if root is AnimationPlayer:
+		return root as AnimationPlayer
+	for child: Node in root.get_children():
+		var found := _find_animation_player(child)
+		if found != null:
+			return found
+	return null
+
+static func _find_skeleton(root: Node) -> Skeleton3D:
+	if root is Skeleton3D:
+		return root as Skeleton3D
+	for child: Node in root.get_children():
+		var found := _find_skeleton(child)
+		if found != null:
+			return found
+	return null
 
 static func _disable_rendering(root: Node) -> void:
 	if root is GeometryInstance3D:
