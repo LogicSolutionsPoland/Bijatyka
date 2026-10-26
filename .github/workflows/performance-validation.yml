@@ -73,6 +73,13 @@ jobs:
           grep -q "PASS: zombie animation" "$RUNNER_TEMP/zombie-animation-tests.log"
           if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/zombie-animation-tests.log"; then exit 1; fi
 
+      - name: Check high-detail zombie rig, detail bands, and shadow comparison
+        run: |
+          set -o pipefail
+          godot --headless --path game --script res://tests/high_detail_zombie_test.gd 2>&1 | tee "$RUNNER_TEMP/high-detail-zombie-tests.log"
+          grep -q "PASS: high-detail zombie visual rig" "$RUNNER_TEMP/high-detail-zombie-tests.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/high-detail-zombie-tests.log"; then exit 1; fi
+
       - name: Check runtime effect pools and zombie replacement safety
         run: |
           set -o pipefail

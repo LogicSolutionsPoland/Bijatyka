@@ -8,6 +8,9 @@ signal defeated(enemy: Node)
 const ENEMY_MODEL_PATH := "res://assets/zombies/brutal_v2/Retribution_Zombie_01_Brutal_V2_RIGGED_LOD1.glb"
 const ENEMY_MODEL_YAW_OFFSET := PI
 const FIGHT_ANIMATION_BUILDER := preload("res://scripts/fight_animation.gd")
+const HIGH_DETAIL_ZOMBIE_RIG := preload("res://scripts/high_detail_zombie_rig.gd")
+const HIGH_DETAIL_ZOMBIE_ENTER_DISTANCE := 12.0
+const HIGH_DETAIL_ZOMBIE_EXIT_DISTANCE := 14.0
 const ENEMY_FIGHT_LIBRARY := &"enemy_combat"
 const ENEMY_FIGHT_FORWARD_AXIS_SIGN := -1.0
 const ENEMY_BONE_MAP := {
@@ -78,6 +81,13 @@ var _decision_time := 0.0
 var _wander_time := 0.0
 var _wander_direction := Vector3.ZERO
 var _spawn_assault_time := 0.0
+var is_high_detail_visual_sample := false
+var _high_detail_visual_ready := false
+var _high_detail_visual_active := false
+var _high_detail_visual_meshes: Array[MeshInstance3D] = []
+var _high_detail_bone_attachments: Array[BoneAttachment3D] = []
+var _base_visual_meshes: Array[MeshInstance3D] = []
+var _quality_shadows_enabled := false
 # Rebuilt once per decision frame, shared by the whole population.
 static var _grid_frame := -1
 static var _grid: Dictionary = {}
@@ -159,9 +169,10 @@ func _wander(delta: float) -> void:
 		rotation.y = lerp_angle(rotation.y, atan2(-_wander_direction.x, -_wander_direction.z), minf(1.0, delta * 5.0))
 	_play_animation("Walk" if state == "wander" else "Idle")
 
-func configure(kind: String, boss_target: bool = false) -> void:
+func configure(kind: String, boss_target: bool = false, high_detail_visual_sample: bool = false) -> void:
 	enemy_variant = kind
 	is_boss = boss_target or kind == "boss"
+	is_high_detail_visual_sample = high_detail_visual_sample
 
 func begin_spawn_assault(target: FoundationPlayer) -> bool:
 	if is_boss or hp <= 0 or not is_instance_valid(target):
@@ -292,6 +303,7 @@ func _ensure_detailed_model() -> void:
 			_build_debug_variant()
 		return
 	SHADOW_POLICY.disable_in_tree(_visual_root)
+	_set_quality_shadow_enabled(_quality_shadows_enabled)
 
 func _instantiate_detailed_model() -> Node3D:
 	if _detailed_scene == null and ResourceLoader.exists(ENEMY_MODEL_PATH):
@@ -313,6 +325,9 @@ func _adopt_detailed_model(model: Node3D) -> void:
 	var skeleton_nodes := model.find_children("*", "Skeleton3D", true, false)
 	if not skeleton_nodes.is_empty():
 		_skeleton = skeleton_nodes[0] as Skeleton3D
+	_base_visual_meshes.clear()
+	for mesh_node in model.find_children("*", "MeshInstance3D", true, false):
+		_base_visual_meshes.append(mesh_node as MeshInstance3D)
 	if _animation_player != null and _skeleton != null:
 		_fight_animations_ready = FIGHT_ANIMATION_BUILDER.install_retargeted(
 			_animation_player,
@@ -331,10 +346,24 @@ func _adopt_detailed_model(model: Node3D) -> void:
 			_animation_player.animation_finished.connect(_on_animation_finished)
 	if is_boss:
 		_apply_variant_overlay()
+	if is_high_detail_visual_sample and _skeleton != null:
+		var detail_result: Dictionary = HIGH_DETAIL_ZOMBIE_RIG.attach(_visual_root, _skeleton)
+		if bool(detail_result.get("ok", false)):
+			for mesh_variant in detail_result.get("meshes", []):
+				_high_detail_visual_meshes.append(mesh_variant as MeshInstance3D)
+			for attachment_variant in detail_result.get("attachments", []):
+				_high_detail_bone_attachments.append(attachment_variant as BoneAttachment3D)
+			_high_detail_visual_ready = not _high_detail_visual_meshes.is_empty()
+		else:
+			push_warning("High-detail zombie sample could not attach: %s" % String(detail_result.get("error", "unknown error")))
+	SHADOW_POLICY.disable_in_tree(model)
+	_set_quality_shadow_enabled(_quality_shadows_enabled)
+	_update_high_detail_visual_lod(_distance_to_player())
 
 func _release_detailed_model() -> void:
 	if _model == null:
 		return
+	_clear_high_detail_visual()
 	var model := _model
 	if _animation_player != null:
 		_animation_player.stop()
@@ -346,6 +375,7 @@ func _release_detailed_model() -> void:
 	_fight_animations_ready = false
 	_model = null
 	_full_animation_selected = false
+	_base_visual_meshes.clear()
 	_update_visual_visibility()
 	_visual_root.remove_child(model)
 	if not is_boss and is_instance_valid(_rig_budget_owner):
@@ -581,6 +611,7 @@ func _move_and_check_assault(step: float) -> void:
 func _set_distance_detail(distance: float) -> void:
 	if _visual_root == null:
 		return
+	_update_high_detail_visual_lod(distance)
 	var band := 2 if distance > RENDER_RADIUS else (0 if distance <= DETAILED_RADIUS else 1)
 	if band == _lod_band:
 		_update_visual_visibility()
@@ -610,12 +641,71 @@ func _set_full_animation_selected(selected: bool) -> void:
 	if selected:
 		_ensure_detailed_model()
 		_full_animation_selected = _model != null
+		_update_high_detail_visual_lod(_distance_to_player())
 		_update_visual_visibility()
 		if _full_animation_selected:
 			_resume_animation_for_state()
 	else:
-		_release_detailed_model()
+		if is_high_detail_visual_sample and _model != null:
+			_full_animation_selected = false
+			if _animation_player != null:
+				_animation_player.stop()
+			_update_high_detail_visual_lod(INF)
+		else:
+			_release_detailed_model()
 		_update_visual_visibility()
+
+func set_quality_shadow_enabled(enabled: bool) -> void:
+	_quality_shadows_enabled = enabled
+	_apply_quality_shadow_state()
+
+func _apply_quality_shadow_state() -> void:
+	for mesh in _base_visual_meshes:
+		if is_instance_valid(mesh):
+			mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if _quality_shadows_enabled and not _high_detail_visual_active else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	for mesh in _high_detail_visual_meshes:
+		if is_instance_valid(mesh):
+			mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if _quality_shadows_enabled and _high_detail_visual_active else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+func _distance_to_player() -> float:
+	if is_instance_valid(_player):
+		return global_position.distance_to(_player.global_position)
+	return INF
+
+func _update_high_detail_visual_lod(distance: float) -> void:
+	if not is_high_detail_visual_sample or not _high_detail_visual_ready:
+		return
+	var show_high_detail := distance <= (HIGH_DETAIL_ZOMBIE_EXIT_DISTANCE if _high_detail_visual_active else HIGH_DETAIL_ZOMBIE_ENTER_DISTANCE)
+	if show_high_detail == _high_detail_visual_active:
+		return
+	_high_detail_visual_active = show_high_detail
+	for mesh in _base_visual_meshes:
+		if is_instance_valid(mesh):
+			mesh.visible = not show_high_detail
+	for mesh in _high_detail_visual_meshes:
+		if is_instance_valid(mesh):
+			mesh.visible = show_high_detail
+	_apply_quality_shadow_state()
+
+func _clear_high_detail_visual() -> void:
+	for mesh in _high_detail_visual_meshes:
+		if is_instance_valid(mesh):
+			mesh.visible = false
+			mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	for attachment in _high_detail_bone_attachments:
+		if is_instance_valid(attachment):
+			var parent := attachment.get_parent()
+			if parent != null:
+				parent.remove_child(attachment)
+			attachment.free()
+	for mesh in _base_visual_meshes:
+		if is_instance_valid(mesh):
+			mesh.visible = true
+			mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_high_detail_visual_meshes.clear()
+	_high_detail_bone_attachments.clear()
+	_high_detail_visual_active = false
+	_high_detail_visual_ready = false
 
 func _resume_animation_for_state() -> void:
 	if _animation_player == null or not _full_animation_selected:

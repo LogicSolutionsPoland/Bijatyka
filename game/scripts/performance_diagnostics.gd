@@ -10,6 +10,7 @@ signal map_comparison_requested(is_visible: bool)
 signal floor_skip_comparison_requested(is_enabled: bool)
 signal floor_detail_comparison_requested(is_fast: bool)
 signal local_lights_comparison_requested(is_enabled: bool)
+signal character_shadows_comparison_requested(is_enabled: bool)
 
 const SAMPLE_INTERVAL := 0.5
 const POPULATIONS := [15, 20, 69, 100, 200]
@@ -31,6 +32,8 @@ var _floor_fast_detail_enabled := false
 var _floor_detail_button: Button
 var _local_lights_enabled := true
 var _local_lights_button: Button
+var _character_shadows_enabled := false
+var _character_shadows_button: Button
 
 func set_initial_floor_detail_mode(is_fast: bool) -> void:
 	_floor_fast_detail_enabled = is_fast
@@ -41,6 +44,11 @@ func set_initial_local_lights_mode(is_enabled: bool) -> void:
 	_local_lights_enabled = is_enabled
 	if _local_lights_button != null:
 		_local_lights_button.text = "Lights ON" if is_enabled else "Lights OFF"
+
+func set_initial_character_shadows_mode(is_enabled: bool) -> void:
+	_character_shadows_enabled = is_enabled
+	if _character_shadows_button != null:
+		_character_shadows_button.text = "Character shadows ON" if is_enabled else "Character shadows OFF"
 
 func _ready() -> void:
 	layer = 100
@@ -107,6 +115,10 @@ func _build_ui() -> void:
 	_local_lights_button.text = "Lights ON" if _local_lights_enabled else "Lights OFF"
 	_local_lights_button.pressed.connect(_toggle_local_lights_comparison)
 	column.add_child(_local_lights_button)
+	_character_shadows_button = Button.new()
+	_character_shadows_button.text = "Character shadows ON" if _character_shadows_enabled else "Character shadows OFF"
+	_character_shadows_button.pressed.connect(_toggle_character_shadows_comparison)
+	column.add_child(_character_shadows_button)
 
 	for mode in MODES:
 		var mode_label := Label.new()
@@ -198,6 +210,12 @@ func _toggle_local_lights_comparison() -> void:
 	_local_lights_enabled = not _local_lights_enabled
 	_local_lights_button.text = "Lights ON" if _local_lights_enabled else "Lights OFF"
 	local_lights_comparison_requested.emit(_local_lights_enabled)
+	_update_readout()
+
+func _toggle_character_shadows_comparison() -> void:
+	_character_shadows_enabled = not _character_shadows_enabled
+	_character_shadows_button.text = "Character shadows ON" if _character_shadows_enabled else "Character shadows OFF"
+	character_shadows_comparison_requested.emit(_character_shadows_enabled)
 	_update_readout()
 
 func _update_readout() -> void:

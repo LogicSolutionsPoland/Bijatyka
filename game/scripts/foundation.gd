@@ -61,9 +61,12 @@ var _floor_skip_enabled := true
 var _mask_comparison_visible := true
 var _floor_fast_detail_enabled := false
 var _local_lights_enabled := true
+var _character_shadows_enabled := false
 var _ruin_materials: Dictionary = {}
 var _emissive_materials: Dictionary = {}
 var _boss_enemy: FoundationEnemy
+var _key_light: DirectionalLight3D
+var _high_detail_zombie_sample_assigned := false
 var burning_horizon: Node3D
 var arena_map: Node3D
 var game_music_player: AudioStreamPlayer
@@ -112,6 +115,7 @@ func _ready() -> void:
 	_floor_material.set_shader_parameter("player_position", player.global_position)
 	_floor_material.set_shader_parameter("flashlight_forward", flashlight_visibility_manager.aim_direction)
 	SHADOW_POLICY.disable_in_tree(self)
+	_set_character_shadow_state(_character_shadows_enabled)
 	player.rage.rage_changed.connect(_refresh_hud)
 	player.rage.selection_pending.connect(_on_selection_pending)
 	player.rage.condemned.connect(_on_condemned)
@@ -184,6 +188,7 @@ func _build_environment() -> void:
 	sun.light_color = Color.WHITE if flashlight_visibility_enabled else Color(1.0, 0.72, 0.54)
 	sun.light_energy = 1.0 if flashlight_visibility_enabled else 1.15
 	sun.shadow_enabled = false
+	_key_light = sun
 	add_child(sun)
 
 func _build_arena() -> void:
@@ -519,15 +524,20 @@ func _spawn_enemies() -> void:
 	_spawn_enemy("boss", Vector3(0.6, 0.05, -16.2), true)
 
 func _spawn_assault_zombie(at: Vector3) -> void:
-	var enemy := _spawn_enemy("shambler", at)
+	var is_visual_sample := not _high_detail_zombie_sample_assigned
+	if is_visual_sample:
+		_high_detail_zombie_sample_assigned = true
+	var enemy := _spawn_enemy("shambler", at, false, is_visual_sample)
 	spawn_director.register_enemy(enemy)
 	horde_far_visuals.register_enemy(enemy)
 	enemy.begin_spawn_assault(player)
 
-func _spawn_enemy(kind: String, at: Vector3, boss_target: bool = false) -> FoundationEnemy:
+func _spawn_enemy(kind: String, at: Vector3, boss_target: bool = false, high_detail_visual_sample: bool = false) -> FoundationEnemy:
 	var enemy := ENEMY_SCRIPT.new() as FoundationEnemy
-	enemy.configure(kind, boss_target)
+	enemy.configure(kind, boss_target, high_detail_visual_sample)
 	enemy.position = at
+	enemy._player = player
+	enemy.set_quality_shadow_enabled(_character_shadows_enabled)
 	enemy.combat_fx_pool = combat_fx_pool
 	enemy.telegraph_started.connect(_on_enemy_telegraph)
 	enemy.defeated.connect(_on_enemy_defeated)
@@ -663,6 +673,8 @@ func _setup_performance_diagnostics() -> void:
 	performance_diagnostics.set_initial_floor_detail_mode(_floor_fast_detail_enabled)
 	performance_diagnostics.local_lights_comparison_requested.connect(_set_debug_local_lights_enabled)
 	performance_diagnostics.set_initial_local_lights_mode(_local_lights_enabled)
+	performance_diagnostics.character_shadows_comparison_requested.connect(_set_debug_character_shadows_enabled)
+	performance_diagnostics.set_initial_character_shadows_mode(_character_shadows_enabled)
 	add_child(performance_diagnostics)
 
 func _set_debug_render_scale(scale: float) -> void:
@@ -689,6 +701,22 @@ func _set_debug_local_lights_enabled(is_enabled: bool) -> void:
 	if OS.is_debug_build():
 		_local_lights_enabled = is_enabled
 		_update_distance_visibility()
+
+func _set_debug_character_shadows_enabled(is_enabled: bool) -> void:
+	if OS.is_debug_build():
+		_character_shadows_enabled = is_enabled
+		_set_character_shadow_state(is_enabled)
+
+func _set_character_shadow_state(is_enabled: bool) -> void:
+	if _key_light != null:
+		_key_light.shadow_enabled = is_enabled
+	if is_instance_valid(player) and player.visual_root != null:
+		for node in player.visual_root.find_children("*", "GeometryInstance3D", true, false):
+			var instance := node as GeometryInstance3D
+			instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if is_enabled else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	for node in get_tree().get_nodes_in_group("enemies"):
+		if node is FoundationEnemy and node.is_high_detail_visual_sample:
+			node.set_quality_shadow_enabled(is_enabled)
 
 func _update_floor_skip_enabled() -> void:
 	if _floor_material != null:
