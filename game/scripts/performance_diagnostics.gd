@@ -7,6 +7,7 @@ signal stop_requested
 signal render_scale_requested(scale: float)
 signal mask_comparison_requested(is_visible: bool)
 signal map_comparison_requested(is_visible: bool)
+signal floor_skip_comparison_requested(is_enabled: bool)
 
 const SAMPLE_INTERVAL := 0.5
 const POPULATIONS := [15, 20, 69, 100, 200]
@@ -22,6 +23,8 @@ var _mask_visible := true
 var _mask_button: Button
 var _map_visible := true
 var _map_button: Button
+var _floor_skip_enabled := true
+var _floor_skip_button: Button
 
 func _ready() -> void:
 	layer = 100
@@ -76,6 +79,10 @@ func _build_ui() -> void:
 	_map_button.text = "Map ON"
 	_map_button.pressed.connect(_toggle_map_comparison)
 	graphics_row.add_child(_map_button)
+	_floor_skip_button = Button.new()
+	_floor_skip_button.text = "Floor skip ON"
+	_floor_skip_button.pressed.connect(_toggle_floor_skip_comparison)
+	column.add_child(_floor_skip_button)
 
 	for mode in MODES:
 		var mode_label := Label.new()
@@ -149,6 +156,12 @@ func _toggle_map_comparison() -> void:
 	_map_visible = not _map_visible
 	_map_button.text = "Map ON" if _map_visible else "Map OFF"
 	map_comparison_requested.emit(_map_visible)
+	_update_readout()
+
+func _toggle_floor_skip_comparison() -> void:
+	_floor_skip_enabled = not _floor_skip_enabled
+	_floor_skip_button.text = "Floor skip ON" if _floor_skip_enabled else "Floor skip OFF"
+	floor_skip_comparison_requested.emit(_floor_skip_enabled)
 	_update_readout()
 
 func _update_readout() -> void:

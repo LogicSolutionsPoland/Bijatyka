@@ -3,6 +3,8 @@ render_mode cull_disabled;
 
 uniform vec3 player_position = vec3(0.0, 0.0, 0.0);
 uniform vec3 floor_color : source_color = vec3(0.105, 0.118, 0.135);
+uniform vec3 flashlight_forward = vec3(0.0, 0.0, -1.0);
+uniform bool floor_skip_enabled = false;
 varying vec3 world_position;
 
 float hash21(vec2 p) {
@@ -30,6 +32,13 @@ void fragment() {
 	vec2 ground_position = world_position.xz;
 	float radius = distance(ground_position, player_position.xz);
 	if (radius > 30.0) {
+		discard;
+	}
+	// The later flashlight composite is opaque black where its sector weight
+	// and player keep weight are both zero. Reject those floor fragments before
+	// the noise and fracture layers; retain the soft edge and the keep area.
+	if (floor_skip_enabled && radius >= 2.1
+			&& dot(ground_position - player_position.xz, flashlight_forward.xz) <= -0.22) {
 		discard;
 	}
 

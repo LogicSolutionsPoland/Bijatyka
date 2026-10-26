@@ -56,6 +56,8 @@ var _status_timer := 0.0
 var _pending_notice := ""
 var _visibility_timer := 0.0
 var _floor_material: ShaderMaterial
+var _floor_skip_enabled := true
+var _mask_comparison_visible := true
 var _ruin_materials: Dictionary = {}
 var _emissive_materials: Dictionary = {}
 var _boss_enemy: FoundationEnemy
@@ -103,6 +105,7 @@ func _ready() -> void:
 	_setup_performance_diagnostics()
 	_update_distance_visibility()
 	_floor_material.set_shader_parameter("player_position", player.global_position)
+	_floor_material.set_shader_parameter("flashlight_forward", flashlight_visibility_manager.aim_direction)
 	SHADOW_POLICY.disable_in_tree(self)
 	player.rage.rage_changed.connect(_refresh_hud)
 	player.rage.selection_pending.connect(_on_selection_pending)
@@ -144,6 +147,7 @@ func _process(delta: float) -> void:
 		_update_boss_locator()
 	if _floor_material != null and player != null:
 		_floor_material.set_shader_parameter("player_position", player.global_position)
+		_floor_material.set_shader_parameter("flashlight_forward", flashlight_visibility_manager.aim_direction)
 
 func _build_environment() -> void:
 	var world := WorldEnvironment.new()
@@ -195,6 +199,7 @@ func _build_arena() -> void:
 	_floor_material.shader = RADIAL_GROUND_SHADER
 	_floor_material.set_shader_parameter("floor_color", Color(0.105, 0.118, 0.135))
 	_floor_material.set_shader_parameter("player_position", Vector3.ZERO)
+	_floor_material.set_shader_parameter("floor_skip_enabled", flashlight_visibility_enabled)
 	floor.material_override = _floor_material
 	floor.add_to_group("radial_floor")
 	ground.add_child(floor)
@@ -645,6 +650,7 @@ func _setup_performance_diagnostics() -> void:
 	performance_diagnostics.render_scale_requested.connect(_set_debug_render_scale)
 	performance_diagnostics.mask_comparison_requested.connect(_set_debug_mask_visible)
 	performance_diagnostics.map_comparison_requested.connect(_set_debug_map_visible)
+	performance_diagnostics.floor_skip_comparison_requested.connect(_set_debug_floor_skip_enabled)
 	add_child(performance_diagnostics)
 
 func _set_debug_render_scale(scale: float) -> void:
@@ -653,7 +659,20 @@ func _set_debug_render_scale(scale: float) -> void:
 
 func _set_debug_mask_visible(is_visible: bool) -> void:
 	if OS.is_debug_build() and flashlight_visibility_manager != null:
+		_mask_comparison_visible = is_visible
 		flashlight_visibility_manager.set_composite_visible_for_comparison(is_visible)
+		_update_floor_skip_enabled()
+
+func _set_debug_floor_skip_enabled(is_enabled: bool) -> void:
+	if OS.is_debug_build():
+		_floor_skip_enabled = is_enabled
+		_update_floor_skip_enabled()
+
+func _update_floor_skip_enabled() -> void:
+	if _floor_material != null:
+		# The mask A/B control restores the unmasked ground as well.
+		_floor_material.set_shader_parameter("floor_skip_enabled",
+			flashlight_visibility_enabled and _mask_comparison_visible and _floor_skip_enabled)
 
 func _set_debug_map_visible(is_visible: bool) -> void:
 	if OS.is_debug_build() and is_instance_valid(arena_map):

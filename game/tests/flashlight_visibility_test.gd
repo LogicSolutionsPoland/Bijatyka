@@ -38,6 +38,10 @@ func _run() -> void:
 	_check(manager.is_point_in_sector(game.player.global_position + Vector3(-10, 0, 0)), "positive camera yaw lights the camera's leftward view")
 	_check(not manager.is_point_in_sector(game.player.global_position + Vector3(10, 0, 0)), "rotated sector excludes the opposite half")
 	_check(manager.aim_direction.distance_to(Vector3.LEFT) < 0.001, "aim direction has no rotation lag")
+	game._camera_yaw = PI * 0.5
+	game._process(1.0 / 60.0)
+	_check((game._floor_material.get_shader_parameter("flashlight_forward") as Vector3).distance_to(manager.aim_direction) < 0.001, "ground skip follows the same yaw as the flashlight mask")
+	game._camera_yaw = 0.0
 	manager.set_aim_yaw(-PI * 0.5)
 	_check(manager.aim_direction.distance_to(Vector3.RIGHT) < 0.001, "negative camera yaw lights the camera's rightward view")
 	manager.set_aim_yaw(0.0)
@@ -145,6 +149,14 @@ func _run() -> void:
 	_check(game._boss_enemy != null and game._boss_enemy.hp > 0, "boss simulation remains independent from flashlight visibility")
 	_check(is_equal_approx(Foundation.MOBILE_3D_RENDER_SCALE, 0.67), "mobile 3D defaults to a lower cost bilinear render scale")
 	if OS.is_debug_build() and game.performance_diagnostics != null:
+		_check(bool(game._floor_material.get_shader_parameter("floor_skip_enabled")), "covered ground fragments skip their detail work by default")
+		game._set_debug_floor_skip_enabled(false)
+		_check(not bool(game._floor_material.get_shader_parameter("floor_skip_enabled")), "ground skip can be disabled independently for a device comparison")
+		game._set_debug_floor_skip_enabled(true)
+		game._set_debug_mask_visible(false)
+		_check(not bool(game._floor_material.get_shader_parameter("floor_skip_enabled")), "mask OFF restores the complete unmasked ground")
+		game._set_debug_mask_visible(true)
+		_check(bool(game._floor_material.get_shader_parameter("floor_skip_enabled")), "mask ON restores the ground skip")
 		var original_scale := root.scaling_3d_scale
 		game.performance_diagnostics.render_scale_requested.emit(0.5)
 		_check(is_equal_approx(root.scaling_3d_scale, 0.5), "debug profiler can compare half-resolution 3D rendering")
