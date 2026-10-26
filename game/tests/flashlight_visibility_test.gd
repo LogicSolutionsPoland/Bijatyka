@@ -149,6 +149,11 @@ func _run() -> void:
 	_check(game._boss_enemy != null and game._boss_enemy.hp > 0, "boss simulation remains independent from flashlight visibility")
 	_check(is_equal_approx(Foundation.MOBILE_3D_RENDER_SCALE, 0.67), "mobile 3D defaults to a lower cost bilinear render scale")
 	if OS.is_debug_build() and game.performance_diagnostics != null:
+		_check(bool(game._floor_material.get_shader_parameter("floor_fast_detail")) == OS.has_feature("mobile"), "phone defaults to lower-cost floor detail while desktop preserves full detail")
+		game.performance_diagnostics.floor_detail_comparison_requested.emit(true)
+		_check(bool(game._floor_material.get_shader_parameter("floor_fast_detail")), "profiler enables the fast floor for A/B comparison")
+		game.performance_diagnostics.floor_detail_comparison_requested.emit(false)
+		_check(not bool(game._floor_material.get_shader_parameter("floor_fast_detail")), "profiler restores the full floor for A/B comparison")
 		_check(bool(game._floor_material.get_shader_parameter("floor_skip_enabled")), "covered ground fragments skip their detail work by default")
 		game._set_debug_floor_skip_enabled(false)
 		_check(not bool(game._floor_material.get_shader_parameter("floor_skip_enabled")), "ground skip can be disabled independently for a device comparison")

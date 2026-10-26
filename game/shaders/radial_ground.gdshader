@@ -5,6 +5,7 @@ uniform vec3 player_position = vec3(0.0, 0.0, 0.0);
 uniform vec3 floor_color : source_color = vec3(0.105, 0.118, 0.135);
 uniform vec3 flashlight_forward = vec3(0.0, 0.0, -1.0);
 uniform bool floor_skip_enabled = false;
+uniform bool floor_fast_detail = false;
 varying vec3 world_position;
 
 float hash21(vec2 p) {
@@ -44,9 +45,18 @@ void fragment() {
 
 	float broad = value_noise(ground_position * 0.075);
 	float middle = value_noise(ground_position * 0.31 + vec2(8.4, -3.7));
-	float fine = value_noise(ground_position * 3.2);
+	// On phones, keep the two smooth ash layers and the original cracks, but
+	// replace only the subtle fine grit with one cell hash. The warm stain uses
+	// those same layers. This removes two full value-noise evaluations in the
+	// lit floor without changing its range, base color or silhouette.
+	float fine = floor_fast_detail
+		? hash21(floor(ground_position * 3.2))
+		: value_noise(ground_position * 3.2);
 	float soot = smoothstep(0.43, 0.79, broad * 0.66 + middle * 0.34);
-	float rust = smoothstep(0.72, 0.90, value_noise(ground_position * 0.17 + vec2(-5.2, 7.8)));
+	float rust_noise = floor_fast_detail
+		? broad * 0.62 + middle * 0.38
+		: value_noise(ground_position * 0.17 + vec2(-5.2, 7.8));
+	float rust = smoothstep(0.72, 0.90, rust_noise);
 	vec3 concrete = floor_color * (0.74 + broad * 0.47);
 	concrete += (middle - 0.5) * vec3(0.045, 0.043, 0.040);
 	concrete *= 0.94 + fine * 0.13;

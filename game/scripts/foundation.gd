@@ -58,6 +58,7 @@ var _visibility_timer := 0.0
 var _floor_material: ShaderMaterial
 var _floor_skip_enabled := true
 var _mask_comparison_visible := true
+var _floor_fast_detail_enabled := false
 var _ruin_materials: Dictionary = {}
 var _emissive_materials: Dictionary = {}
 var _boss_enemy: FoundationEnemy
@@ -74,6 +75,7 @@ var _spawn_blockers: Array[AABB] = []
 func _ready() -> void:
 	if OS.has_feature("mobile"):
 		get_viewport().scaling_3d_scale = MOBILE_3D_RENDER_SCALE
+		_floor_fast_detail_enabled = true
 	flashlight_visibility_enabled = bool(ProjectSettings.get_setting("gameplay/flashlight_visibility_enabled", true))
 	_start_game_music()
 	_build_environment()
@@ -200,6 +202,7 @@ func _build_arena() -> void:
 	_floor_material.set_shader_parameter("floor_color", Color(0.105, 0.118, 0.135))
 	_floor_material.set_shader_parameter("player_position", Vector3.ZERO)
 	_floor_material.set_shader_parameter("floor_skip_enabled", flashlight_visibility_enabled)
+	_floor_material.set_shader_parameter("floor_fast_detail", _floor_fast_detail_enabled)
 	floor.material_override = _floor_material
 	floor.add_to_group("radial_floor")
 	ground.add_child(floor)
@@ -651,6 +654,8 @@ func _setup_performance_diagnostics() -> void:
 	performance_diagnostics.mask_comparison_requested.connect(_set_debug_mask_visible)
 	performance_diagnostics.map_comparison_requested.connect(_set_debug_map_visible)
 	performance_diagnostics.floor_skip_comparison_requested.connect(_set_debug_floor_skip_enabled)
+	performance_diagnostics.floor_detail_comparison_requested.connect(_set_debug_floor_fast_detail_enabled)
+	performance_diagnostics.set_initial_floor_detail_mode(_floor_fast_detail_enabled)
 	add_child(performance_diagnostics)
 
 func _set_debug_render_scale(scale: float) -> void:
@@ -667,6 +672,11 @@ func _set_debug_floor_skip_enabled(is_enabled: bool) -> void:
 	if OS.is_debug_build():
 		_floor_skip_enabled = is_enabled
 		_update_floor_skip_enabled()
+
+func _set_debug_floor_fast_detail_enabled(is_enabled: bool) -> void:
+	if OS.is_debug_build() and _floor_material != null:
+		_floor_fast_detail_enabled = is_enabled
+		_floor_material.set_shader_parameter("floor_fast_detail", is_enabled)
 
 func _update_floor_skip_enabled() -> void:
 	if _floor_material != null:

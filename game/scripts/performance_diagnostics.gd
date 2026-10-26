@@ -8,6 +8,7 @@ signal render_scale_requested(scale: float)
 signal mask_comparison_requested(is_visible: bool)
 signal map_comparison_requested(is_visible: bool)
 signal floor_skip_comparison_requested(is_enabled: bool)
+signal floor_detail_comparison_requested(is_fast: bool)
 
 const SAMPLE_INTERVAL := 0.5
 const POPULATIONS := [15, 20, 69, 100, 200]
@@ -25,6 +26,13 @@ var _map_visible := true
 var _map_button: Button
 var _floor_skip_enabled := true
 var _floor_skip_button: Button
+var _floor_fast_detail_enabled := false
+var _floor_detail_button: Button
+
+func set_initial_floor_detail_mode(is_fast: bool) -> void:
+	_floor_fast_detail_enabled = is_fast
+	if _floor_detail_button != null:
+		_floor_detail_button.text = "Floor FAST" if is_fast else "Floor FULL"
 
 func _ready() -> void:
 	layer = 100
@@ -83,6 +91,10 @@ func _build_ui() -> void:
 	_floor_skip_button.text = "Floor skip ON"
 	_floor_skip_button.pressed.connect(_toggle_floor_skip_comparison)
 	column.add_child(_floor_skip_button)
+	_floor_detail_button = Button.new()
+	_floor_detail_button.text = "Floor FAST" if _floor_fast_detail_enabled else "Floor FULL"
+	_floor_detail_button.pressed.connect(_toggle_floor_detail_comparison)
+	column.add_child(_floor_detail_button)
 
 	for mode in MODES:
 		var mode_label := Label.new()
@@ -162,6 +174,12 @@ func _toggle_floor_skip_comparison() -> void:
 	_floor_skip_enabled = not _floor_skip_enabled
 	_floor_skip_button.text = "Floor skip ON" if _floor_skip_enabled else "Floor skip OFF"
 	floor_skip_comparison_requested.emit(_floor_skip_enabled)
+	_update_readout()
+
+func _toggle_floor_detail_comparison() -> void:
+	_floor_fast_detail_enabled = not _floor_fast_detail_enabled
+	_floor_detail_button.text = "Floor FAST" if _floor_fast_detail_enabled else "Floor FULL"
+	floor_detail_comparison_requested.emit(_floor_fast_detail_enabled)
 	_update_readout()
 
 func _update_readout() -> void:

@@ -65,8 +65,49 @@ func _run() -> void:
 		"android_gpu_time": "N/A (phone measurement required)",
 	}
 	print("RENDERED_DESKTOP_ENVIRONMENT_SAMPLE " + JSON.stringify(report))
+	# One frozen scene, alternating settings. These desktop software-renderer
+	# samples help choose the next phone experiment; they are not Android FPS.
+	game.set_process(false)
+	game.player.set_physics_process(false)
+	game.spawn_director.set_physics_process(false)
+	for enemy in get_nodes_in_group("enemies"):
+		if enemy is FoundationEnemy:
+			enemy.set_physics_process(false)
+	await _sample_render_variant("floor_full_before")
+	game._floor_material.set_shader_parameter("floor_fast_detail", true)
+	await _sample_render_variant("floor_fast")
+	game._floor_material.set_shader_parameter("floor_fast_detail", false)
+	await _sample_render_variant("floor_full_after")
+	var local_lights := game.find_children("*", "OmniLight3D", true, false)
+	for light in local_lights:
+		light.visible = false
+	await _sample_render_variant("local_lights_off")
+	for light in local_lights:
+		light.visible = true
+	await _sample_render_variant("local_lights_on")
+	game._set_debug_mask_visible(false)
+	await _sample_render_variant("mask_off")
+	game._set_debug_mask_visible(true)
+	await _sample_render_variant("mask_on")
 	game.queue_free()
 	await process_frame
 	if not rendered:
 		push_error("Compatibility shader validation did not render frames")
 	quit(0 if rendered else 1)
+
+func _sample_render_variant(label: String) -> void:
+	for frame in range(12):
+		await process_frame
+	var process_total := 0.0
+	var draws_total := 0.0
+	for frame in range(60):
+		await process_frame
+		process_total += Performance.get_monitor(Performance.TIME_PROCESS)
+		draws_total += Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)
+	print("RENDERED_DESKTOP_COST_AB " + JSON.stringify({
+		"variant": label, "frames": 60,
+		"frame_processing_ms_avg": snappedf(process_total * 1000.0 / 60.0, 0.001),
+		"draw_calls_avg": snappedf(draws_total / 60.0, 0.1),
+		"renderer": "Compatibility OpenGL software desktop",
+		"android_gpu_time": "N/A (phone measurement required)",
+	}))
