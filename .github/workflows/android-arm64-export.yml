@@ -6,6 +6,7 @@ on:
     branches:
       - codex/arena-map-apk-export-20261025
       - codex/fix-mobile-5fps-20261025
+      - codex/mobile-performance-apk-export-20261026
 
 permissions:
   contents: read
@@ -46,6 +47,7 @@ jobs:
           mkdir -p build
           preset="Android ARM64"
           if [ "$GITHUB_REF_NAME" = "codex/fix-mobile-5fps-20261025" ]; then preset="Android ARM64 FPS Test"; fi
+          if [ "$GITHUB_REF_NAME" = "codex/mobile-performance-apk-export-20261026" ]; then preset="Android ARM64 Performance Test"; fi
           godot --headless --path game --export-debug "$preset" "$GITHUB_WORKSPACE/build/Bijatyka-android-arm64.apk" 2>&1 | tee "$RUNNER_TEMP/android-export.log"
           if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/android-export.log"; then exit 1; fi
           test -s "$GITHUB_WORKSPACE/build/Bijatyka-android-arm64.apk"
@@ -70,6 +72,7 @@ jobs:
             assets/scenes/foundation.tscn.remap \
             assets/scenes/player.tscn.remap \
             assets/shaders/burning_horizon.gdshader \
+            assets/shaders/radial_ground.gdshader \
             assets/shaders/flashlight_visibility.gdshader \
             assets/shaders/horde_crowd_animation.gdshader \
             assets/assets/audio/menu_music.mp3.import \
@@ -85,6 +88,7 @@ jobs:
           test -n "$aapt_bin"
           package_name="org.logicsolutionspoland.bijatyka"
           if [ "$GITHUB_REF_NAME" = "codex/fix-mobile-5fps-20261025" ]; then package_name="org.logicsolutionspoland.bijatyka.fpstest"; fi
+          if [ "$GITHUB_REF_NAME" = "codex/mobile-performance-apk-export-20261026" ]; then package_name="org.logicsolutionspoland.bijatyka.perftest2"; fi
           "$aapt_bin" dump badging "$apk" | grep -q "package: name='$package_name'"
 
       - name: Upload Android ARM64 APK artifact
