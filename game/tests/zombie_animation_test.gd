@@ -101,7 +101,7 @@ func _test_behavior_animation_connections() -> void:
 	_check(enemy._select_attack_animation(target, 1.2, ["Attack_Swipe_R"]) == "Attack_Swipe_R", "missing desired clip falls back to an available swipe")
 
 	enemy._begin_attack_animation(target, 1.2, 0.4)
-	_check(animations.current_animation == "Attack_Swipe_R", "attack windup starts the selected swipe")
+	_check(animations.current_animation == "enemy_combat/right_kick", "attack windup uses the player kick retargeted to the zombie rig")
 	animations.advance(0.4)
 	_check(absf(animations.current_animation_position - enemy._attack_contact_time) < 0.025, "attack contact pose reaches the existing windup expiry")
 	enemy.combat_target = target
