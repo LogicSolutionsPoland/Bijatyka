@@ -15,6 +15,11 @@ func _run() -> void:
 	var player := Player.new() as FoundationPlayer
 	root.add_child(player)
 	player.set_physics_process(false)
+	_check(player._animation_player.current_animation == "Idle", "player starts its idle animation immediately")
+	var ready_skeleton := player._skeleton as Skeleton3D
+	_check(_bone_world(ready_skeleton, "hand_l").y < _bone_world(ready_skeleton, "upperarm_l").y - 0.20
+		and _bone_world(ready_skeleton, "hand_r").y < _bone_world(ready_skeleton, "upperarm_r").y - 0.20,
+		"player is not displayed in the imported T-pose")
 	await process_frame
 	_check(player._fight_animations_ready, "player combat clips install on the imported rig")
 	if not player._fight_animations_ready:

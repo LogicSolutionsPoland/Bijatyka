@@ -122,7 +122,7 @@ func _ready() -> void:
 	player.health_changed.connect(func(_current: int, _maximum: int) -> void: _refresh_hud())
 	player.magic_changed.connect(func(_current: float, _maximum: float, _school: String) -> void: _refresh_hud())
 	_refresh_hud(player.rage.rage, player.rage.maximum_rage, player.rage.condemnation_threshold())
-	hud.show_notice("Thornbound awakens. Zombies interrupt; only bosses damage HP.")
+	hud.show_notice("Zombies interrupt attacks; only the boss damages HP.")
 
 func _start_game_music() -> void:
 	game_music_player = AudioStreamPlayer.new()

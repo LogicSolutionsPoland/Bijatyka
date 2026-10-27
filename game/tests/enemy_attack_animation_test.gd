@@ -24,6 +24,14 @@ func _run() -> void:
 		if not enemy._fight_animations_ready:
 			enemy.queue_free()
 			continue
+		_check(enemy._animation_player.current_animation == "Idle", "%s starts its idle pose immediately" % variant)
+		var skeleton := enemy._skeleton as Skeleton3D
+		_check(_bone(skeleton, "hand_l").y < _bone(skeleton, "upperarm_l").y - 0.20
+			and _bone(skeleton, "hand_r").y < _bone(skeleton, "upperarm_r").y - 0.20,
+			"%s is not displayed in the imported T-pose" % variant)
+		for child in enemy._visual_root.get_children():
+			if child is MeshInstance3D:
+				_check(not (child as MeshInstance3D).mesh is BoxMesh, "%s has no box over the animated torso" % variant)
 		var expected_path := Enemy.BOSS_MODEL_PATH if variant == "boss" else Enemy.ENEMY_MODEL_PATH
 		_check(enemy._model.scene_file_path == expected_path, "%s uses the specified male/female model" % variant)
 		var animator := enemy._animation_player as AnimationPlayer
@@ -128,6 +136,8 @@ func _check_playback(enemy: FoundationEnemy) -> void:
 	_check(animator.current_animation in ["Idle", "Walk", "Sprint"], "%s returns to idle or locomotion when target leaves reach" % enemy.enemy_variant)
 	victim.global_position = Vector3(0.0, 0.0, -enemy.attack_range * 0.80)
 	# Replaying the same clip during a second windup must reset its pose.
+	# Wandering may turn the enemy randomly while the victim is out of reach.
+	enemy.rotation.y = 0.0
 	enemy._attack_sequence = 0
 	enemy._begin_attack_animation(victim, enemy.attack_range * 0.80, first_time)
 	animator.advance(0.10)

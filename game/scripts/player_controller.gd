@@ -111,6 +111,9 @@ func _load_player_visual() -> void:
 					_fight_animations_ready = FIGHT_ANIMATION_BUILDER.install(_animation_player, _skeleton, ATTACKS)
 				_animation_player.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_PHYSICS
 				_set_locomotion_animation("Idle")
+				# Avoid displaying the imported T-pose on the first gameplay frame.
+				if _animation_player.current_animation == "Idle":
+					_animation_player.seek(0.05, true)
 				return
 	_add_debug_visual()
 

@@ -265,8 +265,8 @@ func _build_visual() -> void:
 	if is_boss:
 		_full_animation_selected = true
 		_ensure_detailed_model()
-	if is_boss or enemy_variant == "brute":
-		_add_silhouette_piece()
+	if is_boss:
+		_add_boss_ring()
 	_build_health_display()
 	SHADOW_POLICY.disable_in_tree(_visual_root)
 
@@ -326,6 +326,11 @@ func _adopt_detailed_model(model: Node3D) -> void:
 			if _animation_player.has_animation(loop_name):
 				_animation_player.get_animation(loop_name).loop_mode = Animation.LOOP_LINEAR
 		_animation_player.speed_scale = 1.0
+		# Apply a real imported pose before the model can be rendered. The GLB's
+		# bind pose has horizontal arms, and the boss is visible immediately.
+		if _animation_player.has_animation(&"Idle"):
+			_animation_player.play(&"Idle", 0.0)
+			_animation_player.seek(0.05, true)
 		if not _animation_player.animation_finished.is_connected(_on_animation_finished):
 			_animation_player.animation_finished.connect(_on_animation_finished)
 	if is_boss:
@@ -450,34 +455,23 @@ func _apply_variant_overlay() -> void:
 		if node is GeometryInstance3D:
 			(node as GeometryInstance3D).material_overlay = overlay
 
-func _add_silhouette_piece() -> void:
-	var plate := MeshInstance3D.new()
-	var box := BoxMesh.new()
-	box.size = Vector3(1.05, 0.52, 0.42) if not is_boss else Vector3(1.45, 0.70, 0.52)
-	plate.mesh = box
-	plate.position = Vector3(0.0, 1.45 if not is_boss else 1.85, 0.12)
-	var material := StandardMaterial3D.new()
-	material.albedo_color = Color(0.20, 0.22, 0.25) if enemy_variant == "brute" else Color(0.28, 0.05, 0.08)
-	material.roughness = 0.84
-	material.metallic = 0.36
-	plate.material_override = material
-	_visual_root.add_child(plate)
-	if is_boss:
-		var halo := MeshInstance3D.new()
-		var ring := TorusMesh.new()
-		ring.inner_radius = 0.65
-		ring.outer_radius = 0.82
-		ring.rings = 18
-		ring.ring_segments = 8
-		halo.mesh = ring
-		halo.position.y = 0.12
-		var glow := StandardMaterial3D.new()
-		glow.albedo_color = Color(0.85, 0.08, 0.12)
-		glow.emission_enabled = true
-		glow.emission = Color(0.85, 0.08, 0.12)
-		glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		halo.material_override = glow
-		_visual_root.add_child(halo)
+func _add_boss_ring() -> void:
+	var halo := MeshInstance3D.new()
+	halo.name = "BossRing"
+	var ring := TorusMesh.new()
+	ring.inner_radius = 0.65
+	ring.outer_radius = 0.82
+	ring.rings = 18
+	ring.ring_segments = 8
+	halo.mesh = ring
+	halo.position.y = 0.12
+	var glow := StandardMaterial3D.new()
+	glow.albedo_color = Color(0.85, 0.08, 0.12)
+	glow.emission_enabled = true
+	glow.emission = Color(0.85, 0.08, 0.12)
+	glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	halo.material_override = glow
+	_visual_root.add_child(halo)
 
 func _build_debug_variant() -> void:
 	var body := MeshInstance3D.new()

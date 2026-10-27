@@ -143,7 +143,7 @@ func _build_status() -> void:
 	column.add_theme_constant_override("separation", 3)
 	panel.add_child(column)
 	var title := Label.new()
-	title.text = "RETRIBUTION  /  THORNBOUND"
+	title.text = "BIJATYKA"
 	title.add_theme_font_size_override("font_size", 15)
 	title.add_theme_color_override("font_color", Color(0.95, 0.77, 0.60))
 	column.add_child(title)
