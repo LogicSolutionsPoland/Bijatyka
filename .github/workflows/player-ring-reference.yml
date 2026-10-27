@@ -13,7 +13,7 @@ jobs:
   player-ring-clips:
     name: Validate rig, attack timing and enemy isolation
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - name: Install Godot 4.7.2
@@ -21,6 +21,7 @@ jobs:
         with:
           version: 4.7.2
           use-dotnet: false
+          include-templates: true
       - name: Import source and animations
         shell: bash
         run: |
@@ -54,3 +55,35 @@ jobs:
           set -euo pipefail
           godot --headless --path game --quit-after 240 2>&1 | tee "$RUNNER_TEMP/smoke.log"
           if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/smoke.log"; then exit 1; fi
+      - name: Build debug Android ARM64 APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d "$ANDROID_HOME"
+          mkdir -p build
+          godot --headless --path game --export-debug "Android ARM64" "$GITHUB_WORKSPACE/build/Bijatyka-Player-Ring-ARM64.apk" 2>&1 | tee "$RUNNER_TEMP/export.log"
+          if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/export.log"; then exit 1; fi
+          test -s build/Bijatyka-Player-Ring-ARM64.apk
+      - name: Check generated APK content and package
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=build/Bijatyka-Player-Ring-ARM64.apk
+          unzip -tqq "$apk"
+          unzip -Z1 "$apk" > "$RUNNER_TEMP/apk-files.txt"
+          for entry in lib/arm64-v8a/libgodot_android.so assets/project.binary assets/scripts/player_controller.gdc assets/scripts/player_ring_reference.gdc assets/scripts/enemy.gdc assets/scenes/foundation.tscn.remap assets/assets/characters/universal_base/Universal_Base_Characters_Male.glb.import; do
+            grep -Fxq "$entry" "$RUNNER_TEMP/apk-files.txt"
+            test "$(unzip -p "$apk" "$entry" | wc -c)" -gt 0
+          done
+          if grep -Eq '^lib/(armeabi-v7a|x86|x86_64)/' "$RUNNER_TEMP/apk-files.txt"; then exit 1; fi
+          aapt_bin="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
+          "$aapt_bin" dump badging "$apk" | grep -q "package: name='org.logicsolutionspoland.bijatyka'"
+          sha256sum "$apk"
+          ls -lh "$apk"
+      - name: Upload ready APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bijatyka-Player-Ring-ARM64-APK
+          path: build/Bijatyka-Player-Ring-ARM64.apk
+          if-no-files-found: error
+          retention-days: 30
