@@ -1,0 +1,56 @@
+name: Player-only ring reference animations
+
+on:
+  push:
+    branches:
+      - codex/ring-player-only-20261027
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  player-ring-clips:
+    name: Validate rig, attack timing and enemy isolation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Godot 4.7.2
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+      - name: Import source and animations
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --editor --path game --import --quit 2>&1 | tee "$RUNNER_TEMP/import.log"
+          if grep -E 'SCRIPT ERROR:|ERROR: Failed to load' "$RUNNER_TEMP/import.log"; then exit 1; fi
+      - name: Player rig, sixteen clips, timing, controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path game --script res://tests/player_animation_test.gd 2>&1 | tee "$RUNNER_TEMP/player.log"
+          grep -q 'PASS: player martial animation' "$RUNNER_TEMP/player.log"
+          if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/player.log"; then exit 1; fi
+      - name: Existing enemy animation regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path game --script res://tests/enemy_attack_animation_test.gd 2>&1 | tee "$RUNNER_TEMP/enemy.log"
+          grep -q 'PASS:' "$RUNNER_TEMP/enemy.log"
+          if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/enemy.log"; then exit 1; fi
+      - name: Gameplay and gamepad regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path game --script res://tests/test_runner.gd 2>&1 | tee "$RUNNER_TEMP/gameplay.log"
+          grep -q 'PASS:' "$RUNNER_TEMP/gameplay.log"
+          if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/gameplay.log"; then exit 1; fi
+      - name: Playable scene smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path game --quit-after 240 2>&1 | tee "$RUNNER_TEMP/smoke.log"
+          if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/smoke.log"; then exit 1; fi
