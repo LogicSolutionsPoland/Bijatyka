@@ -33,7 +33,10 @@ const ACTIONS := {
 	"Magic_Fire": 0.62,
 	"Magic_Shadow": 0.68,
 	"Hit": 0.34,
-	"Defeat": 1.25
+	"Hit_React": 0.34,
+	"Defeat": 1.25,
+	"Death_Forward": 1.25,
+	"Death_Backward": 1.25
 }
 
 static func clip_path(action_name: String) -> StringName:
@@ -67,8 +70,17 @@ static func install(animation_player: AnimationPlayer, skeleton: Skeleton3D) -> 
 	if animation_player.add_animation_library(LIBRARY_NAME, action_library) != OK:
 		return false
 
-	for animation_name in ["Idle", "Walk", "Sprint", "Jump"]:
-		var animation := _build_locomotion(skeleton, animation_root.get_path_to(skeleton), animation_name)
+	for animation_name in ["Idle", "Walk", "Sprint", "Jump", "Hit_React", "Death_Forward", "Death_Backward"]:
+		var animation: Animation
+		if animation_name in ["Idle", "Walk", "Sprint", "Jump"]:
+			animation = _build_locomotion(skeleton, animation_root.get_path_to(skeleton), animation_name)
+		else:
+			animation = _build_action(
+				skeleton,
+				animation_root.get_path_to(skeleton),
+				animation_name,
+				float(ACTIONS.get(animation_name, 0.5))
+			)
 		if animation_player.has_animation(StringName(animation_name)):
 			animation_player.remove_animation(StringName(animation_name))
 		if animation_player.add_animation(StringName(animation_name), animation) != OK:
@@ -201,7 +213,7 @@ static func _action_poses(action_name: String) -> Dictionary:
 				"RightForearm": [zero, Vector3(0.42, 0.0, 0.0), Vector3(0.18, 0.0, 0.0), zero],
 				"LeftUpperArm": [zero, Vector3(0.18, 0.0, 0.10), Vector3(0.12, 0.0, 0.05), zero]
 			}
-		"Hit":
+		"Hit", "Hit_React":
 			return {
 				"Hips": [zero, Vector3(0.0, 0.0, 0.10), Vector3(0.0, 0.0, 0.06), zero],
 				"Spine": [zero, Vector3(0.12, 0.0, 0.10), Vector3(0.06, 0.0, 0.04), zero],
@@ -209,9 +221,10 @@ static func _action_poses(action_name: String) -> Dictionary:
 				"LeftUpperArm": [zero, Vector3(0.20, 0.0, 0.14), Vector3(0.10, 0.0, 0.06), zero],
 				"RightUpperArm": [zero, Vector3(0.20, 0.0, -0.14), Vector3(0.10, 0.0, -0.06), zero]
 			}
-		"Defeat":
+		"Defeat", "Death_Forward", "Death_Backward":
+			var fall_sign := -1.0 if action_name == "Death_Backward" else 1.0
 			return {
-				"Hips": [zero, Vector3(0.14, 0.0, 0.0), Vector3(0.42, 0.0, 0.0), Vector3(0.48, 0.0, 0.0)],
+				"Hips": [zero, Vector3(0.14 * fall_sign, 0.0, 0.0), Vector3(0.42 * fall_sign, 0.0, 0.0), Vector3(0.48 * fall_sign, 0.0, 0.0)],
 				"Spine": [zero, Vector3(0.12, 0.0, 0.0), Vector3(0.38, 0.0, 0.0), Vector3(0.48, 0.0, 0.0)],
 				"Chest": [zero, Vector3(-0.10, 0.0, 0.0), Vector3(0.26, 0.0, 0.0), Vector3(0.32, 0.0, 0.0)],
 				"LeftThigh": [zero, Vector3(-0.14, 0.0, -0.08), Vector3(-0.35, 0.0, -0.10), Vector3(-0.35, 0.0, -0.10)],
