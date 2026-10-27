@@ -8,6 +8,7 @@ signal defeated(enemy: Node)
 const ENEMY_MODEL_PATH := "res://assets/characters/universal_base/Universal_Base_Characters_Male.glb"
 const BOSS_MODEL_PATH := "res://assets/characters/universal_base/Universal_Base_Characters_Female.glb"
 const UNIVERSAL_BASE_MOTION := preload("res://scripts/universal_base_motion.gd")
+const RECONSTRUCTED_HEAD_TRANSFER := preload("res://scripts/reconstructed_head_texture.gd")
 const ENEMY_MODEL_YAW_OFFSET := PI
 const FIGHT_ANIMATION_BUILDER := preload("res://scripts/universal_base_enemy_combat.gd")
 const ENEMY_FIGHT_LIBRARY := &"enemy_combat"
@@ -317,6 +318,8 @@ func _adopt_detailed_model(model: Node3D) -> void:
 	_base_visual_meshes.clear()
 	for mesh_node in model.find_children("*", "MeshInstance3D", true, false):
 		_base_visual_meshes.append(mesh_node as MeshInstance3D)
+	if not is_boss and _skeleton != null:
+		RECONSTRUCTED_HEAD_TRANSFER.install(_skeleton, _base_visual_meshes)
 	if _animation_player != null and _skeleton != null:
 		UNIVERSAL_BASE_MOTION.install(_animation_player, _skeleton)
 		_fight_animations_ready = FIGHT_ANIMATION_BUILDER.install(_animation_player, _skeleton, _fight_attack_profiles())
