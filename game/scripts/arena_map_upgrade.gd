@@ -1,8 +1,12 @@
 extends Node3D
-## Original low-poly environment dressing for the quarantine combat map.
-## All geometry is procedural, has no collision, and uses the existing weathering shader.
+## Batched quarantine map geometry and imported CC0 nature dressing.
+## All scenery is visual-only and leaves the combat routes unobstructed.
 
 const RUIN_SURFACE_SHADER := preload("res://shaders/ruined_surface.gdshader")
+const DEAD_TREE_1 := preload("res://assets/environment/nature/DeadTree_1.gltf")
+const DEAD_TREE_3 := preload("res://assets/environment/nature/DeadTree_3.gltf")
+const ROCK_MEDIUM_1 := preload("res://assets/environment/nature/Rock_Medium_1.gltf")
+const BUSH_COMMON := preload("res://assets/environment/nature/Bush_Common.gltf")
 var _static_box_batches: Dictionary = {}
 
 func _ready() -> void:
@@ -24,6 +28,68 @@ func _build_map() -> void:
 	_build_edge_debris(rust, concrete)
 	_build_southern_checkpoint(concrete, dark_concrete, rust, amber)
 	_flush_static_boxes()
+	_build_nature()
+
+func _build_nature() -> void:
+	# Quaternius CC0 scenery from Zasoby. Keep trunks beyond the fence and the
+	# protected base so the five-zombie combat routes and spawn logic stay open.
+	_add_nature_batch("DeadTreesShort", DEAD_TREE_1, [
+		_nature_transform(-17.8, -22.0, 20.0, 0.65),
+		_nature_transform(23.0, 7.5, -37.0, 0.65),
+		_nature_transform(-27.0, -5.0, 112.0, 0.82),
+	])
+	_add_nature_batch("DeadTreesTall", DEAD_TREE_3, [
+		_nature_transform(18.2, -23.0, 45.0, 0.50),
+		_nature_transform(-23.5, 17.0, -28.0, 0.62),
+		_nature_transform(22.0, 17.5, 131.0, 0.59),
+	])
+	_add_nature_batch("RoadsideRocks", ROCK_MEDIUM_1, [
+		_nature_transform(-19.0, 8.5, 12.0, 0.70),
+		_nature_transform(20.0, 10.0, 58.0, 0.65),
+		_nature_transform(-25.0, -1.5, 115.0, 0.75),
+		_nature_transform(26.0, 0.5, -25.0, 0.63),
+		_nature_transform(-20.5, 17.5, 80.0, 0.60),
+		_nature_transform(19.0, -25.0, 143.0, 0.57),
+		_nature_transform(-22.0, -25.0, -53.0, 0.70),
+		_nature_transform(23.5, -17.0, 33.0, 0.66),
+	])
+	_add_nature_batch("OvergrownShrubs", BUSH_COMMON, [
+		_nature_transform(-19.2, 10.0, 0.0, 0.78),
+		_nature_transform(19.5, 11.5, 70.0, 0.85),
+		_nature_transform(-25.3, -3.0, 114.0, 0.90),
+		_nature_transform(25.5, 1.5, -21.0, 0.76),
+		_nature_transform(-21.5, -23.5, 40.0, 0.87),
+		_nature_transform(23.0, -23.0, 115.0, 0.80),
+	])
+
+func _nature_transform(x: float, z: float, yaw_degrees: float, scale_factor: float) -> Transform3D:
+	return Transform3D(Basis(Vector3.UP, deg_to_rad(yaw_degrees)).scaled(Vector3.ONE * scale_factor), Vector3(x, 0.10, z))
+
+func _add_nature_batch(label: String, source: PackedScene, placements: Array) -> void:
+	# A single imported mesh and MultiMesh per type share the pack's textures.
+	# Decoration has no collision, avoiding changes to combat and spawn timing.
+	var prototype := source.instantiate() as Node3D
+	var meshes := prototype.find_children("*", "MeshInstance3D", true, false)
+	if meshes.is_empty():
+		push_error("Missing scenery mesh: " + label)
+		prototype.free()
+		return
+	var visual := meshes[0] as MeshInstance3D
+	var batch := MultiMesh.new()
+	batch.transform_format = MultiMesh.TRANSFORM_3D
+	batch.mesh = visual.mesh
+	batch.instance_count = placements.size()
+	batch.visible_instance_count = placements.size()
+	for index in range(placements.size()):
+		var placement: Transform3D = placements[index]
+		batch.set_instance_transform(index, placement * visual.transform)
+	var instance := MultiMeshInstance3D.new()
+	instance.name = label
+	instance.multimesh = batch
+	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	instance.add_to_group("nature_scenery_batch")
+	add_child(instance)
+	prototype.free()
 
 func _build_street(asphalt: Material, concrete: Material, dark_concrete: Material, road_paint: Material) -> void:
 	# A cross street and boulevard give the flat fight yard a clear route through it.

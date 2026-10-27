@@ -30,13 +30,22 @@ func _run() -> void:
 	var district := game.get_node("AshenQuarantineMap")
 	var district_batches := 0
 	var district_boxes := 0
+	var nature_batches := 0
+	var nature_instances := 0
 	for child in district.get_children():
-		if child is MultiMeshInstance3D:
+		if child is MultiMeshInstance3D and child.is_in_group("static_map_batch"):
 			var batch := child as MultiMeshInstance3D
 			district_batches += 1
 			district_boxes += batch.multimesh.instance_count
 			_check(batch.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "district batches cast no shadows")
+		elif child is MultiMeshInstance3D and child.is_in_group("nature_scenery_batch"):
+			var nature := child as MultiMeshInstance3D
+			nature_batches += 1
+			nature_instances += nature.multimesh.instance_count
+			_check(nature.multimesh.mesh != null and nature.multimesh.mesh.get_surface_count() > 0, "nature uses imported meshes")
+			_check(nature.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "nature casts no shadows")
 	_check(district_batches == 7 and district_boxes == 103, "all 103 district boxes share seven material draws")
+	_check(nature_batches == 4 and nature_instances == 20, "six trees, eight rocks, six shrubs share four mesh batches")
 	_check(Foundation.VISIBILITY_RADIUS == 30.0, "visual edge stays at 30 m")
 	game.queue_free()
 	await process_frame

@@ -12,6 +12,7 @@ on:
       - codex/universal-base-characters-integration-20261027
       - codex/player-attack-animation-fix-20261027
       - codex/enemy-attack-animation-fix-20261027
+      - codex/environment-nature-zasoby-20261027
 
 permissions:
   contents: read
@@ -49,7 +50,7 @@ jobs:
       - name: Validate enemy and player animation and controls
         run: |
           set -euo pipefail
-          for suite in enemy_attack_animation_test zombie_animation_test player_animation_test test_runner; do
+          for suite in environment_render_test enemy_attack_animation_test zombie_animation_test player_animation_test test_runner; do
             godot --headless --path game --script "res://tests/$suite.gd" 2>&1 | tee "$RUNNER_TEMP/$suite.log"
             grep -q 'PASS:' "$RUNNER_TEMP/$suite.log"
             if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/$suite.log"; then exit 1; fi
@@ -117,11 +118,16 @@ jobs:
             assets/scripts/universal_base_motion.gdc \
             assets/scripts/universal_base_combat.gdc \
             assets/scripts/universal_base_enemy_combat.gdc \
+            assets/scripts/arena_map_upgrade.gdc \
             assets/scenes/foundation.tscn.remap \
             assets/scenes/player.tscn.remap \
             assets/assets/characters/thornbound/Retribution_Player_Thornbound_Warrior_MOBILE.glb.import \
             assets/assets/characters/universal_base/Universal_Base_Characters_Male.glb.import \
             assets/assets/characters/universal_base/Universal_Base_Characters_Female.glb.import \
+            assets/assets/environment/nature/DeadTree_1.gltf.import \
+            assets/assets/environment/nature/DeadTree_3.gltf.import \
+            assets/assets/environment/nature/Rock_Medium_1.gltf.import \
+            assets/assets/environment/nature/Bush_Common.gltf.import \
             assets/shaders/burning_horizon.gdshader \
             assets/shaders/radial_ground.gdshader \
             assets/shaders/flashlight_visibility.gdshader \

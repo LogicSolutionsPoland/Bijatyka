@@ -20,11 +20,21 @@ func _run() -> void:
 		await process_frame
 	var map_batches := 0
 	var map_boxes := 0
+	var nature_batches := 0
+	var nature_instances := 0
 	var road_mark_found := false
 	for child in game.arena_map.get_children():
 		if not child is MultiMeshInstance3D:
 			continue
 		var batch := child as MultiMeshInstance3D
+		if child.is_in_group("nature_scenery_batch"):
+			nature_batches += 1
+			nature_instances += batch.multimesh.instance_count
+			if batch.get_aabb().size.length_squared() <= 0.0:
+				push_error("nature batch has an empty render bound")
+				quit(1)
+				return
+			continue
 		map_batches += 1
 		map_boxes += batch.multimesh.instance_count
 		if batch.get_aabb().size.length_squared() <= 0.0:
@@ -34,7 +44,7 @@ func _run() -> void:
 		for index in range(batch.multimesh.instance_count):
 			if batch.multimesh.get_instance_transform(index).origin.distance_to(Vector3(0.0, 0.032, -19.2)) < 0.01:
 				road_mark_found = true
-	if map_batches != 7 or map_boxes != 103 or not road_mark_found:
+	if map_batches != 7 or map_boxes != 103 or not road_mark_found or nature_batches != 4 or nature_instances != 20:
 		push_error("static map geometry did not reach the Compatibility renderer")
 		quit(1)
 		return
@@ -55,6 +65,8 @@ func _run() -> void:
 		"active_zombies": 20,
 		"map_batches": map_batches,
 		"map_boxes": map_boxes,
+		"nature_batches": nature_batches,
+		"nature_instances": nature_instances,
 		"renderer": "Compatibility OpenGL software desktop",
 		"rendered_frames": Engine.get_frames_drawn() - frames_before,
 		"frame_processing_ms_avg": snappedf(process_total * 1000.0 / SAMPLES, 0.001),
