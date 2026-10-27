@@ -222,7 +222,7 @@ func _check_cinematic_chain(player: FoundationPlayer) -> void:
 	_check(player.attack_phase == "windup", "reaching motion transitions into strike")
 	player._animation_player.advance(float(Player.ATTACKS["punch"].windup))
 	player._update_attack(float(Player.ATTACKS["punch"].windup))
-	_check(first.hp == 82, "grabbed zombie receives damage at animated contact")
+	_check(first.hp == first.starting_health - int(Player.ATTACKS["punch"].damage), "grabbed zombie receives damage at animated contact")
 	player.request_attack("punch", "left")
 	player._animation_player.advance(float(Player.ATTACKS["punch"].active))
 	player._update_attack(float(Player.ATTACKS["punch"].active))
