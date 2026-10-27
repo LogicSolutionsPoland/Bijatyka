@@ -74,6 +74,8 @@ static var _enemy_model_scene: PackedScene
 static var _boss_model_scene: PackedScene
 var _rig_budget_owner: Node
 var _low_poly_death_scale := 1.0
+var _player_grapple_owner: FoundationPlayer
+var _player_grapple_time := 0.0
 
 func _nearby() -> Array[FoundationEnemy]:
 	var frame := Engine.get_physics_frames()
@@ -513,6 +515,24 @@ func _descendants(root: Node) -> Array[Node]:
 func _physics_process(delta: float) -> void:
 	if hp <= 0:
 		return
+	if _player_grapple_time > 0.0:
+		_player_grapple_time = maxf(0.0, _player_grapple_time - delta)
+		if not is_instance_valid(_player_grapple_owner):
+			_player_grapple_time = 0.0
+		else:
+			var facing := _player_grapple_owner.global_position - global_position
+			facing.y = 0.0
+			if facing.length_squared() > 0.01:
+				rotation.y = lerp_angle(rotation.y, atan2(-facing.x, -facing.z), minf(1.0, delta * 16.0))
+			velocity.x = 0.0
+			velocity.z = 0.0
+			knockback = Vector3.ZERO
+			if not is_on_floor():
+				velocity.y -= GRAVITY * delta
+			else:
+				velocity.y = 0.0
+			move_and_slide()
+			return
 	if not is_instance_valid(_player):
 		_player = get_tree().get_first_node_in_group("player") as FoundationPlayer
 	if _player == null:
@@ -762,6 +782,28 @@ func _is_player_visible_to_player() -> bool:
 	var rect := get_viewport().get_visible_rect()
 	return not camera.is_position_behind(global_position) and rect.grow(-28.0).has_point(point)
 
+func begin_player_grapple(owner: FoundationPlayer, duration: float) -> bool:
+	# Existing reaction clip is shared; enemy/boss animation libraries stay untouched.
+	if hp <= 0 or is_boss or not is_instance_valid(owner) or duration <= 0.0:
+		return false
+	_finish_spawn_assault()
+	_player_grapple_owner = owner
+	_player_grapple_time = duration
+	state = "hit"
+	state_time = duration
+	_attack_animation = ""
+	velocity.x = 0.0
+	velocity.z = 0.0
+	knockback = Vector3.ZERO
+	_play_animation("Hit_React", 1.0, 0.08, true)
+	return true
+
+func end_player_grapple(owner: FoundationPlayer) -> void:
+	if _player_grapple_owner != owner:
+		return
+	_player_grapple_owner = null
+	_player_grapple_time = 0.0
+
 func receive_hit(damage: int, hit_direction: Vector3 = Vector3.ZERO, is_jump_hit: bool = false) -> int:
 	if hp <= 0 or damage <= 0 or _death_started:
 		return 0
@@ -776,6 +818,8 @@ func receive_hit(damage: int, hit_direction: Vector3 = Vector3.ZERO, is_jump_hit
 	if hit_direction.length_squared() > 0.01:
 		knockback = hit_direction.normalized() * (4.5 if not is_jump_hit else 6.5)
 	if hp <= 0:
+		_player_grapple_time = 0.0
+		_player_grapple_owner = null
 		state = "dead"
 		_death_started = true
 		velocity = Vector3.ZERO
