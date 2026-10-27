@@ -6,6 +6,8 @@ signal attack_resolved(enemy: Node, hit: bool)
 signal defeated(enemy: Node)
 
 const ENEMY_MODEL_PATH := "res://assets/zombies/brutal_v2/Retribution_Zombie_01_Brutal_V2_RIGGED_LOD1.glb"
+const BOSS_MODEL_PATH := "res://assets/characters/universal_base/Universal_Base_Characters_Female.glb"
+const UNIVERSAL_BASE_MOTION := preload("res://scripts/universal_base_motion.gd")
 const ENEMY_MODEL_YAW_OFFSET := PI
 const FIGHT_ANIMATION_BUILDER := preload("res://scripts/fight_animation.gd")
 const HIGH_DETAIL_ZOMBIE_RIG := preload("res://scripts/high_detail_zombie_rig.gd")
@@ -92,6 +94,7 @@ var _quality_shadows_enabled := false
 static var _grid_frame := -1
 static var _grid: Dictionary = {}
 static var _detailed_scene: PackedScene
+static var _boss_detailed_scene: PackedScene
 var _rig_budget_owner: Node
 var _low_poly_death_scale := 1.0
 
@@ -306,6 +309,10 @@ func _ensure_detailed_model() -> void:
 	set_quality_shadow_enabled(_quality_shadows_enabled)
 
 func _instantiate_detailed_model() -> Node3D:
+	if is_boss:
+		if _boss_detailed_scene == null and ResourceLoader.exists(BOSS_MODEL_PATH):
+			_boss_detailed_scene = load(BOSS_MODEL_PATH) as PackedScene
+		return _boss_detailed_scene.instantiate() as Node3D if _boss_detailed_scene != null else null
 	if _detailed_scene == null and ResourceLoader.exists(ENEMY_MODEL_PATH):
 		_detailed_scene = load(ENEMY_MODEL_PATH) as PackedScene
 	return _detailed_scene.instantiate() as Node3D if _detailed_scene != null else null
@@ -321,6 +328,12 @@ func _adopt_detailed_model(model: Node3D) -> void:
 	model.rotation = Vector3(0.0, ENEMY_MODEL_YAW_OFFSET, 0.0)
 	model.scale = Vector3.ONE * 1.38 if is_boss else (Vector3(1.16, 1.0, 1.15) if enemy_variant == "brute" else (Vector3(0.91, 1.03, 0.91) if enemy_variant == "stalker" else Vector3.ONE))
 	_animation_player = model.find_child("AnimationPlayer", true, false) as AnimationPlayer
+	if is_boss and _animation_player == null:
+		_animation_player = AnimationPlayer.new()
+		_animation_player.name = "UniversalBaseAnimationPlayer"
+		model.add_child(_animation_player)
+	if is_boss and _animation_player != null:
+		_animation_player.root_node = NodePath("..")
 	_skeleton = null
 	var skeleton_nodes := model.find_children("*", "Skeleton3D", true, false)
 	if not skeleton_nodes.is_empty():
@@ -329,14 +342,25 @@ func _adopt_detailed_model(model: Node3D) -> void:
 	for mesh_node in model.find_children("*", "MeshInstance3D", true, false):
 		_base_visual_meshes.append(mesh_node as MeshInstance3D)
 	if _animation_player != null and _skeleton != null:
-		_fight_animations_ready = FIGHT_ANIMATION_BUILDER.install_retargeted(
-			_animation_player,
-			_skeleton,
-			_fight_attack_profiles(),
-			ENEMY_BONE_MAP,
-			ENEMY_FIGHT_LIBRARY,
-			ENEMY_FIGHT_FORWARD_AXIS_SIGN
-		)
+		if is_boss:
+			UNIVERSAL_BASE_MOTION.install(_animation_player, _skeleton)
+			_fight_animations_ready = FIGHT_ANIMATION_BUILDER.install_retargeted(
+				_animation_player,
+				_skeleton,
+				_fight_attack_profiles(),
+				UNIVERSAL_BASE_MOTION.BONE_MAP,
+				ENEMY_FIGHT_LIBRARY,
+				ENEMY_FIGHT_FORWARD_AXIS_SIGN
+			)
+		else:
+			_fight_animations_ready = FIGHT_ANIMATION_BUILDER.install_retargeted(
+				_animation_player,
+				_skeleton,
+				_fight_attack_profiles(),
+				ENEMY_BONE_MAP,
+				ENEMY_FIGHT_LIBRARY,
+				ENEMY_FIGHT_FORWARD_AXIS_SIGN
+			)
 	if _animation_player != null:
 		for loop_name in ["Idle", "Walk", "Sprint"]:
 			if _animation_player.has_animation(loop_name):

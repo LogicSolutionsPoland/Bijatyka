@@ -11,8 +11,8 @@ signal jump_impact(target: Node)
 
 const RAGE_SCRIPT := preload("res://scripts/rage_progression.gd")
 const FIGHT_ANIMATION_BUILDER := preload("res://scripts/fight_animation.gd")
-const CHARACTER_MOTION := preload("res://scripts/character_motion.gd")
-const PLAYER_MODEL_PATH := "res://assets/characters/thornbound/Retribution_Player_Thornbound_Warrior_MOBILE.glb"
+const CHARACTER_MOTION := preload("res://scripts/universal_base_motion.gd")
+const PLAYER_MODEL_PATH := "res://assets/characters/universal_base/Universal_Base_Characters_Male.glb"
 const GRAVITY := 24.0
 const MAX_HEALTH := 100
 const MAX_MAGIC := 100.0
@@ -97,10 +97,24 @@ func _load_player_visual() -> void:
 		if packed != null:
 			var model := packed.instantiate()
 			visual_root.add_child(model)
+			model.rotation.y = PI
 			_animation_player = model.find_child("AnimationPlayer", true, false) as AnimationPlayer
+			if _animation_player == null:
+				_animation_player = AnimationPlayer.new()
+				_animation_player.name = "UniversalBaseAnimationPlayer"
+				model.add_child(_animation_player)
+			_animation_player.root_node = NodePath("..")
 			_skeleton = model.find_child("Skeleton3D", true, false) as Skeleton3D
-			_fight_animations_ready = FIGHT_ANIMATION_BUILDER.install(_animation_player, _skeleton, ATTACKS)
-			_character_motion_ready = CHARACTER_MOTION.install(_animation_player, _skeleton)
+			if _skeleton != null:
+				_fight_animations_ready = FIGHT_ANIMATION_BUILDER.install_retargeted(
+					_animation_player,
+					_skeleton,
+					ATTACKS,
+					CHARACTER_MOTION.BONE_MAP,
+					FIGHT_ANIMATION_BUILDER.LIBRARY_NAME,
+					CHARACTER_MOTION.FORWARD_AXIS_SIGN
+				)
+				_character_motion_ready = CHARACTER_MOTION.install(_animation_player, _skeleton)
 			_set_locomotion_animation("Idle")
 	else:
 		_add_debug_visual()
