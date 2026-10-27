@@ -83,8 +83,7 @@ jobs:
             assets/shaders/radial_ground.gdshader \
             assets/shaders/flashlight_visibility.gdshader \
             assets/shaders/horde_crowd_animation.gdshader \
-            assets/assets/audio/menu_music.mp3.import \
-; do
+            assets/assets/audio/menu_music.mp3.import; do
             grep -Fxq "$entry" "$RUNNER_TEMP/apk-files.txt"
             test "$(unzip -p "$apk" "$entry" | wc -c)" -gt 0
           done
