@@ -31,6 +31,12 @@ jobs:
           godot --headless --path game --script res://tests/flashlight_visibility_test.gd 2>&1 | tee "$RUNNER_TEMP/teeth-range.log"
           grep -q 'PASS: flashlight visibility and camera' "$RUNNER_TEMP/teeth-range.log"
           if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/teeth-range.log"; then exit 1; fi
+      - name: Verify actual zombie glints and wall occlusion
+        run: |
+          set -o pipefail
+          godot --headless --path game --script res://tests/zombie_teeth_integration_test.gd 2>&1 | tee "$RUNNER_TEMP/teeth-integration.log"
+          grep -q 'PASS: zombie teeth tracked enemy integration' "$RUNNER_TEMP/teeth-integration.log"
+          if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/teeth-integration.log"; then exit 1; fi
       - name: Verify tooth strokes render above darkness in GL Compatibility
         run: |
           set -o pipefail
