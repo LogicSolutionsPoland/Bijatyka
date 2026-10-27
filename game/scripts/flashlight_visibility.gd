@@ -20,7 +20,9 @@ const CLOSE_COMBAT_RADIUS := FoundationEnemy.DETAILED_RADIUS
 const SECTOR_HYSTERESIS_METERS := 0.65
 const CLASSIFICATION_INTERVAL := 0.12
 const TEETH_REFRESH_INTERVAL := 0.033
-const TEETH_REFLECTION_BAND_METERS := 10.0
+const TEETH_EXTRA_FORWARD_METERS := 5.0
+const TEETH_EXTRA_SIDE_METERS := 3.0
+const TEETH_EDGE_FADE_METERS := 1.0
 const TEETH_FRONT_FACING_DOT := 0.24
 # Camera-space footprint of the supplied 1536x707 gameplay reference.
 const OVAL_CENTER_UV := Vector2(0.44, 0.60)
@@ -95,6 +97,26 @@ func get_radial_weight(distance: float) -> float:
 func get_oval_weight(screen_uv: Vector2) -> float:
 	var offset := (screen_uv - OVAL_CENTER_UV) / OVAL_RADIUS_UV
 	return 1.0 - smoothstep(1.0 - OVAL_FEATHER, 1.0, offset.length())
+
+func get_teeth_reach_weight(world_position: Vector3) -> float:
+	# Extend ONLY the reflective-tooth overlay: 5 m in front and 3 m
+	# on either side of the unchanged 30 m forward flashlight half-disc.
+	if not is_instance_valid(player):
+		return 0.0
+	var offset := world_position - player.global_position
+	offset.y = 0.0
+	var forward_meters := offset.dot(aim_direction)
+	if forward_meters < 0.0:
+		return 0.0
+	var side_axis := Vector3(-aim_direction.z, 0.0, aim_direction.x)
+	var sideways_meters := absf(offset.dot(side_axis))
+	# Shortest reach back to the normal semicircular beam after its
+	# independent forward and side extensions (not extra scene lighting).
+	var core_forward := maxf(0.0, forward_meters - TEETH_EXTRA_FORWARD_METERS)
+	var core_side := maxf(0.0, sideways_meters - TEETH_EXTRA_SIDE_METERS)
+	var core_radius := Vector2(core_forward, core_side).length()
+	return 1.0 - smoothstep(MAX_RADIUS - TEETH_EDGE_FADE_METERS, MAX_RADIUS, core_radius)
+
 
 func get_classification_counts() -> Dictionary:
 	return _counts.duplicate()
@@ -209,8 +231,8 @@ func _inside_camera_frustum(enemy: Node3D) -> bool:
 
 
 func _update_distant_teeth() -> void:
-	# Screen-space glints show only in the final 10 m of the flashlight beam.
-	# They do not extend visibility beyond the flashlight or reveal bodies.
+	# Mouth-only screen-space reflections cover the beam plus 5 m forward
+	# and 3 m sideways. The scene mask and zombie meshes remain unchanged.
 	# Only five registered ordinary zombies are considered, not the boss.
 	var points: Array[Dictionary] = []
 	if not is_instance_valid(camera) or not is_instance_valid(player) or not camera.is_current():
@@ -227,12 +249,12 @@ func _update_distant_teeth() -> void:
 		var offset := enemy.global_position - player.global_position
 		offset.y = 0.0
 		var distance := offset.length()
-		# Only the last 10 metres INSIDE the existing beam: 20–30 m.
-		if distance < MAX_RADIUS - TEETH_REFLECTION_BAND_METERS or distance >= MAX_RADIUS:
+		if distance < 0.1:
 			continue
-		var aim_dot := offset.normalized().dot(aim_direction)
-		if aim_dot <= 0.0:
+		var reach_strength := get_teeth_reach_weight(enemy.global_position)
+		if reach_strength <= 0.01:
 			continue
+		var forward_meters := offset.dot(aim_direction)
 		# The glint appears on the mouth, never on the back of the head.
 		var enemy_forward := Vector3(-sin(enemy.rotation.y), 0.0, -cos(enemy.rotation.y))
 		var to_player := -offset.normalized()
@@ -245,10 +267,8 @@ func _update_distant_teeth() -> void:
 		var screen_position := camera.unproject_position(mouth_world)
 		if not Rect2(Vector2.ZERO, viewport_size).has_point(screen_position):
 			continue
-		# Never let the overlay bypass the existing oval flashlight mask.
-		var oval_strength := get_oval_weight(screen_position / viewport_size)
-		if oval_strength <= 0.01:
-			continue
+		# Teeth may glint in the added fringe outside the oval, but never
+		# expose the face, enemy body or darkened environment.
 		# Do not draw glints through buildings, terrain or the base boundary.
 		# Enemy bodies use layer 2; only static occluders (1 and 4) are queried.
 		var ray := PhysicsRayQueryParameters3D.create(camera.global_position, mouth_world)
@@ -259,10 +279,9 @@ func _update_distant_teeth() -> void:
 			ray.exclude = [(player as CollisionObject3D).get_rid()]
 		if not camera.get_world_3d().direct_space_state.intersect_ray(ray).is_empty():
 			continue
-		var fade := smoothstep(MAX_RADIUS - TEETH_REFLECTION_BAND_METERS, MAX_RADIUS - TEETH_REFLECTION_BAND_METERS + 2.0, distance) * (1.0 - smoothstep(MAX_RADIUS - 2.0, MAX_RADIUS, distance))
-		var aim_strength := smoothstep(0.0, 0.45, aim_dot)
+		var aim_strength := smoothstep(0.0, 1.25, forward_meters)
 		var front_strength := smoothstep(TEETH_FRONT_FACING_DOT, 0.78, front_dot)
-		var strength := fade * aim_strength * front_strength * oval_strength
+		var strength := reach_strength * aim_strength * front_strength
 		if strength < 0.02:
 			continue
 		var size_scale := clampf((viewport_size.y / 720.0) * 35.0 / distance, 0.7, 1.6)
