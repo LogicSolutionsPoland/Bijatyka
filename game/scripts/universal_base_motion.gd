@@ -125,7 +125,7 @@ static func _build_turn(skeleton: Skeleton3D, skeleton_path: NodePath, turn_left
 	_add_rotation_track(animation, skeleton, skeleton_path, "Head", [0.0, duration * 0.5, duration], [Vector3.ZERO, Vector3(0.0, 0.14 * direction, 0.0), Vector3.ZERO])
 	return animation
 
-static func _add_rotation_track(animation: Animation, skeleton: Skeleton3D, skeleton_path: NodePath, source_bone: String, key_times: Array[float], poses: Array[Vector3]) -> void:
+static func _add_rotation_track(animation: Animation, skeleton: Skeleton3D, skeleton_path: NodePath, source_bone: String, key_times: Array, poses: Array) -> void:
 	var target_bone := String(BONE_MAP.get(source_bone, source_bone))
 	var bone_index := skeleton.find_bone(target_bone)
 	if bone_index < 0:
@@ -135,5 +135,7 @@ static func _add_rotation_track(animation: Animation, skeleton: Skeleton3D, skel
 	animation.track_set_path(track, NodePath("%s:%s" % [str(skeleton_path), target_bone]))
 	animation.track_set_interpolation_type(track, Animation.INTERPOLATION_CUBIC)
 	for index in range(mini(key_times.size(), poses.size())):
-		var local_rotation := (rest_rotation * Quaternion.from_euler(poses[index] * Vector3(FORWARD_AXIS_SIGN, 1.0, 1.0))).normalized()
-		animation.rotation_track_insert_key(track, key_times[index], local_rotation)
+		var local_pose: Vector3 = poses[index]
+		local_pose.x *= FORWARD_AXIS_SIGN
+		var local_rotation := (rest_rotation * Quaternion.from_euler(local_pose)).normalized()
+		animation.rotation_track_insert_key(track, float(key_times[index]), local_rotation)
