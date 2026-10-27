@@ -105,6 +105,7 @@ func _ready() -> void:
 	flashlight_visibility_manager.name = "FlashlightVisibilityManager"
 	flashlight_visibility_manager.configure(player, camera, flashlight_visibility_enabled)
 	add_child(flashlight_visibility_manager)
+	player.flashlight_visibility_manager = flashlight_visibility_manager
 	burning_horizon = BURNING_HORIZON.new()
 	burning_horizon.name = "BurningHorizon"
 	add_child(burning_horizon)
