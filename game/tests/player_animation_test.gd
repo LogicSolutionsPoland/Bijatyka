@@ -41,6 +41,7 @@ func _run() -> void:
 			_check_repeated_strikes(player, kind, side)
 
 	_check_attack_priority(player)
+	_check_cinematic_chain(player)
 
 	_check_locomotion_does_not_restart(animator, player)
 	for action in ["jump", "dash", "attack_punch", "attack_kick", "pad_jump", "pad_dash", "pad_punch_left", "pad_blast", "pad_kick_left", "pad_kick_right"]:
@@ -52,6 +53,8 @@ func _check_ring_bank(player: FoundationPlayer) -> void:
 	var animator := player._animation_player as AnimationPlayer
 	var all_names: Array = Player.PLAYER_RING_REFERENCE.CLIP_NAMES
 	_check(all_names.size() == 16, "reference animation bank retains 16 reusable player clips")
+	_check(animator.has_animation(Player.PLAYER_RING_REFERENCE.clip_path("grapple_reach")), "grapple reach player clip installed")
+	_check(is_equal_approx(Player.TARGET_MELEE_CYCLE_SECONDS, 0.5), "maximum attack cadence is two strikes per second")
 	for raw_name in all_names:
 		var name := String(raw_name)
 		var path := Player.PLAYER_RING_REFERENCE.clip_path(name)
@@ -130,6 +133,11 @@ func _check_hit_timing(player: FoundationPlayer, kind: String, side: String) -> 
 	var hit_time := float(Player.ATTACKS[kind].windup)
 	player._finish_attack()
 	_check(player.request_attack(kind, side), "%s %s attack starts through its existing input path" % [side, kind])
+	if player.attack_phase == "grapple":
+		_check(player._engagement_target == enemy, "cinematic grapple picks the nearest ordinary zombie")
+		_check(enemy._player_grapple_owner == player, "victim is held while player reaches for a grab")
+		animator.advance(Player.CHAIN_GRAB_SECONDS)
+		player._update_attack(Player.CHAIN_GRAB_SECONDS)
 	var active_clip := player._active_attack_clip
 	_check(String(active_clip).begins_with("player_ring_reference/") and player._animation_player.current_animation == active_clip, "%s %s selects a player-only ring clip" % [side, kind])
 	_check(is_equal_approx(player._animation_player.get_animation(active_clip).get_marker_time(&"contact"), hit_time), "%s %s variant retains gameplay contact marker" % [side, kind])
@@ -160,7 +168,7 @@ func _check_repeated_strikes(player: FoundationPlayer, kind: String, side: Strin
 		player._update_attack(float(Player.ATTACKS[kind].windup))
 		animator.advance(float(Player.ATTACKS[kind].active))
 		player._update_attack(float(Player.ATTACKS[kind].active))
-	_check(player.attack_count == count_before + 5, "%s %s retains five strikes per second" % [side, kind])
+	_check(player.attack_count == count_before + 5, "%s %s retains five sequential strikes at a two-per-second cadence" % [side, kind])
 	_check(observed.size() == (3 if kind == "punch" else 2), "%s %s cycles distinct ring variants" % [side, kind])
 	player._finish_attack()
 	# Buffered repeats also need a new animation, even without a ready frame.
@@ -189,6 +197,48 @@ func _check_attack_priority(player: FoundationPlayer) -> void:
 	_check(player._animation_player.current_animation == Player.CHARACTER_MOTION.clip_path("Hit"), "real enemy interruption still plays a hit reaction")
 	player._finish_attack()
 	player._character_action_time = 0.0
+
+func _check_cinematic_chain(player: FoundationPlayer) -> void:
+	var first := Enemy.new() as FoundationEnemy
+	var second := Enemy.new() as FoundationEnemy
+	first.starting_health = 100
+	second.starting_health = 100
+	root.add_child(first)
+	root.add_child(second)
+	first.set_physics_process(false)
+	second.set_physics_process(false)
+	player.global_position = Vector3.ZERO
+	player.rotation.y = 0.0
+	first.global_position = Vector3(0.0, 0.0, -1.1)
+	second.global_position = Vector3(0.0, 0.0, -3.5)
+	player._previous_engagement_target = null
+	player._finish_attack()
+	_check(player.request_attack("punch", "right"), "chain first strike accepted")
+	_check(player.attack_phase == "grapple" and player._engagement_target == first, "first nearby zombie is grabbed before hitting")
+	_check(first._player_grapple_owner == player and second._player_grapple_owner == null, "only the first victim is held")
+	player._animation_player.advance(Player.CHAIN_GRAB_SECONDS)
+	player._update_attack(Player.CHAIN_GRAB_SECONDS)
+	_check(player.attack_phase == "windup", "reaching motion transitions into strike")
+	player._animation_player.advance(float(Player.ATTACKS["punch"].windup))
+	player._update_attack(float(Player.ATTACKS["punch"].windup))
+	_check(first.hp == 82, "grabbed zombie receives damage at animated contact")
+	player.request_attack("punch", "left")
+	player._animation_player.advance(float(Player.ATTACKS["punch"].active))
+	player._update_attack(float(Player.ATTACKS["punch"].active))
+	_check(player.attack_phase == "approach" and player._engagement_target == second, "buffered attack chooses another zombie")
+	_check(player._animation_player.current_animation == Player.PLAYER_RING_REFERENCE.clip_path("slip_left"), "approach uses a dedicated ring dodge pose")
+	var before := player.global_position
+	player._update_movement(1.0 / 60.0)
+	_check(player.velocity.z < 0.0 and player.global_position == before, "chain hop uses collision-aware velocity, not a teleport")
+	player.global_position = Vector3(0.0, 0.0, -2.2)
+	player._update_attack(1.0 / 60.0)
+	_check(player.attack_phase == "grapple" and player._engagement_target == second, "reaching the next zombie starts another grapple")
+	player._finish_attack()
+	player.velocity = Vector3.ZERO
+	player._previous_engagement_target = null
+	first.queue_free()
+	second.queue_free()
+
 
 func _check_locomotion_does_not_restart(animator: AnimationPlayer, player: FoundationPlayer) -> void:
 	player._set_locomotion_animation("Idle")
