@@ -1,4 +1,4 @@
-name: Player-only ring reference animations
+name: Player ring / cinematic combat Android validation
 
 on:
   push:
@@ -50,6 +50,13 @@ jobs:
           godot --headless --path game --script res://tests/test_runner.gd 2>&1 | tee "$RUNNER_TEMP/gameplay.log"
           grep -q 'PASS:' "$RUNNER_TEMP/gameplay.log"
           if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/gameplay.log"; then exit 1; fi
+      - name: Cinematic chain real physics and flashlight regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path game --script res://tests/cinematic_chain_physics_test.gd 2>&1 | tee "$RUNNER_TEMP/chain.log"
+          grep -q 'PASS: cinematic zombie chain physics' "$RUNNER_TEMP/chain.log"
+          if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/chain.log"; then exit 1; fi
       - name: Playable scene smoke
         shell: bash
         run: |
@@ -62,14 +69,14 @@ jobs:
           set -euo pipefail
           test -d "$ANDROID_HOME"
           mkdir -p build
-          godot --headless --path game --export-debug "Android ARM64" "$GITHUB_WORKSPACE/build/Bijatyka-Player-Ring-ARM64.apk" 2>&1 | tee "$RUNNER_TEMP/export.log"
+          godot --headless --path game --export-debug "Android ARM64" "$GITHUB_WORKSPACE/build/Bijatyka-Cinematic-Combat-ARM64.apk" 2>&1 | tee "$RUNNER_TEMP/export.log"
           if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/export.log"; then exit 1; fi
-          test -s build/Bijatyka-Player-Ring-ARM64.apk
+          test -s build/Bijatyka-Cinematic-Combat-ARM64.apk
       - name: Check generated APK content and package
         shell: bash
         run: |
           set -euo pipefail
-          apk=build/Bijatyka-Player-Ring-ARM64.apk
+          apk=build/Bijatyka-Cinematic-Combat-ARM64.apk
           unzip -tqq "$apk"
           unzip -Z1 "$apk" > "$RUNNER_TEMP/apk-files.txt"
           for entry in lib/arm64-v8a/libgodot_android.so assets/project.binary assets/scripts/player_controller.gdc assets/scripts/player_ring_reference.gdc assets/scripts/enemy.gdc assets/scenes/foundation.tscn.remap assets/assets/characters/universal_base/Universal_Base_Characters_Male.glb.import; do
@@ -84,7 +91,7 @@ jobs:
       - name: Upload ready APK
         uses: actions/upload-artifact@v4
         with:
-          name: Bijatyka-Player-Ring-ARM64-APK
-          path: build/Bijatyka-Player-Ring-ARM64.apk
+          name: Bijatyka-Cinematic-Combat-ARM64-APK
+          path: build/Bijatyka-Cinematic-Combat-ARM64.apk
           if-no-files-found: error
           retention-days: 30
