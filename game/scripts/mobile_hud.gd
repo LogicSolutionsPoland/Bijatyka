@@ -30,7 +30,7 @@ const GAMEPAD_ACTIONS := {
 	&"pad_spell_0": "spell_0", &"pad_spell_1": "spell_1",
 	&"pad_spell_2": "spell_2", &"pad_spell_3": "spell_3"
 }
-const MELEE_HOLD_REPEAT_INTERVAL := 0.20
+const MELEE_HOLD_REPEAT_INTERVAL := 0.50
 const MELEE_TIMER_EPSILON := 0.0001
 const TRIGGER_PRESS_THRESHOLD := 0.55
 const TRIGGER_RELEASE_THRESHOLD := 0.35
