@@ -3,6 +3,7 @@ class_name UniversalBaseCombat
 
 ## Player attacks for the UAL rig. Never apply the old character's local bone
 ## rotations to this skeleton: its arms have different rest axes and a T-pose.
+const RING := preload("res://scripts/ring_reference_combat.gd")
 const LIBRARY_NAME := &"universal_base_combat"
 const PUNCH_SOURCES := {"left": &"Punch_Jab", "right": &"Punch_Cross"}
 # Full extension in the supplied clips, before their recovery begins.
@@ -17,12 +18,19 @@ static func install(animator: AnimationPlayer, skeleton: Skeleton3D, profiles: D
 	for source: StringName in PUNCH_SOURCES.values():
 		if not animator.has_animation(source):
 			return false
+	var ring_ready := RING.install(animator, skeleton)
 	var library := AnimationLibrary.new()
 	for side: String in ["left", "right"]:
-		var source := animator.get_animation(PUNCH_SOURCES[side])
-		var punch := _retime_punch(source, float(PUNCH_CONTACTS[side]), profiles["punch"])
-		var kick := _build_kick(animator.get_animation(&"Punch_Jab"), skeleton, side, profiles["kick"])
-		if kick == null:
+		var punch: Animation
+		var kick: Animation
+		if ring_ready:
+			punch = RING.build_attack(animator, "punch", side, profiles["punch"])
+			kick = RING.build_attack(animator, "kick", side, profiles["kick"])
+		else:
+			var source := animator.get_animation(PUNCH_SOURCES[side])
+			punch = _retime_punch(source, float(PUNCH_CONTACTS[side]), profiles["punch"])
+			kick = _build_kick(animator.get_animation(&"Punch_Jab"), skeleton, side, profiles["kick"])
+		if punch == null or kick == null:
 			return false
 		library.add_animation(StringName(side + "_punch"), punch)
 		library.add_animation(StringName(side + "_kick"), kick)

@@ -1,0 +1,38 @@
+[gd_resource type="AnimationLibrary" load_steps=17 format=3]
+
+[ext_resource type="Animation" path="res://animations/ring_reference/female/guard_hold.tres" id="1"]
+[ext_resource type="Animation" path="res://animations/ring_reference/female/guard_raise.tres" id="2"]
+[ext_resource type="Animation" path="res://animations/ring_reference/female/lead_straight.tres" id="3"]
+[ext_resource type="Animation" path="res://animations/ring_reference/female/rear_hook.tres" id="4"]
+[ext_resource type="Animation" path="res://animations/ring_reference/female/overhand.tres" id="5"]
+[ext_resource type="Animation" path="res://animations/ring_reference/female/duck_roll.tres" id="6"]
+[ext_resource type="Animation" path="res://animations/ring_reference/female/body_slip.tres" id="7"]
+[ext_resource type="Animation" path="res://animations/ring_reference/female/right_high_kick.tres" id="8"]
+[ext_resource type="Animation" path="res://animations/ring_reference/female/downward_stamp.tres" id="9"]
+[ext_resource type="Animation" path="res://animations/ring_reference/female/downward_punch.tres" id="10"]
+[ext_resource type="Animation" path="res://animations/ring_reference/female/step_in.tres" id="11"]
+[ext_resource type="Animation" path="res://animations/ring_reference/female/pivot_exit.tres" id="12"]
+[ext_resource type="Animation" path="res://animations/ring_reference/female/rope_recoil.tres" id="13"]
+[ext_resource type="Animation" path="res://animations/ring_reference/female/arms_raised_taunt.tres" id="14"]
+[ext_resource type="Animation" path="res://animations/ring_reference/female/kick_landing.tres" id="15"]
+[ext_resource type="Animation" path="res://animations/ring_reference/female/left_high_kick.tres" id="16"]
+
+[resource]
+_data = {
+&"guard_hold": ExtResource("1"),
+&"guard_raise": ExtResource("2"),
+&"lead_straight": ExtResource("3"),
+&"rear_hook": ExtResource("4"),
+&"overhand": ExtResource("5"),
+&"duck_roll": ExtResource("6"),
+&"body_slip": ExtResource("7"),
+&"right_high_kick": ExtResource("8"),
+&"downward_stamp": ExtResource("9"),
+&"downward_punch": ExtResource("10"),
+&"step_in": ExtResource("11"),
+&"pivot_exit": ExtResource("12"),
+&"rope_recoil": ExtResource("13"),
+&"arms_raised_taunt": ExtResource("14"),
+&"kick_landing": ExtResource("15"),
+&"left_high_kick": ExtResource("16")
+}

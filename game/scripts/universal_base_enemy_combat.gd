@@ -18,6 +18,7 @@ static func install(animator: AnimationPlayer, skeleton: Skeleton3D, profiles: D
 	for source: StringName in BASE_COMBAT.PUNCH_SOURCES.values():
 		if not animator.has_animation(source):
 			return false
+	var ring_ready := BASE_COMBAT.RING.install(animator, skeleton)
 	var library := AnimationLibrary.new()
 	for kind in ["punch", "kick"]:
 		if not profiles.has(kind):
@@ -25,7 +26,9 @@ static func install(animator: AnimationPlayer, skeleton: Skeleton3D, profiles: D
 		var profile: Dictionary = profiles[kind]
 		for side in ["left", "right"]:
 			var clip: Animation
-			if kind == "punch":
+			if ring_ready:
+				clip = BASE_COMBAT.RING.build_attack(animator, kind, side, profile)
+			elif kind == "punch":
 				var source := animator.get_animation(BASE_COMBAT.PUNCH_SOURCES[side])
 				clip = BASE_COMBAT._retime_punch(source, float(BASE_COMBAT.PUNCH_CONTACTS[side]), profile)
 			else:
