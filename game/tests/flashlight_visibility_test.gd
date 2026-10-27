@@ -33,6 +33,20 @@ func _run() -> void:
 	_check(is_equal_approx(manager.get_radial_weight(22.0), 1.0), "illumination stays bright through 22 m")
 	_check(manager.get_radial_weight(26.0) > 0.0 and manager.get_radial_weight(26.0) < 1.0, "outer 22–30 m band fades smoothly")
 	_check(is_zero_approx(manager.get_radial_weight(30.0)), "illumination reaches black at 30 m")
+	# Tooth glints use an independent extension of the light footprint,
+	# while the normal 22–30 m blackout mask stays exactly as before.
+	var base_position: Vector3 = game.player.global_position
+	_check(manager.get_teeth_reach_weight(base_position + Vector3(0, 0, -15)) > 0.99, "teeth glint in the normal flashlight range")
+	_check(manager.get_teeth_reach_weight(base_position + Vector3(0, 0, -34)) > 0.0, "teeth glint beyond the beam, up to 5 m forward")
+	_check(is_zero_approx(manager.get_teeth_reach_weight(base_position + Vector3(0, 0, -35))), "teeth stop at the +5 m forward boundary")
+	_check(is_zero_approx(manager.get_teeth_reach_weight(base_position + Vector3(0, 0, -36))), "teeth cannot glow beyond 35 m in front")
+	_check(manager.get_teeth_reach_weight(base_position + Vector3(32, 0, -1)) > 0.0, "teeth glint 2 m to the right outside the beam")
+	_check(manager.get_teeth_reach_weight(base_position + Vector3(-32, 0, -1)) > 0.0, "teeth glint 2 m to the left outside the beam")
+	_check(is_zero_approx(manager.get_teeth_reach_weight(base_position + Vector3(33, 0, -1))), "teeth stop at the +3 m right boundary")
+	_check(is_zero_approx(manager.get_teeth_reach_weight(base_position + Vector3(-33, 0, -1))), "teeth stop at the +3 m left boundary")
+	_check(is_zero_approx(manager.get_teeth_reach_weight(base_position + Vector3(0, 0, 2))), "teeth stay invisible behind the player")
+	_check(is_zero_approx(manager.get_teeth_reach_weight(base_position + Vector3(34, 0, -34))), "diagonal positions beyond the expanded beam stay invisible")
+	_check(is_zero_approx(manager.get_radial_weight(31.0)), "ordinary environment light does not extend with teeth")
 	_check(manager.get_oval_weight(VisibilityManager.OVAL_CENTER_UV) > 0.999, "reference oval center is lit")
 	_check(is_zero_approx(manager.get_oval_weight(Vector2(0.02, 0.60))), "left of the oval is black")
 	_check(is_zero_approx(manager.get_oval_weight(Vector2(0.90, 0.60))), "right of the oval is black")
@@ -47,6 +61,8 @@ func _run() -> void:
 	_check(manager.is_point_in_sector(game.player.global_position + Vector3(-10, 0, 0)), "positive camera yaw lights the camera's leftward view")
 	_check(not manager.is_point_in_sector(game.player.global_position + Vector3(10, 0, 0)), "rotated sector excludes the opposite half")
 	_check(manager.aim_direction.distance_to(Vector3.LEFT) < 0.001, "aim direction has no rotation lag")
+	_check(manager.get_teeth_reach_weight(game.player.global_position + Vector3(-34, 0, 0)) > 0.0, "teeth range follows the rotated flashlight")
+	_check(is_zero_approx(manager.get_teeth_reach_weight(game.player.global_position + Vector3(34, 0, 0))), "teeth range never glows behind the rotated light")
 	game._camera_yaw = PI * 0.5
 	game._process(1.0 / 60.0)
 	_check((game._floor_material.get_shader_parameter("flashlight_forward") as Vector3).distance_to(manager.aim_direction) < 0.001, "ground skip follows the same yaw as the flashlight mask")
