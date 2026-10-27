@@ -1,7 +1,7 @@
 extends RefCounted
 class_name UniversalBaseCharacterMotion
 
-## Runtime animation bridge for the 65-bone Universal Base Characters rig.
+## Routes Quaternius UAL clips onto the matching Universal Base Characters rig.
 
 const LIBRARY_NAME := &"universal_base_actions"
 const FORWARD_AXIS_SIGN := -1.0
@@ -21,22 +21,44 @@ const BONE_MAP := {
 	"RightHand": "hand_r",
 	"RightThigh": "thigh_r",
 	"RightShin": "calf_r",
-	"RightFoot": "foot_r"
+	"RightFoot": "foot_r",
 }
 const ACTIONS := {
-	"Dash": 0.30,
-	"Landing": 0.38,
+	"Dash": 0.62,
+	"Landing": 0.55,
 	"Turn_Left": 0.28,
 	"Turn_Right": 0.28,
-	"Magic_Light": 0.62,
-	"Magic_Judgment": 0.72,
-	"Magic_Fire": 0.62,
-	"Magic_Shadow": 0.68,
-	"Hit": 0.34,
-	"Hit_React": 0.34,
+	"Magic_Light": 0.84,
+	"Magic_Judgment": 0.84,
+	"Magic_Fire": 0.84,
+	"Magic_Shadow": 0.84,
+	"Hit": 0.72,
+	"Hit_React": 0.72,
 	"Defeat": 1.25,
 	"Death_Forward": 1.25,
-	"Death_Backward": 1.25
+	"Death_Backward": 1.25,
+}
+const ACTION_SOURCE_CLIPS := {
+	"Dash": "Roll",
+	"Landing": "Jump_Land",
+	"Magic_Light": "Spell_Simple_Shoot",
+	"Magic_Judgment": "Spell_Simple_Shoot",
+	"Magic_Fire": "Spell_Simple_Shoot",
+	"Magic_Shadow": "Spell_Simple_Shoot",
+	"Hit": "Hit_Chest",
+	"Hit_React": "Hit_Chest",
+	"Defeat": "Death01",
+	"Death_Forward": "Death01",
+	"Death_Backward": "Death01",
+}
+const DEFAULT_SOURCE_CLIPS := {
+	"Idle": "Idle_Loop",
+	"Walk": "Walk_Loop",
+	"Sprint": "Sprint_Loop",
+	"Jump": "Jump_Loop",
+	"Hit_React": "Hit_Chest",
+	"Death_Forward": "Death01",
+	"Death_Backward": "Death01",
 }
 
 static func clip_path(action_name: String) -> StringName:
@@ -50,121 +72,60 @@ static func install(animation_player: AnimationPlayer, skeleton: Skeleton3D) -> 
 		animation_root = animation_player.get_parent()
 	if animation_root == null or not animation_root.is_ancestor_of(skeleton):
 		return false
-	for source_bone: String in BONE_MAP:
-		if skeleton.find_bone(String(BONE_MAP[source_bone])) < 0:
+	for logical_bone: String in BONE_MAP:
+		if skeleton.find_bone(String(BONE_MAP[logical_bone])) < 0:
 			return false
-
+	var default_library := animation_player.get_animation_library(&"")
+	if default_library == null:
+		return false
+	for raw_target in DEFAULT_SOURCE_CLIPS:
+		var target_name := String(raw_target)
+		var source_name := String(DEFAULT_SOURCE_CLIPS[raw_target])
+		if not _copy_animation(default_library, source_name, default_library, target_name):
+			return false
+	for loop_name in ["Idle", "Walk", "Sprint"]:
+		if default_library.has_animation(StringName(loop_name)):
+			default_library.get_animation(StringName(loop_name)).loop_mode = Animation.LOOP_LINEAR
 	var action_library := AnimationLibrary.new()
-	for raw_action_name in ACTIONS:
-		var action_name := String(raw_action_name)
-		var action := _build_action(
-			skeleton,
-			animation_root.get_path_to(skeleton),
-			action_name,
-			float(ACTIONS[raw_action_name])
-		)
+	for raw_action in ACTIONS:
+		var action_name := String(raw_action)
+		var action: Animation
+		if action_name == "Turn_Left" or action_name == "Turn_Right":
+			action = _build_turn(skeleton, animation_root.get_path_to(skeleton), action_name == "Turn_Left", float(ACTIONS[raw_action]))
+		else:
+			var source_clip := String(ACTION_SOURCE_CLIPS[action_name])
+			if not default_library.has_animation(StringName(source_clip)):
+				return false
+			action = default_library.get_animation(StringName(source_clip)).duplicate(true) as Animation
+		if action == null:
+			return false
 		if action_library.add_animation(StringName(action_name), action) != OK:
 			return false
 	if animation_player.has_animation_library(LIBRARY_NAME):
 		animation_player.remove_animation_library(LIBRARY_NAME)
-	if animation_player.add_animation_library(LIBRARY_NAME, action_library) != OK:
+	return animation_player.add_animation_library(LIBRARY_NAME, action_library) == OK
+
+static func _copy_animation(source: AnimationLibrary, source_name: String, target: AnimationLibrary, target_name: String) -> bool:
+	var source_key := StringName(source_name)
+	var target_key := StringName(target_name)
+	if not source.has_animation(source_key):
 		return false
+	if target.has_animation(target_key):
+		target.remove_animation(target_key)
+	var copied := source.get_animation(source_key).duplicate(true) as Animation
+	return copied != null and target.add_animation(target_key, copied) == OK
 
-	var default_library := animation_player.get_animation_library(&"")
-	if default_library == null:
-		default_library = AnimationLibrary.new()
-		if animation_player.add_animation_library(&"", default_library) != OK:
-			return false
-	for animation_name in ["Idle", "Walk", "Sprint", "Jump", "Hit_React", "Death_Forward", "Death_Backward"]:
-		var animation: Animation
-		if animation_name in ["Idle", "Walk", "Sprint", "Jump"]:
-			animation = _build_locomotion(skeleton, animation_root.get_path_to(skeleton), animation_name)
-		else:
-			animation = _build_action(
-				skeleton,
-				animation_root.get_path_to(skeleton),
-				animation_name,
-				float(ACTIONS.get(animation_name, 0.5))
-			)
-		var animation_key := StringName(animation_name)
-		if default_library.has_animation(animation_key):
-			default_library.remove_animation(animation_key)
-		if default_library.add_animation(animation_key, animation) != OK:
-			return false
-	return true
-
-static func _build_locomotion(skeleton: Skeleton3D, skeleton_path: NodePath, animation_name: String) -> Animation:
-	var duration := 1.0
-	var key_times: Array[float] = []
-	var animation := Animation.new()
-	match animation_name:
-		"Walk":
-			duration = 0.64
-		"Sprint":
-			duration = 0.46
-		"Jump":
-			duration = 0.58
-		_:
-			duration = 1.2
-	animation.length = duration
-	key_times = [0.0, duration * 0.25, duration * 0.5, duration * 0.75, duration]
-	animation.step = 1.0 / 60.0
-	animation.loop_mode = Animation.LOOP_LINEAR if animation_name != "Jump" else Animation.LOOP_NONE
-	var zero := Vector3.ZERO
-	match animation_name:
-		"Idle":
-			_add_rotation_track(animation, skeleton, skeleton_path, "Spine", key_times, [zero, Vector3(-0.018, 0.0, 0.0), zero, Vector3(-0.018, 0.0, 0.0), zero])
-			_add_rotation_track(animation, skeleton, skeleton_path, "Chest", key_times, [zero, Vector3(-0.025, 0.0, 0.0), zero, Vector3(-0.025, 0.0, 0.0), zero])
-			_add_rotation_track(animation, skeleton, skeleton_path, "Head", key_times, [zero, Vector3(0.015, 0.0, 0.0), zero, Vector3(0.015, 0.0, 0.0), zero])
-			_add_rotation_track(animation, skeleton, skeleton_path, "LeftUpperArm", key_times, [zero, Vector3(0.0, 0.0, -0.025), zero, Vector3(0.0, 0.0, -0.025), zero])
-			_add_rotation_track(animation, skeleton, skeleton_path, "RightUpperArm", key_times, [zero, Vector3(0.0, 0.0, 0.025), zero, Vector3(0.0, 0.0, 0.025), zero])
-		"Walk", "Sprint":
-			var stride := 0.48 if animation_name == "Walk" else 0.78
-			var knee := 0.24 if animation_name == "Walk" else 0.42
-			var arm_swing := 0.28 if animation_name == "Walk" else 0.48
-			_add_rotation_track(animation, skeleton, skeleton_path, "LeftThigh", key_times, [Vector3(stride, 0.0, 0.0), zero, Vector3(-stride, 0.0, 0.0), zero, Vector3(stride, 0.0, 0.0)])
-			_add_rotation_track(animation, skeleton, skeleton_path, "RightThigh", key_times, [Vector3(-stride, 0.0, 0.0), zero, Vector3(stride, 0.0, 0.0), zero, Vector3(-stride, 0.0, 0.0)])
-			_add_rotation_track(animation, skeleton, skeleton_path, "LeftShin", key_times, [Vector3(knee, 0.0, 0.0), Vector3(knee * 0.4, 0.0, 0.0), zero, Vector3(knee * 0.4, 0.0, 0.0), Vector3(knee, 0.0, 0.0)])
-			_add_rotation_track(animation, skeleton, skeleton_path, "RightShin", key_times, [zero, Vector3(knee * 0.4, 0.0, 0.0), Vector3(knee, 0.0, 0.0), Vector3(knee * 0.4, 0.0, 0.0), zero])
-			_add_rotation_track(animation, skeleton, skeleton_path, "LeftUpperArm", key_times, [Vector3(-arm_swing, 0.0, 0.0), zero, Vector3(arm_swing, 0.0, 0.0), zero, Vector3(-arm_swing, 0.0, 0.0)])
-			_add_rotation_track(animation, skeleton, skeleton_path, "RightUpperArm", key_times, [Vector3(arm_swing, 0.0, 0.0), zero, Vector3(-arm_swing, 0.0, 0.0), zero, Vector3(arm_swing, 0.0, 0.0)])
-			_add_rotation_track(animation, skeleton, skeleton_path, "Spine", key_times, [Vector3(0.02, 0.0, 0.0), zero, Vector3(-0.02, 0.0, 0.0), zero, Vector3(0.02, 0.0, 0.0)])
-		"Jump":
-			var jump_times: Array[float] = [0.0, duration * 0.22, duration * 0.72, duration]
-			_add_rotation_track(animation, skeleton, skeleton_path, "LeftThigh", jump_times, [zero, Vector3(-0.28, 0.0, 0.0), Vector3(-0.12, 0.0, 0.0), zero])
-			_add_rotation_track(animation, skeleton, skeleton_path, "RightThigh", jump_times, [zero, Vector3(-0.28, 0.0, 0.0), Vector3(-0.12, 0.0, 0.0), zero])
-			_add_rotation_track(animation, skeleton, skeleton_path, "LeftShin", jump_times, [zero, Vector3(0.38, 0.0, 0.0), Vector3(0.18, 0.0, 0.0), zero])
-			_add_rotation_track(animation, skeleton, skeleton_path, "RightShin", jump_times, [zero, Vector3(0.38, 0.0, 0.0), Vector3(0.18, 0.0, 0.0), zero])
-			_add_rotation_track(animation, skeleton, skeleton_path, "LeftUpperArm", jump_times, [zero, Vector3(-0.35, 0.0, -0.16), Vector3(-0.20, 0.0, -0.10), zero])
-			_add_rotation_track(animation, skeleton, skeleton_path, "RightUpperArm", jump_times, [zero, Vector3(-0.35, 0.0, 0.16), Vector3(-0.20, 0.0, 0.10), zero])
-	return animation
-
-static func _build_action(skeleton: Skeleton3D, skeleton_path: NodePath, action_name: String, duration: float) -> Animation:
+static func _build_turn(skeleton: Skeleton3D, skeleton_path: NodePath, turn_left: bool, duration: float) -> Animation:
 	var animation := Animation.new()
 	animation.length = duration
 	animation.step = 1.0 / 60.0
 	animation.loop_mode = Animation.LOOP_NONE
-	var key_times := [0.0, duration * 0.22, duration * 0.68, duration]
-	var poses := _action_poses(action_name)
-	for raw_bone_name in poses:
-		_add_rotation_track(
-			animation,
-			skeleton,
-			skeleton_path,
-			String(raw_bone_name),
-			key_times,
-			poses[raw_bone_name]
-		)
+	var direction := 1.0 if turn_left else -1.0
+	_add_rotation_track(animation, skeleton, skeleton_path, "Spine", [0.0, duration * 0.5, duration], [Vector3.ZERO, Vector3(0.0, -0.10 * direction, 0.0), Vector3.ZERO])
+	_add_rotation_track(animation, skeleton, skeleton_path, "Head", [0.0, duration * 0.5, duration], [Vector3.ZERO, Vector3(0.0, 0.14 * direction, 0.0), Vector3.ZERO])
 	return animation
 
-static func _add_rotation_track(
-	animation: Animation,
-	skeleton: Skeleton3D,
-	skeleton_path: NodePath,
-	source_bone: String,
-	key_times: Array,
-	poses: Array
-) -> void:
+static func _add_rotation_track(animation: Animation, skeleton: Skeleton3D, skeleton_path: NodePath, source_bone: String, key_times: Array[float], poses: Array[Vector3]) -> void:
 	var target_bone := String(BONE_MAP.get(source_bone, source_bone))
 	var bone_index := skeleton.find_bone(target_bone)
 	if bone_index < 0:
@@ -174,71 +135,5 @@ static func _add_rotation_track(
 	animation.track_set_path(track, NodePath("%s:%s" % [str(skeleton_path), target_bone]))
 	animation.track_set_interpolation_type(track, Animation.INTERPOLATION_CUBIC)
 	for index in range(mini(key_times.size(), poses.size())):
-		var local_pose: Vector3 = poses[index]
-		local_pose.x *= FORWARD_AXIS_SIGN
-		var local_rotation := (rest_rotation * Quaternion.from_euler(local_pose)).normalized()
-		animation.rotation_track_insert_key(track, float(key_times[index]), local_rotation)
-
-static func _action_poses(action_name: String) -> Dictionary:
-	var zero := Vector3.ZERO
-	match action_name:
-		"Dash":
-			return {
-				"Spine": [zero, Vector3(-0.18, 0.0, 0.0), Vector3(-0.12, 0.0, 0.0), zero],
-				"Chest": [zero, Vector3(-0.24, 0.0, 0.0), Vector3(-0.16, 0.0, 0.0), zero],
-				"LeftUpperArm": [zero, Vector3(0.28, 0.0, -0.12), Vector3(0.20, 0.0, -0.08), zero],
-				"RightUpperArm": [zero, Vector3(0.28, 0.0, 0.12), Vector3(0.20, 0.0, 0.08), zero]
-			}
-		"Landing":
-			return {
-				"Hips": [zero, Vector3(0.12, 0.0, 0.0), Vector3(0.07, 0.0, 0.0), zero],
-				"Spine": [zero, Vector3(0.14, 0.0, 0.0), Vector3(0.06, 0.0, 0.0), zero],
-				"LeftThigh": [zero, Vector3(-0.22, 0.0, 0.0), Vector3(-0.12, 0.0, 0.0), zero],
-				"RightThigh": [zero, Vector3(-0.22, 0.0, 0.0), Vector3(-0.12, 0.0, 0.0), zero],
-				"LeftShin": [zero, Vector3(0.30, 0.0, 0.0), Vector3(0.18, 0.0, 0.0), zero],
-				"RightShin": [zero, Vector3(0.30, 0.0, 0.0), Vector3(0.18, 0.0, 0.0), zero]
-			}
-		"Turn_Left", "Turn_Right":
-			var direction := 1.0 if action_name == "Turn_Left" else -1.0
-			return {
-				"Hips": [zero, Vector3(0.0, 0.10 * direction, 0.0), Vector3(0.0, 0.06 * direction, 0.0), zero],
-				"Spine": [zero, Vector3(0.0, -0.12 * direction, 0.0), Vector3(0.0, -0.06 * direction, 0.0), zero],
-				"Head": [zero, Vector3(0.0, 0.12 * direction, 0.0), Vector3(0.0, 0.06 * direction, 0.0), zero]
-			}
-		"Magic_Light", "Magic_Judgment", "Magic_Fire", "Magic_Shadow":
-			var lift := 0.58
-			if action_name == "Magic_Judgment":
-				lift = 0.82
-			elif action_name == "Magic_Fire":
-				lift = 0.46
-			elif action_name == "Magic_Shadow":
-				lift = 0.66
-			return {
-				"Spine": [zero, Vector3(-0.14, 0.0, 0.0), Vector3(-0.10, 0.0, 0.0), zero],
-				"Chest": [zero, Vector3(-0.08, 0.0, 0.0), Vector3(-0.04, 0.0, 0.0), zero],
-				"RightUpperArm": [zero, Vector3(-lift, 0.0, -0.18), Vector3(-0.18, 0.0, -0.08), zero],
-				"RightForearm": [zero, Vector3(0.42, 0.0, 0.0), Vector3(0.18, 0.0, 0.0), zero],
-				"LeftUpperArm": [zero, Vector3(0.18, 0.0, 0.10), Vector3(0.12, 0.0, 0.05), zero]
-			}
-		"Hit", "Hit_React":
-			return {
-				"Hips": [zero, Vector3(0.0, 0.0, 0.10), Vector3(0.0, 0.0, 0.06), zero],
-				"Spine": [zero, Vector3(0.12, 0.0, 0.10), Vector3(0.06, 0.0, 0.04), zero],
-				"Chest": [zero, Vector3(0.14, 0.0, 0.06), Vector3(0.06, 0.0, 0.03), zero],
-				"LeftUpperArm": [zero, Vector3(0.20, 0.0, 0.14), Vector3(0.10, 0.0, 0.06), zero],
-				"RightUpperArm": [zero, Vector3(0.20, 0.0, -0.14), Vector3(0.10, 0.0, -0.06), zero]
-			}
-		"Defeat", "Death_Forward", "Death_Backward":
-			var fall_sign := -1.0 if action_name == "Death_Backward" else 1.0
-			return {
-				"Hips": [zero, Vector3(0.14 * fall_sign, 0.0, 0.0), Vector3(0.42 * fall_sign, 0.0, 0.0), Vector3(0.48 * fall_sign, 0.0, 0.0)],
-				"Spine": [zero, Vector3(0.12, 0.0, 0.0), Vector3(0.38, 0.0, 0.0), Vector3(0.48, 0.0, 0.0)],
-				"Chest": [zero, Vector3(-0.10, 0.0, 0.0), Vector3(0.26, 0.0, 0.0), Vector3(0.32, 0.0, 0.0)],
-				"LeftThigh": [zero, Vector3(-0.14, 0.0, -0.08), Vector3(-0.35, 0.0, -0.10), Vector3(-0.35, 0.0, -0.10)],
-				"RightThigh": [zero, Vector3(-0.14, 0.0, 0.08), Vector3(-0.35, 0.0, 0.10), Vector3(-0.35, 0.0, 0.10)],
-				"LeftShin": [zero, Vector3(0.20, 0.0, 0.0), Vector3(0.40, 0.0, 0.0), Vector3(0.40, 0.0, 0.0)],
-				"RightShin": [zero, Vector3(0.20, 0.0, 0.0), Vector3(0.40, 0.0, 0.0), Vector3(0.40, 0.0, 0.0)],
-				"LeftUpperArm": [zero, Vector3(0.32, 0.0, 0.18), Vector3(0.66, 0.0, 0.28), Vector3(0.66, 0.0, 0.28)],
-				"RightUpperArm": [zero, Vector3(0.32, 0.0, -0.18), Vector3(0.66, 0.0, -0.28), Vector3(0.66, 0.0, -0.28)]
-			}
-	return {}
+		var local_rotation := (rest_rotation * Quaternion.from_euler(poses[index] * Vector3(FORWARD_AXIS_SIGN, 1.0, 1.0))).normalized()
+		animation.rotation_track_insert_key(track, key_times[index], local_rotation)

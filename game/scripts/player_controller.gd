@@ -95,29 +95,30 @@ func _load_player_visual() -> void:
 	if ResourceLoader.exists(PLAYER_MODEL_PATH):
 		var packed := load(PLAYER_MODEL_PATH) as PackedScene
 		if packed != null:
-			var model := packed.instantiate()
-			visual_root.add_child(model)
-			model.rotation.y = PI
-			_animation_player = model.find_child("AnimationPlayer", true, false) as AnimationPlayer
-			if _animation_player == null:
-				_animation_player = AnimationPlayer.new()
-				_animation_player.name = "UniversalBaseAnimationPlayer"
-				model.add_child(_animation_player)
-			_animation_player.root_node = NodePath("..")
-			_skeleton = model.find_child("Skeleton3D", true, false) as Skeleton3D
-			if _skeleton != null:
-				_fight_animations_ready = FIGHT_ANIMATION_BUILDER.install_retargeted(
-					_animation_player,
-					_skeleton,
-					ATTACKS,
-					CHARACTER_MOTION.BONE_MAP,
-					FIGHT_ANIMATION_BUILDER.LIBRARY_NAME,
-					CHARACTER_MOTION.FORWARD_AXIS_SIGN
-				)
-				_character_motion_ready = CHARACTER_MOTION.install(_animation_player, _skeleton)
-			_set_locomotion_animation("Idle")
-	else:
-		_add_debug_visual()
+			var model := packed.instantiate() as Node3D
+			if model != null:
+				visual_root.add_child(model)
+				model.rotation.y = PI
+				_animation_player = model.find_child("AnimationPlayer", true, false) as AnimationPlayer
+				if _animation_player == null:
+					_animation_player = AnimationPlayer.new()
+					_animation_player.name = "UniversalBaseAnimationPlayer"
+					model.add_child(_animation_player)
+				_animation_player.root_node = _animation_player.get_path_to(model)
+				_skeleton = model.find_child("Skeleton3D", true, false) as Skeleton3D
+				if _skeleton != null:
+					_character_motion_ready = CHARACTER_MOTION.install(_animation_player, _skeleton)
+					_fight_animations_ready = FIGHT_ANIMATION_BUILDER.install_retargeted(
+						_animation_player,
+						_skeleton,
+						ATTACKS,
+						CHARACTER_MOTION.BONE_MAP,
+						FIGHT_ANIMATION_BUILDER.LIBRARY_NAME,
+						CHARACTER_MOTION.FORWARD_AXIS_SIGN
+					)
+				_set_locomotion_animation("Idle")
+				return
+	_add_debug_visual()
 
 func _add_debug_visual() -> void:
 	var body := MeshInstance3D.new()

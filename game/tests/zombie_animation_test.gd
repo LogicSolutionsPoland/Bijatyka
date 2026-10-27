@@ -2,19 +2,21 @@ extends SceneTree
 
 const Enemy := preload("res://scripts/enemy.gd")
 const Player := preload("res://scripts/player_controller.gd")
-const MODEL_PATH := "res://assets/zombies/brutal_v2/Retribution_Zombie_01_Brutal_V2_RIGGED_LOD1.glb"
-const EXPECTED_DURATIONS := {
-	"Idle": 2.60,
-	"Walk": 1.25,
-	"Sprint": 0.71,
-	"Attack_Swipe_L": 1.05,
-	"Attack_Swipe_R": 1.05,
-	"Attack_Bite": 0.95,
-	"Hit_React": 0.66,
-	"Death_Forward": 1.55,
-	"Death_Backward": 1.55,
-	"Spawn_Recovery": 1.38,
-}
+const MODEL_PATH := "res://assets/characters/universal_base/Universal_Base_Characters_Male.glb"
+const EXPECTED_CLIPS := [
+	"Idle_Loop",
+	"Walk_Loop",
+	"Sprint_Loop",
+	"Jump_Loop",
+	"Punch_Cross",
+	"Punch_Jab",
+	"Spell_Simple_Enter",
+	"Spell_Simple_Idle_Loop",
+	"Spell_Simple_Shoot",
+	"Spell_Simple_Exit",
+	"Hit_Chest",
+	"Death01",
+]
 
 var failures: Array[String] = []
 var checks := 0
@@ -24,7 +26,7 @@ func _initialize() -> void:
 	call_deferred("_run")
 
 func _run() -> void:
-	_check_imported_clip_names_and_durations()
+	_check_imported_clip_names()
 	await _test_behavior_animation_connections()
 	if failures.is_empty():
 		print("PASS: zombie animation (%d checks)" % checks)
@@ -35,14 +37,14 @@ func _run() -> void:
 		print("FAIL: %d of %d zombie animation checks failed" % [failures.size(), checks])
 		quit(1)
 
-func _check_imported_clip_names_and_durations() -> void:
+func _check_imported_clip_names() -> void:
 	var packed := load(MODEL_PATH) as PackedScene
-	_check(packed != null, "zombie GLB imports as a scene")
+	_check(packed != null, "Universal Base enemy GLB imports as a scene")
 	if packed == null:
 		return
 	var model := packed.instantiate()
 	var player := model.find_child("AnimationPlayer", true, false) as AnimationPlayer
-	_check(player != null, "imported zombie exposes an AnimationPlayer")
+	_check(player != null, "imported character exposes an AnimationPlayer")
 	if player == null:
 		model.free()
 		return
@@ -52,11 +54,9 @@ func _check_imported_clip_names_and_durations() -> void:
 		for animation_name in library.get_animation_list():
 			var full_name := String(animation_name) if library_name == &"" else "%s/%s" % [library_name, animation_name]
 			found.append(full_name)
-	_check(found.size() == EXPECTED_DURATIONS.size(), "imported zombie animation library contains the expected ten clips")
-	for animation_name in EXPECTED_DURATIONS:
+	_check(found.size() >= 43, "imported character contains all 43 Universal Animation Library clips")
+	for animation_name in EXPECTED_CLIPS:
 		_check(player.has_animation(animation_name), "imported animation exists: %s" % animation_name)
-		if player.has_animation(animation_name):
-			_check(is_equal_approx(player.get_animation(animation_name).length, float(EXPECTED_DURATIONS[animation_name])), "%s duration matches the imported resource" % animation_name)
 	model.free()
 
 func _test_behavior_animation_connections() -> void:
@@ -71,7 +71,7 @@ func _test_behavior_animation_connections() -> void:
 	enemy._set_distance_detail(0.0)
 	enemy._set_full_animation_selected(true)
 	var animations := enemy._animation_player
-	_check(animations != null, "near zombie creates its detailed imported rig")
+	_check(animations != null, "near enemy creates its imported character rig")
 	if animations == null:
 		enemy.queue_free()
 		player.queue_free()
@@ -101,7 +101,7 @@ func _test_behavior_animation_connections() -> void:
 	_check(enemy._select_attack_animation(target, 1.2, ["Attack_Swipe_R"]) == "Attack_Swipe_R", "missing desired clip falls back to an available swipe")
 
 	enemy._begin_attack_animation(target, 1.2, 0.4)
-	_check(animations.current_animation == "enemy_combat/right_kick", "attack windup uses the player kick retargeted to the zombie rig")
+	_check(animations.current_animation == "enemy_combat/right_kick", "attack windup uses the player kick retargeted to the enemy rig")
 	animations.advance(0.4)
 	_check(absf(animations.current_animation_position - enemy._attack_contact_time) < 0.025, "attack contact pose reaches the existing windup expiry")
 	enemy.combat_target = target

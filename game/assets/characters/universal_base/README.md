@@ -1,9 +1,9 @@
 # Universal Base Characters
 
-This CC0 character pack supplies the new player and boss visuals:
-- Male model: player character.
-- Female model: boss character.
+This CC0 character pack now supplies all animated humanoid visuals:
+- Male model: player and regular enemies.
+- Female model: boss.
 
-The supplied GLB files have no animation clips. `universal_base_motion.gd` builds locomotion, spell, hit, defeat, and combat animations for the pack's 65-bone rig at runtime.
+The matching 65-bone Universal Animation Library rig is merged into both GLBs. The game uses its 43 original animation clips for locomotion, combat, and spells. Spell casts play Quaternius' `Spell_Simple_Shoot` clip; the game maps its movement, hit, dash, landing, and defeat actions to matching library clips.
 
-Ordinary zombie visuals and their existing models are unchanged.
+The character models and animation library are CC0. See `LICENSE_CC0.txt` and `third_party/universal_animation_library_standard/License.txt`.

@@ -2,7 +2,7 @@ extends SceneTree
 
 const Player := preload("res://scripts/player_controller.gd")
 const Enemy := preload("res://scripts/enemy.gd")
-const EXPECTED_SOURCE_CLIPS := ["Idle", "Walk", "Sprint", "Jump", "Sword_Slash"]
+const EXPECTED_SOURCE_CLIPS := ["Idle_Loop", "Walk_Loop", "Sprint_Loop", "Jump_Loop", "Spell_Simple_Shoot"]
 const FORWARD := Vector3(0.0, 0.0, -1.0)
 
 var failures: Array[String] = []
@@ -23,7 +23,7 @@ func _run() -> void:
 
 	var animator := player._animation_player as AnimationPlayer
 	var skeleton := player._skeleton as Skeleton3D
-	_check(skeleton.get_bone_count() == 21, "imported player rig contains 21 bones")
+	_check(skeleton.get_bone_count() == 65, "imported player rig contains 65 bones")
 	for clip_name in EXPECTED_SOURCE_CLIPS:
 		_check(animator.has_animation(clip_name), "imported player clip exists: %s" % clip_name)
 	for kind in ["punch", "kick"]:
