@@ -174,21 +174,23 @@ func _test_manual_attack_and_hit_window() -> void:
 	target.set_physics_process(false)
 	root.add_child(target)
 	await process_frame
-	_check(player.request_attack("punch"), "punch press starts one attack")
-	_check(player.request_attack("kick") and player.attack_count == 1 and player._queued_attack_kind == "kick", "next input buffers during the current attack")
-	player._update_attack(0.15)
+	_check(player.request_attack("punch"), "punch press starts a cinematic engagement")
+	_check(player.attack_phase == "grapple" and target._player_grapple_owner == player, "first enemy is grabbed before striking")
+	player._update_attack(Player.CHAIN_GRAB_SECONDS)
+	_check(player.attack_count == 1 and player.attack_phase == "windup", "grapple reaches into the first punch")
+	_check(player.request_attack("kick") and player._queued_attack_kind == "kick", "next input buffers during the current attack")
+	player._update_attack(float(Player.ATTACKS["punch"].windup))
 	_check(target.hp < target.starting_health, "punch hit window detects an in-range enemy")
 	_check(player.rage.rage == 3.0, "only a confirmed positive hit increases RAGE")
-	player._update_attack(0.13)
-	_check(player.attack_kind == "kick" and player.attack_count == 2 and player.attack_phase == "windup", "buffered kick begins as soon as the punch hit window ends")
+	player._update_attack(float(Player.ATTACKS["punch"].active))
+	_check(player.attack_kind == "kick" and player.attack_count == 2 and player.attack_phase == "windup", "buffered kick begins after half a second of fighting")
 	for _frame in range(100):
 		player._update_attack(0.01)
 	await process_frame
 	_check(player.attack_phase == "ready" and player.request_attack("kick") and player.attack_count == 3, "a fresh kick starts immediately after the previous action finishes")
 	var rage_before_miss := player.rage.rage
 	target.hp = target.starting_health
-	player.attack_phase = "ready"
-	player.attack_kind = ""
+	player._finish_attack()
 	target.position = Vector3(4.0, 0.0, 0.0)
 	_check(player.request_attack("kick"), "kick input starts its distinct action")
 	player._update_attack(0.24)
@@ -593,17 +595,17 @@ func _test_gamepad_controls() -> void:
 		_send_pad(button, true)
 		_send_pad(button, true)
 		_check(routed.size() == before + 1, "duplicate %s down event cannot double-strike" % buttons[button])
-		hud._process(0.19)
-		player._update_attack(0.19)
+		hud._process(0.49)
+		player._update_attack(0.49)
 		_check(routed.size() == before + 1, "%s has no early repeat" % buttons[button])
 		hud._process(0.01)
 		player._update_attack(0.01)
-		_check(routed.size() == before + 2, "%s repeats after 0.20 seconds" % buttons[button])
+		_check(routed.size() == before + 2, "%s repeats after 0.50 seconds" % buttons[button])
 		for repeat in range(3):
-			for frame in range(20):
+			for frame in range(50):
 				hud._process(0.01)
 				player._update_attack(0.01)
-		_check(routed.size() == before + 5, "%s permits five attempts over the first 0.8 seconds" % buttons[button])
+		_check(routed.size() == before + 5, "%s permits five attempts over the first 2.0 seconds" % buttons[button])
 		_send_pad(button, false)
 		for frame in range(20):
 			player._update_attack(0.01)
@@ -633,17 +635,17 @@ func _test_gamepad_controls() -> void:
 	_send_trigger(0.45)
 	_send_trigger(0.8)
 	_check(routed.size() == before_trigger + 1, "R2 trigger noise cannot double-strike")
-	hud._process(0.19)
-	player._update_attack(0.19)
+	hud._process(0.49)
+	player._update_attack(0.49)
 	_check(routed.size() == before_trigger + 1, "held R2 has no early repeat")
 	hud._process(0.01)
 	player._update_attack(0.01)
-	_check(routed.size() == before_trigger + 2, "held R2 repeats after 0.20 seconds")
+	_check(routed.size() == before_trigger + 2, "held R2 repeats after 0.50 seconds")
 	for repeat in range(3):
-		for frame in range(20):
+		for frame in range(50):
 			hud._process(0.01)
 			player._update_attack(0.01)
-	_check(routed.size() == before_trigger + 5 and player.attack_count == attacks_before_trigger + 5, "held R2 permits five distinct right-kick attempts over 0.8 seconds")
+	_check(routed.size() == before_trigger + 5 and player.attack_count == attacks_before_trigger + 5, "held R2 permits five distinct right-kick attempts over 2.0 seconds")
 	_send_trigger(0.0)
 	hud._process(0.4)
 	_check(routed.size() == before_trigger + 5, "releasing R2 stops repeats")
