@@ -19,14 +19,20 @@ const MAX_HEALTH := 100
 const MAX_MAGIC := 100.0
 const DASH_DISTANCE := 15.0
 const DASH_DURATION := 0.30
-const TARGET_MELEE_HITS_PER_SECOND := 5.0
+const TARGET_MELEE_HITS_PER_SECOND := 2.0
 const TARGET_MELEE_CYCLE_SECONDS := 1.0 / TARGET_MELEE_HITS_PER_SECOND
 const MELEE_TIMER_EPSILON := 0.0001
-const ATTACK_ANIMATION_BLEND_SECONDS := 0.08
+const ATTACK_ANIMATION_BLEND_SECONDS := 0.06
+const CHAIN_TARGET_RADIUS := 5.0
+const CHAIN_GRAB_DISTANCE := 1.72
+const CHAIN_STRIKE_DISTANCE := 1.45
+const CHAIN_APPROACH_SECONDS := 0.48
+const CHAIN_HOP_SPEED := 9.5
+const CHAIN_GRAB_SECONDS := 0.16
 const LOCOMOTION_ANIMATION_BLEND_SECONDS := 0.12
 const ATTACKS := {
-	"punch": {"windup": 0.10, "active": TARGET_MELEE_CYCLE_SECONDS - 0.10, "recovery": 0.34, "range": 1.55, "damage": 18, "cone": 0.42},
-	"kick": {"windup": 0.12, "active": TARGET_MELEE_CYCLE_SECONDS - 0.12, "recovery": 0.48, "range": 2.15, "damage": 28, "cone": 0.30}
+	"punch": {"windup": 0.20, "active": TARGET_MELEE_CYCLE_SECONDS - 0.20, "recovery": 0.24, "range": 1.55, "damage": 18, "cone": 0.42},
+	"kick": {"windup": 0.24, "active": TARGET_MELEE_CYCLE_SECONDS - 0.24, "recovery": 0.28, "range": 2.15, "damage": 28, "cone": 0.30}
 }
 const SPELLS := {
 	"light": {"cost": 20.0, "range": 8.0, "color": Color(1.0, 0.84, 0.32)},
@@ -59,6 +65,9 @@ var _fight_animations_ready := false
 var _ring_animations_ready := false
 var _active_attack_clip: StringName = &""
 var _ring_attack_counts: Dictionary = {}
+var _engagement_target: FoundationEnemy
+var _previous_engagement_target: FoundationEnemy
+var _grabbed_target: FoundationEnemy
 var _character_motion_ready := false
 var _character_action_time := 0.0
 var _camera_yaw := 0.0
@@ -216,6 +225,23 @@ func move_input() -> Vector2:
 	return keyboard
 
 func _update_movement(delta: float) -> void:
+	if attack_phase == "approach" and is_instance_valid(_engagement_target) and _engagement_target.hp > 0:
+		var offset := _engagement_target.global_position - global_position
+		offset.y = 0.0
+		var distance := offset.length()
+		if distance > CHAIN_STRIKE_DISTANCE:
+			var direction := offset.normalized()
+			velocity.x = direction.x * CHAIN_HOP_SPEED
+			velocity.z = direction.z * CHAIN_HOP_SPEED
+			rotation.y = lerp_angle(rotation.y, atan2(-direction.x, -direction.z), minf(1.0, delta * 16.0))
+		else:
+			velocity.x = 0.0
+			velocity.z = 0.0
+		return
+	if attack_phase == "grapple":
+		velocity.x = 0.0
+		velocity.z = 0.0
+		return
 	var stick := move_input()
 	var relative := Vector3(stick.x, 0.0, stick.y)
 	var direction := relative.rotated(Vector3.UP, _camera_yaw)
@@ -234,7 +260,7 @@ func _update_movement(delta: float) -> void:
 func request_attack(kind: String, side: String = "right") -> bool:
 	if not ATTACKS.has(kind) or side not in ["left", "right"] or rage.current_soul_condemned:
 		return false
-	if attack_phase == "windup" or attack_phase == "active":
+	if attack_phase in ["approach", "grapple", "windup", "active"]:
 		_queue_attack(kind, side)
 		return true
 	if attack_phase == "recovery":
@@ -249,31 +275,95 @@ func _queue_attack(kind: String, side: String) -> void:
 	_queued_attack_kind = kind
 	_queued_attack_side = side
 
+func _select_chain_target() -> FoundationEnemy:
+	# Only normal zombies take part in cinematic grabs; the boss remains manual.
+	var chosen: FoundationEnemy = null
+	var best := INF
+	for node in get_tree().get_nodes_in_group("enemies"):
+		var enemy := node as FoundationEnemy
+		if enemy == null or not is_instance_valid(enemy) or enemy.is_queued_for_deletion() or enemy.is_boss or enemy.hp <= 0:
+			continue
+		var offset := enemy.global_position - global_position
+		offset.y = 0.0
+		var distance := offset.length()
+		if distance > CHAIN_TARGET_RADIUS:
+			continue
+		var score := distance
+		if enemy == _previous_engagement_target:
+			score += CHAIN_TARGET_RADIUS + 0.5
+		# Keep the next victim near the forward-facing arc where possible.
+		var facing := -global_basis.z
+		facing.y = 0.0
+		if distance > 0.05 and facing.normalized().dot(offset.normalized()) < -0.25:
+			score += 1.2
+		if score < best:
+			best = score
+			chosen = enemy
+	return chosen
+
 func _start_attack(kind: String, side: String) -> void:
 	attack_kind = kind
 	attack_side = side
-	attack_phase = "windup"
-	attack_phase_time = float(ATTACKS[kind].windup)
 	_attack_recovery_locked = false
 	_character_action_time = 0.0
+	_engagement_target = _select_chain_target()
+	if is_instance_valid(_engagement_target):
+		var separation := global_position.distance_to(_engagement_target.global_position)
+		if separation > CHAIN_GRAB_DISTANCE:
+			attack_phase = "approach"
+			attack_phase_time = CHAIN_APPROACH_SECONDS
+			# A short physical hop, never a teleport: CharacterBody3D collision remains active.
+			if is_on_floor():
+				velocity.y = 3.2
+				_was_airborne = true
+			_play_engagement_pose("slip_left" if side == "left" else "slip_right")
+			return
+		if _engagement_target != _previous_engagement_target:
+			_begin_grapple()
+			return
+	_begin_strike()
+
+func _play_engagement_pose(name: String) -> void:
+	if _ring_animations_ready and _animation_player != null:
+		var path := PLAYER_RING_REFERENCE.clip_path(name)
+		if _animation_player.has_animation(path):
+			_animation_player.play(path, ATTACK_ANIMATION_BLEND_SECONDS)
+			_animation_player.seek(0.0, true)
+
+func _begin_grapple() -> void:
+	if not is_instance_valid(_engagement_target) or _engagement_target.hp <= 0 or _engagement_target.is_boss:
+		_begin_strike()
+		return
+	attack_phase = "grapple"
+	attack_phase_time = CHAIN_GRAB_SECONDS
+	_grabbed_target = _engagement_target
+	_grabbed_target.begin_player_grapple(self, CHAIN_GRAB_SECONDS + TARGET_MELEE_CYCLE_SECONDS + 0.12)
+	_play_engagement_pose("grapple_reach")
+
+func _begin_strike() -> void:
+	attack_phase = "windup"
+	attack_phase_time = float(ATTACKS[attack_kind].windup)
 	attack_count += 1
-	attack_started.emit(kind)
-	_spawn_attack_sweep(kind, side)
+	attack_started.emit(attack_kind)
+	_spawn_attack_sweep(attack_kind, attack_side)
+	if is_instance_valid(_engagement_target) and _engagement_target.hp > 0:
+		var offset := _engagement_target.global_position - global_position
+		offset.y = 0.0
+		if offset.length_squared() > 0.01:
+			rotation.y = atan2(-offset.x, -offset.z)
 	if _animation_player != null:
 		if _fight_animations_ready:
-			_active_attack_clip = FIGHT_ANIMATION_BUILDER.clip_path(kind, side)
+			_active_attack_clip = FIGHT_ANIMATION_BUILDER.clip_path(attack_kind, attack_side)
 			if _ring_animations_ready:
-				var strike_key := "%s_%s" % [kind, side]
+				var strike_key := "%s_%s" % [attack_kind, attack_side]
 				var repetition := int(_ring_attack_counts.get(strike_key, 0))
-				var airborne := kind == "kick" and velocity.y > 0.1 and not is_on_floor()
-				var variant := PLAYER_RING_REFERENCE.attack_name(kind, side, repetition, airborne)
+				var airborne := attack_kind == "kick" and velocity.y > 0.1 and not is_on_floor()
+				var variant := PLAYER_RING_REFERENCE.attack_name(attack_kind, attack_side, repetition, airborne)
 				var ring_path := PLAYER_RING_REFERENCE.clip_path(variant)
 				if _animation_player.has_animation(ring_path):
 					_active_attack_clip = ring_path
 					_ring_attack_counts[strike_key] = repetition + 1
 			_animation_player.play(_active_attack_clip, ATTACK_ANIMATION_BLEND_SECONDS)
-			# play() on the same currently playing clip does not restart it.
-			# Every accepted strike, including held input, needs a new windup.
 			_animation_player.seek(0.0, true)
 		else:
 			_animation_player.stop()
@@ -291,6 +381,12 @@ func _start_queued_attack() -> bool:
 
 func _finish_attack() -> void:
 	var finished := attack_kind
+	if is_instance_valid(_grabbed_target):
+		_grabbed_target.end_player_grapple(self)
+	if is_instance_valid(_engagement_target):
+		_previous_engagement_target = _engagement_target
+	_grabbed_target = null
+	_engagement_target = null
 	attack_phase = "ready"
 	attack_kind = ""
 	attack_phase_time = 0.0
@@ -303,12 +399,28 @@ func _update_attack(delta: float) -> void:
 	if attack_phase == "ready":
 		return
 	var elapsed_time := maxf(0.0, delta)
+	if attack_phase == "approach":
+		if not is_instance_valid(_engagement_target) or _engagement_target.hp <= 0:
+			_finish_attack()
+			return
+		var flat := _engagement_target.global_position - global_position
+		flat.y = 0.0
+		if flat.length() <= CHAIN_GRAB_DISTANCE:
+			_begin_grapple()
+			return
+		attack_phase_time -= elapsed_time
+		if attack_phase_time <= 0.0:
+			# A blocked hop must not hit or warp through an obstacle.
+			_finish_attack()
+		return
 	if elapsed_time + MELEE_TIMER_EPSILON < attack_phase_time:
 		attack_phase_time -= elapsed_time
 		return
 	var overflow_time := maxf(0.0, elapsed_time - attack_phase_time)
 	attack_phase_time = 0.0
 	match attack_phase:
+		"grapple":
+			_begin_strike()
 		"windup":
 			attack_phase = "active"
 			_resolve_attack()
@@ -332,7 +444,14 @@ func _resolve_attack() -> void:
 	var profile: Dictionary = ATTACKS[attack_kind]
 	if _fight_animations_ready and _animation_player.current_animation == _active_attack_clip:
 		_animation_player.seek(float(profile.windup), true)
-	var target := _find_target(float(profile.range), float(profile.cone))
+	var target: FoundationEnemy = null
+	if is_instance_valid(_engagement_target) and _engagement_target.hp > 0:
+		var flat := _engagement_target.global_position - global_position
+		flat.y = 0.0
+		if flat.length() <= float(profile.range) + 0.28:
+			target = _engagement_target
+	if target == null:
+		target = _find_target(float(profile.range), float(profile.cone))
 	if target == null:
 		return
 	var direction := target.global_position - global_position
@@ -346,6 +465,8 @@ func _resolve_attack() -> void:
 func try_jump() -> bool:
 	if not is_on_floor() or rage.current_soul_condemned:
 		return false
+	if attack_phase in ["approach", "grapple"]:
+		_finish_attack()
 	velocity.y = 8.2
 	jump_impact_armed = true
 	_was_airborne = true
@@ -371,6 +492,8 @@ func _camera_aim_direction() -> Vector3:
 func try_dash(direction: Vector3 = Vector3.ZERO) -> bool:
 	if dash_time > 0.0 or rage.current_soul_condemned:
 		return false
+	if attack_phase in ["approach", "grapple"]:
+		_finish_attack()
 	if direction.length_squared() < 0.01:
 		direction = _camera_aim_direction()
 		# The camera looks down at the arena; do not drive the 15 m dash
@@ -386,6 +509,11 @@ func try_dash(direction: Vector3 = Vector3.ZERO) -> bool:
 	return true
 
 func interrupt_by_zombie(slow_seconds: float = 0.7, recovery_penalty: float = 0.45) -> void:
+	if attack_phase in ["approach", "grapple"]:
+		_finish_attack()
+	elif is_instance_valid(_grabbed_target):
+		_grabbed_target.end_player_grapple(self)
+		_grabbed_target = null
 	movement_slow_factor = minf(movement_slow_factor, 0.58)
 	movement_slow_time = maxf(movement_slow_time, slow_seconds)
 	if attack_phase != "ready":
@@ -712,6 +840,8 @@ func _on_condemned(_threshold: float, _maximum: float) -> void:
 	call_deferred("_reset_at_safe_base")
 
 func _reset_at_safe_base() -> void:
+	_finish_attack()
+	_previous_engagement_target = null
 	global_position = safe_base_position
 	velocity = Vector3.ZERO
 	health = MAX_HEALTH
