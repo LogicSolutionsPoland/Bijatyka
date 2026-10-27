@@ -9,9 +9,8 @@ const ENEMY_MODEL_PATH := "res://assets/characters/universal_base/Universal_Base
 const BOSS_MODEL_PATH := "res://assets/characters/universal_base/Universal_Base_Characters_Female.glb"
 const UNIVERSAL_BASE_MOTION := preload("res://scripts/universal_base_motion.gd")
 const ENEMY_MODEL_YAW_OFFSET := PI
-const FIGHT_ANIMATION_BUILDER := preload("res://scripts/fight_animation.gd")
+const FIGHT_ANIMATION_BUILDER := preload("res://scripts/universal_base_enemy_combat.gd")
 const ENEMY_FIGHT_LIBRARY := &"enemy_combat"
-const ENEMY_FIGHT_FORWARD_AXIS_SIGN := -1.0
 const SHADOW_POLICY := preload("res://scripts/shadow_policy.gd")
 const GRAVITY := 24.0
 const RENDER_RADIUS := 30.0
@@ -320,14 +319,8 @@ func _adopt_detailed_model(model: Node3D) -> void:
 		_base_visual_meshes.append(mesh_node as MeshInstance3D)
 	if _animation_player != null and _skeleton != null:
 		UNIVERSAL_BASE_MOTION.install(_animation_player, _skeleton)
-		_fight_animations_ready = FIGHT_ANIMATION_BUILDER.install_retargeted(
-			_animation_player,
-			_skeleton,
-			_fight_attack_profiles(),
-			UNIVERSAL_BASE_MOTION.BONE_MAP,
-			ENEMY_FIGHT_LIBRARY,
-			ENEMY_FIGHT_FORWARD_AXIS_SIGN
-		)
+		_fight_animations_ready = FIGHT_ANIMATION_BUILDER.install(_animation_player, _skeleton, _fight_attack_profiles())
+		_animation_player.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_PHYSICS
 	if _animation_player != null:
 		for loop_name in ["Idle", "Walk", "Sprint"]:
 			if _animation_player.has_animation(loop_name):
@@ -684,6 +677,8 @@ func _update_ai(delta: float, distance: float) -> void:
 		if state == "windup":
 			state = "recovery"
 			state_time = recovery_duration
+			_attack_animation = ""
+			_play_animation("Idle")
 		if state == "hit" or state == "recovery":
 			state_time = maxf(0.0, state_time - delta)
 			velocity.x = 0.0
@@ -753,8 +748,13 @@ func _resolve_enemy_attack(distance: float) -> void:
 			hit = true
 	attack_resolved.emit(self, hit)
 	if not _attack_animation.is_empty() and _animation_player != null and _animation_player.current_animation == _attack_animation:
+		var clip := _animation_player.get_animation(_attack_animation)
+		var remaining := maxf(0.01, clip.length - _attack_contact_time)
+		var recovery := recovery_duration if is_boss else recovery_duration * 0.65
+		# The AI clock decides damage; play the remaining visual recovery over
+		# that same interval, even when a decision tick resolves contact late.
+		_animation_player.play(_attack_animation, -1.0, remaining / maxf(recovery, 0.01))
 		_animation_player.seek(_attack_contact_time, true)
-		_animation_player.speed_scale = 1.0
 	_attack_animation = ""
 	state = "recovery"
 	state_time = recovery_duration if is_boss else recovery_duration * 0.65
@@ -815,6 +815,8 @@ func _play_animation(animation_name: String, playback_speed: float = 1.0, blend:
 		return false
 	if force_restart or _animation_player.current_animation != animation_name or not _animation_player.is_playing():
 		_animation_player.play(animation_name, blend, maxf(0.01, playback_speed))
+		if force_restart:
+			_animation_player.seek(0.0, true)
 	return true
 
 func _is_high_speed_chase() -> bool:
