@@ -288,6 +288,11 @@ func _select_chain_target() -> FoundationEnemy:
 		var distance := offset.length()
 		if distance > CHAIN_TARGET_RADIUS:
 			continue
+		# Prevent auto-grabs through arena walls or player-base obstacles.
+		var sight := PhysicsRayQueryParameters3D.create(global_position + Vector3.UP, enemy.global_position + Vector3.UP, 1)
+		sight.exclude = [get_rid(), enemy.get_rid()]
+		if not get_world_3d().direct_space_state.intersect_ray(sight).is_empty():
+			continue
 		var score := distance
 		if enemy == _previous_engagement_target:
 			score += CHAIN_TARGET_RADIUS + 0.5
