@@ -1,0 +1,77 @@
+name: Export Bloodforged Sentinel model
+
+on:
+  push:
+    branches:
+      - codex/model-assets-integration-20261027
+    paths:
+      - .github/workflows/export-bloodforged-sentinel.yml
+      - art/characters/bloodforged_sentinel/source/Meshy_AI_Bloodforged_Sentinel_1026102138_generate.blend
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  export:
+    name: Export Blender source to Godot GLB
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out integration branch
+        uses: actions/checkout@v4
+
+      - name: Install Blender
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes blender
+          blender --version
+
+      - name: Export model and record rig inventory
+        run: |
+          set -euo pipefail
+          mkdir -p game/assets/characters/bloodforged_sentinel
+          blender --background art/characters/bloodforged_sentinel/source/Meshy_AI_Bloodforged_Sentinel_1026102138_generate.blend --python-expr '
+          import bpy
+          import os
+          meshes = [obj for obj in bpy.context.scene.objects if obj.type == "MESH"]
+          armatures = [obj for obj in bpy.context.scene.objects if obj.type == "ARMATURE"]
+          if not meshes:
+              raise RuntimeError("The source scene contains no mesh objects.")
+          output = "game/assets/characters/bloodforged_sentinel/Bloodforged_Sentinel.glb"
+          bpy.ops.export_scene.gltf(filepath=output, export_format="GLB", export_animations=True, export_skins=True)
+          actions = sorted(action.name for action in bpy.data.actions)
+          mesh_lines = [f"- {obj.name}: {len(obj.data.vertices):,} vertices, {len(obj.data.polygons):,} faces" for obj in meshes]
+          rig_lines = [f"- {obj.name}: {len(obj.data.bones)} bones" for obj in armatures]
+          report = [
+              "# Bloodforged Sentinel export report",
+              "",
+              f"- Blender: {bpy.app.version_string}",
+              f"- Mesh objects: {len(meshes)}",
+              *mesh_lines,
+              f"- Armatures: {len(armatures)}",
+              *(rig_lines or ["- No armature found"]),
+              f"- Animation actions: {len(actions)}",
+              *(["- " + name for name in actions] or ["- No animation actions found"]),
+              "",
+              "The exported GLB is available for gameplay only if its rig and clips match the player controller."
+          ]
+          os.makedirs("art/characters/bloodforged_sentinel", exist_ok=True)
+          with open("art/characters/bloodforged_sentinel/EXPORT_REPORT.md", "w", encoding="utf-8") as handle:
+              handle.write("\n".join(report) + "\n")
+          print("\n".join(report))
+          '
+          test -s game/assets/characters/bloodforged_sentinel/Bloodforged_Sentinel.glb
+
+      - name: Commit exported model and report
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add game/assets/characters/bloodforged_sentinel/Bloodforged_Sentinel.glb art/characters/bloodforged_sentinel/EXPORT_REPORT.md
+          if git diff --cached --quiet; then
+            echo "No export changes to commit."
+            exit 0
+          fi
+          git commit -m "Export Bloodforged Sentinel to GLB"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
