@@ -20,7 +20,7 @@ const CLOSE_COMBAT_RADIUS := FoundationEnemy.DETAILED_RADIUS
 const SECTOR_HYSTERESIS_METERS := 0.65
 const CLASSIFICATION_INTERVAL := 0.12
 const TEETH_REFRESH_INTERVAL := 0.033
-const TEETH_GLOW_EXTRA_METERS := 10.0
+const TEETH_REFLECTION_BAND_METERS := 10.0
 const TEETH_FRONT_FACING_DOT := 0.24
 # Camera-space footprint of the supplied 1536x707 gameplay reference.
 const OVAL_CENTER_UV := Vector2(0.44, 0.60)
@@ -209,9 +209,9 @@ func _inside_camera_frustum(enemy: Node3D) -> bool:
 
 
 func _update_distant_teeth() -> void:
-	# Screen-space glints are much cheaper than extending animated characters
-	# or adding five realtime lights. Only the five registered ordinary zombies
-	# are considered; neither the boss nor distant silhouettes are unmasked.
+	# Screen-space glints show only in the final 10 m of the flashlight beam.
+	# They do not extend visibility beyond the flashlight or reveal bodies.
+	# Only five registered ordinary zombies are considered, not the boss.
 	var points: Array[Dictionary] = []
 	if not is_instance_valid(camera) or not is_instance_valid(player) or not camera.is_current():
 		_teeth_overlay.call("set_glints", points)
@@ -227,8 +227,8 @@ func _update_distant_teeth() -> void:
 		var offset := enemy.global_position - player.global_position
 		offset.y = 0.0
 		var distance := offset.length()
-		# Strictly ten additional metres BEYOND the existing 30 m beam.
-		if distance <= MAX_RADIUS or distance >= MAX_RADIUS + TEETH_GLOW_EXTRA_METERS:
+		# Only the last 10 metres INSIDE the existing beam: 20–30 m.
+		if distance < MAX_RADIUS - TEETH_REFLECTION_BAND_METERS or distance >= MAX_RADIUS:
 			continue
 		var aim_dot := offset.normalized().dot(aim_direction)
 		if aim_dot <= 0.0:
@@ -243,7 +243,11 @@ func _update_distant_teeth() -> void:
 		if camera.is_position_behind(mouth_world):
 			continue
 		var screen_position := camera.unproject_position(mouth_world)
-		if not Rect2(Vector2.ZERO, viewport_size).grow(6.0).has_point(screen_position):
+		if not Rect2(Vector2.ZERO, viewport_size).has_point(screen_position):
+			continue
+		# Never let the overlay bypass the existing oval flashlight mask.
+		var oval_strength := get_oval_weight(screen_position / viewport_size)
+		if oval_strength <= 0.01:
 			continue
 		# Do not draw glints through buildings, terrain or the base boundary.
 		# Enemy bodies use layer 2; only static occluders (1 and 4) are queried.
@@ -255,10 +259,10 @@ func _update_distant_teeth() -> void:
 			ray.exclude = [(player as CollisionObject3D).get_rid()]
 		if not camera.get_world_3d().direct_space_state.intersect_ray(ray).is_empty():
 			continue
-		var fade := 1.0 - smoothstep(MAX_RADIUS + 5.0, MAX_RADIUS + TEETH_GLOW_EXTRA_METERS, distance)
+		var fade := smoothstep(MAX_RADIUS - TEETH_REFLECTION_BAND_METERS, MAX_RADIUS - TEETH_REFLECTION_BAND_METERS + 2.0, distance) * (1.0 - smoothstep(MAX_RADIUS - 2.0, MAX_RADIUS, distance))
 		var aim_strength := smoothstep(0.0, 0.45, aim_dot)
 		var front_strength := smoothstep(TEETH_FRONT_FACING_DOT, 0.78, front_dot)
-		var strength := fade * aim_strength * front_strength
+		var strength := fade * aim_strength * front_strength * oval_strength
 		if strength < 0.02:
 			continue
 		var size_scale := clampf((viewport_size.y / 720.0) * 35.0 / distance, 0.7, 1.6)
