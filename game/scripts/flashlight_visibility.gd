@@ -249,6 +249,10 @@ func _update_distant_teeth() -> void:
 		# Enemy bodies use layer 2; only static occluders (1 and 4) are queried.
 		var ray := PhysicsRayQueryParameters3D.create(camera.global_position, mouth_world)
 		ray.collision_mask = 1 | 4
+		# The third-person camera sits behind the player capsule (layer 1).
+		# Ignoring it avoids permanently hiding every distant glint.
+		if player is CollisionObject3D:
+			ray.exclude = [(player as CollisionObject3D).get_rid()]
 		if not camera.get_world_3d().direct_space_state.intersect_ray(ray).is_empty():
 			continue
 		var fade := 1.0 - smoothstep(MAX_RADIUS + 5.0, MAX_RADIUS + TEETH_GLOW_EXTRA_METERS, distance)
