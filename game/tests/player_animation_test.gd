@@ -22,6 +22,7 @@ func _run() -> void:
 		"player is not displayed in the imported T-pose")
 	await process_frame
 	_check(player._fight_animations_ready, "player combat clips install on the imported rig")
+	_check(player._ring_animations_ready, "all ring reference clips install exclusively on the player rig")
 	if not player._fight_animations_ready:
 		_finish(player, null)
 		return
@@ -32,6 +33,7 @@ func _run() -> void:
 	_check(skeleton.get_bone_count() == 65, "imported player rig contains 65 bones")
 	for clip_name in EXPECTED_SOURCE_CLIPS:
 		_check(animator.has_animation(clip_name), "imported player clip exists: %s" % clip_name)
+	_check_ring_bank(player)
 	for kind in ["punch", "kick"]:
 		for side in ["left", "right"]:
 			_check_contact_pose(player, kind, side)
@@ -45,6 +47,29 @@ func _run() -> void:
 		_check(InputMap.has_action(action), "existing input action remains present: %s" % action)
 
 	_finish(player, null)
+
+func _check_ring_bank(player: FoundationPlayer) -> void:
+	var animator := player._animation_player as AnimationPlayer
+	var all_names: Array = Player.PLAYER_RING_REFERENCE.CLIP_NAMES
+	_check(all_names.size() == 16, "reference animation bank retains 16 reusable player clips")
+	for raw_name in all_names:
+		var name := String(raw_name)
+		var path := Player.PLAYER_RING_REFERENCE.clip_path(name)
+		_check(animator.has_animation(path), "player ring library includes %s" % name)
+		if not animator.has_animation(path):
+			continue
+		var clip := animator.get_animation(path)
+		_check(clip.get_track_count() >= 3, "ring clip %s drives an actual skeleton" % name)
+		if name not in ["duck", "slip_left", "slip_right", "pivot_left", "pivot_right"]:
+			var kind := "kick" if "kick" in name else "punch"
+			_check(is_equal_approx(clip.get_marker_time(&"contact"), float(Player.ATTACKS[kind].windup)), "ring clip %s contact matches damage timing" % name)
+	# Enemy visuals must never have the player-only library.
+	var enemy := Enemy.new() as FoundationEnemy
+	root.add_child(enemy)
+	enemy.set_physics_process(false)
+	_check(enemy._animation_player == null or not enemy._animation_player.has_animation(Player.PLAYER_RING_REFERENCE.clip_path("left_hook")), "ordinary zombie never gets player reference clips")
+	enemy.queue_free()
+
 
 func _check_contact_pose(player: FoundationPlayer, kind: String, side: String) -> void:
 	var animator := player._animation_player as AnimationPlayer
@@ -105,7 +130,9 @@ func _check_hit_timing(player: FoundationPlayer, kind: String, side: String) -> 
 	var hit_time := float(Player.ATTACKS[kind].windup)
 	player._finish_attack()
 	_check(player.request_attack(kind, side), "%s %s attack starts through its existing input path" % [side, kind])
-	_check(player._animation_player.current_animation == Player.FIGHT_ANIMATION_BUILDER.clip_path(kind, side), "%s %s selects its matching visual clip" % [side, kind])
+	var active_clip := player._active_attack_clip
+	_check(String(active_clip).begins_with("player_ring_reference/") and player._animation_player.current_animation == active_clip, "%s %s selects a player-only ring clip" % [side, kind])
+	_check(is_equal_approx(player._animation_player.get_animation(active_clip).get_marker_time(&"contact"), hit_time), "%s %s variant retains gameplay contact marker" % [side, kind])
 	player._animation_player.advance(hit_time - 0.01)
 	player._update_attack(hit_time - 0.01)
 	_check(enemy.hp == starting_health, "%s %s cannot damage before visual contact" % [side, kind])
@@ -124,14 +151,17 @@ func _check_hit_timing(player: FoundationPlayer, kind: String, side: String) -> 
 func _check_repeated_strikes(player: FoundationPlayer, kind: String, side: String) -> void:
 	var animator := player._animation_player
 	var count_before := player.attack_count
+	var observed: Dictionary = {}
 	for strike in range(5):
 		_check(player.request_attack(kind, side), "%s %s repeat %d starts" % [side, kind, strike])
+		observed[String(animator.current_animation)] = true
 		_check(is_zero_approx(animator.current_animation_position), "%s %s repeat %d restarts its windup" % [side, kind, strike])
 		animator.advance(float(Player.ATTACKS[kind].windup))
 		player._update_attack(float(Player.ATTACKS[kind].windup))
 		animator.advance(float(Player.ATTACKS[kind].active))
 		player._update_attack(float(Player.ATTACKS[kind].active))
 	_check(player.attack_count == count_before + 5, "%s %s retains five strikes per second" % [side, kind])
+	_check(observed.size() == (3 if kind == "punch" else 2), "%s %s cycles distinct ring variants" % [side, kind])
 	player._finish_attack()
 	# Buffered repeats also need a new animation, even without a ready frame.
 	player.request_attack(kind, side)
@@ -146,7 +176,7 @@ func _check_repeated_strikes(player: FoundationPlayer, kind: String, side: Strin
 func _check_attack_priority(player: FoundationPlayer) -> void:
 	player._play_character_action("Landing", 0.55)
 	player.request_attack("punch", "right")
-	var clip := Player.FIGHT_ANIMATION_BUILDER.clip_path("punch", "right")
+	var clip := player._active_attack_clip
 	_check(is_zero_approx(player._character_action_time), "accepted melee clears the old action's locomotion lock")
 	player._animation_player.advance(0.04)
 	Input.action_press("move_left")
