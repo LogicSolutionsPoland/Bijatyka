@@ -714,9 +714,6 @@ func _set_character_shadow_state(is_enabled: bool) -> void:
 		for node in player.visual_root.find_children("*", "GeometryInstance3D", true, false):
 			var instance := node as GeometryInstance3D
 			instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if is_enabled else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	for node in get_tree().get_nodes_in_group("enemies"):
-		if node is FoundationEnemy and node.is_high_detail_visual_sample:
-			node.set_quality_shadow_enabled(is_enabled)
 
 func _update_floor_skip_enabled() -> void:
 	if _floor_material != null:

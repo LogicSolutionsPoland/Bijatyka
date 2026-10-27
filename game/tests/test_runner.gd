@@ -210,8 +210,8 @@ func _test_punch_animation_faces_forward() -> void:
 			_check(player.request_attack("punch", side), "%s punch starts its authored clip" % side)
 			player._animation_player.advance(0.04)
 			player._animation_player.advance(float(Player.ATTACKS["punch"].windup) - 0.04)
-			var shoulder_index := player._skeleton.find_bone("%sUpperArm" % side.capitalize())
-			var wrist_index := player._skeleton.find_bone("%sHand" % side.capitalize())
+			var shoulder_index := player._skeleton.find_bone(Player.CHARACTER_MOTION.BONE_MAP["%sUpperArm" % side.capitalize()])
+			var wrist_index := player._skeleton.find_bone(Player.CHARACTER_MOTION.BONE_MAP["%sHand" % side.capitalize()])
 			var shoulder := player._skeleton.to_global(player._skeleton.get_bone_global_pose(shoulder_index).origin)
 			var wrist := player._skeleton.to_global(player._skeleton.get_bone_global_pose(wrist_index).origin)
 			var forward := -player.global_transform.basis.z
@@ -355,6 +355,8 @@ func _test_ten_button_controls() -> void:
 	root.add_child(arena)
 	var player: FoundationPlayer = arena.player
 	var hud: FoundationHUD = arena.hud
+	_check(player.rage.rage_changed.is_connected(arena._refresh_hud), "game startup completes and connects the combat HUD after model initialization")
+	_check(Foundation.ZOMBIE_HORDE_SIZE == 5 and arena.spawn_director.population_limit == 5, "normal gameplay retains exactly five ordinary zombies")
 	var shoulder_arm := arena.camera.get_parent() as SpringArm3D
 	_check(shoulder_arm != null, "close third-person camera uses a collision-aware shoulder spring arm")
 	if shoulder_arm != null:

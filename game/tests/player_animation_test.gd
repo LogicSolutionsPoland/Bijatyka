@@ -3,7 +3,6 @@ extends SceneTree
 const Player := preload("res://scripts/player_controller.gd")
 const Enemy := preload("res://scripts/enemy.gd")
 const EXPECTED_SOURCE_CLIPS := ["Idle_Loop", "Walk_Loop", "Sprint_Loop", "Jump_Loop", "Spell_Simple_Shoot"]
-const FORWARD := Vector3(0.0, 0.0, -1.0)
 
 var failures: Array[String] = []
 var checks := 0
@@ -15,6 +14,7 @@ func _initialize() -> void:
 func _run() -> void:
 	var player := Player.new() as FoundationPlayer
 	root.add_child(player)
+	player.set_physics_process(false)
 	await process_frame
 	_check(player._fight_animations_ready, "player combat clips install on the imported rig")
 	if not player._fight_animations_ready:
@@ -22,6 +22,7 @@ func _run() -> void:
 		return
 
 	var animator := player._animation_player as AnimationPlayer
+	animator.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
 	var skeleton := player._skeleton as Skeleton3D
 	_check(skeleton.get_bone_count() == 65, "imported player rig contains 65 bones")
 	for clip_name in EXPECTED_SOURCE_CLIPS:
@@ -29,7 +30,10 @@ func _run() -> void:
 	for kind in ["punch", "kick"]:
 		for side in ["left", "right"]:
 			_check_contact_pose(player, kind, side)
-			_check_hit_timing(player, kind, side)
+			await _check_hit_timing(player, kind, side)
+			_check_repeated_strikes(player, kind, side)
+
+	_check_attack_priority(player)
 
 	_check_locomotion_does_not_restart(animator, player)
 	for action in ["jump", "dash", "attack_punch", "attack_kick", "pad_jump", "pad_dash", "pad_punch_left", "pad_blast", "pad_kick_left", "pad_kick_right"]:
@@ -50,24 +54,41 @@ func _check_contact_pose(player: FoundationPlayer, kind: String, side: String) -
 	_check(is_equal_approx(animation.length, contact_time + float(profile.active) + float(profile.recovery)), "%s %s clip duration matches gameplay phases" % [side, kind])
 	_check(is_equal_approx(animation.get_marker_time(&"contact"), contact_time), "%s %s visual contact marker matches gameplay hit time" % [side, kind])
 	animator.play(animation_path, 0.0)
+	animator.seek(0.0, true)
+	skeleton.force_update_all_bone_transforms()
+	var suffix := "l" if side == "left" else "r"
+	var support_suffix := "r" if side == "left" else "l"
+	var planted_foot := _bone_world(skeleton, "foot_" + support_suffix)
+	_check_guard(skeleton, "%s %s start" % [side, kind])
 	animator.seek(contact_time, true)
 	skeleton.force_update_all_bone_transforms()
-	var limb := "Left" if side == "left" else "Right"
+	var forward := -player.global_transform.basis.z
 	if kind == "punch":
-		var shoulder := skeleton.find_bone(limb + "UpperArm")
-		var hand := skeleton.find_bone(limb + "Hand")
-		var strike_vector := skeleton.get_bone_global_pose(hand).origin - skeleton.get_bone_global_pose(shoulder).origin
-		_check(strike_vector.dot(FORWARD) > 0.18, "%s punch hand extends toward the imported -Z facing direction" % side)
+		var strike_vector := _bone_world(skeleton, "hand_" + suffix) - _bone_world(skeleton, "upperarm_" + suffix)
+		_check(strike_vector.dot(forward) > 0.40, "%s punch fist extends in front of the player at contact" % side)
 	else:
-		var active_foot := skeleton.find_bone(limb + "Foot")
-		var support_foot := skeleton.find_bone(("Right" if side == "left" else "Left") + "Foot")
-		var foot_delta := skeleton.get_bone_global_pose(active_foot).origin - skeleton.get_bone_global_pose(support_foot).origin
-		_check(foot_delta.dot(FORWARD) > 0.25, "%s kick foot extends forward of the planted foot" % side)
+		var active_foot := _bone_world(skeleton, "foot_" + suffix)
+		var support_foot := _bone_world(skeleton, "foot_" + support_suffix)
+		_check((active_foot - support_foot).dot(forward) > 0.50, "%s kick extends forward at contact" % side)
+		_check(active_foot.y - player.global_position.y > 0.60, "%s kick reaches the opponent's body" % side)
+		_check(support_foot.distance_to(planted_foot) < 0.01, "%s kick keeps the supporting foot planted" % side)
+	animator.seek(animation.length, true)
+	skeleton.force_update_all_bone_transforms()
+	_check_guard(skeleton, "%s %s recovery" % [side, kind])
+
+func _bone_world(skeleton: Skeleton3D, bone_name: String) -> Vector3:
+	return skeleton.to_global(skeleton.get_bone_global_pose(skeleton.find_bone(bone_name)).origin)
+
+func _check_guard(skeleton: Skeleton3D, label: String) -> void:
+	var left := _bone_world(skeleton, "hand_l")
+	var right := _bone_world(skeleton, "hand_r")
+	_check(left.distance_to(right) < 0.65, "%s holds a guard instead of the old T-pose" % label)
 
 func _check_hit_timing(player: FoundationPlayer, kind: String, side: String) -> void:
 	var enemy := Enemy.new() as FoundationEnemy
 	enemy.starting_health = 100
 	root.add_child(enemy)
+	enemy.set_physics_process(false)
 	player.global_position = Vector3.ZERO
 	player.rotation.y = 0.0
 	enemy.global_position = Vector3(0.0, 0.0, -1.0)
@@ -77,15 +98,62 @@ func _check_hit_timing(player: FoundationPlayer, kind: String, side: String) -> 
 		player.attack_connected.connect(_on_attack_connected)
 	var starting_health := enemy.hp
 	var hit_time := float(Player.ATTACKS[kind].windup)
+	player._finish_attack()
 	_check(player.request_attack(kind, side), "%s %s attack starts through its existing input path" % [side, kind])
 	_check(player._animation_player.current_animation == Player.FIGHT_ANIMATION_BUILDER.clip_path(kind, side), "%s %s selects its matching visual clip" % [side, kind])
-	player._update_attack(hit_time)
+	player._animation_player.advance(hit_time - 0.01)
+	player._update_attack(hit_time - 0.01)
+	_check(enemy.hp == starting_health, "%s %s cannot damage before visual contact" % [side, kind])
+	player._animation_player.advance(0.01)
+	player._update_attack(0.01)
 	_check(player.attack_phase == "active", "%s %s enters active state on the existing windup boundary" % [side, kind])
 	_check(enemy.hp == starting_health - int(Player.ATTACKS[kind].damage), "%s %s gameplay damage resolves on that boundary" % [side, kind])
 	_check(connected_hits.has(kind), "%s %s hit event is emitted on the visual contact marker" % [side, kind])
+	_check(is_equal_approx(player._animation_player.current_animation_position, hit_time), "%s %s playback reaches contact with damage" % [side, kind])
+	player._update_attack(float(Player.ATTACKS[kind].active))
+	_check(connected_hits.size() == 1, "%s %s applies damage only once" % [side, kind])
 	player._finish_attack()
 	enemy.queue_free()
 	await process_frame
+
+func _check_repeated_strikes(player: FoundationPlayer, kind: String, side: String) -> void:
+	var animator := player._animation_player
+	var count_before := player.attack_count
+	for strike in range(5):
+		_check(player.request_attack(kind, side), "%s %s repeat %d starts" % [side, kind, strike])
+		_check(is_zero_approx(animator.current_animation_position), "%s %s repeat %d restarts its windup" % [side, kind, strike])
+		animator.advance(float(Player.ATTACKS[kind].windup))
+		player._update_attack(float(Player.ATTACKS[kind].windup))
+		animator.advance(float(Player.ATTACKS[kind].active))
+		player._update_attack(float(Player.ATTACKS[kind].active))
+	_check(player.attack_count == count_before + 5, "%s %s retains five strikes per second" % [side, kind])
+	player._finish_attack()
+	# Buffered repeats also need a new animation, even without a ready frame.
+	player.request_attack(kind, side)
+	player.request_attack(kind, side)
+	animator.advance(float(Player.ATTACKS[kind].windup))
+	player._update_attack(float(Player.ATTACKS[kind].windup))
+	animator.advance(float(Player.ATTACKS[kind].active))
+	player._update_attack(float(Player.ATTACKS[kind].active))
+	_check(player.attack_phase == "windup" and is_zero_approx(animator.current_animation_position), "%s %s buffered repeat restarts visibly" % [side, kind])
+	player._finish_attack()
+
+func _check_attack_priority(player: FoundationPlayer) -> void:
+	player._play_character_action("Landing", 0.55)
+	player.request_attack("punch", "right")
+	var clip := Player.FIGHT_ANIMATION_BUILDER.clip_path("punch", "right")
+	_check(is_zero_approx(player._character_action_time), "accepted melee clears the old action's locomotion lock")
+	player._animation_player.advance(0.04)
+	Input.action_press("move_left")
+	player._update_movement(1.0 / 60.0)
+	Input.action_release("move_left")
+	_check(player._animation_player.current_animation == clip, "turning while attacking cannot replace the punch")
+	player._play_character_action("Landing", 0.55)
+	_check(player._animation_player.current_animation == clip, "landing while attacking cannot replace the punch")
+	player.interrupt_by_zombie()
+	_check(player._animation_player.current_animation == Player.CHARACTER_MOTION.clip_path("Hit"), "real enemy interruption still plays a hit reaction")
+	player._finish_attack()
+	player._character_action_time = 0.0
 
 func _check_locomotion_does_not_restart(animator: AnimationPlayer, player: FoundationPlayer) -> void:
 	player._set_locomotion_animation("Idle")

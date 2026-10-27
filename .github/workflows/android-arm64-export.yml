@@ -10,6 +10,7 @@ on:
       - codex/mobile-zombies-5-fight-animations-20261026
       - codex/character-quality-slice-20261026
       - codex/universal-base-characters-integration-20261027
+      - codex/player-attack-animation-fix-20261027
 
 permissions:
   contents: read
@@ -44,6 +45,31 @@ jobs:
           godot --headless --editor --path game --import --quit 2>&1 | tee "$RUNNER_TEMP/android-import.log"
           if grep -E "SCRIPT ERROR:|ERROR: Failed to load" "$RUNNER_TEMP/android-import.log"; then exit 1; fi
 
+      - name: Validate player attack animation and controls
+        run: |
+          set -euo pipefail
+          for suite in player_animation_test test_runner; do
+            godot --headless --path game --script "res://tests/$suite.gd" 2>&1 | tee "$RUNNER_TEMP/$suite.log"
+            grep -q 'PASS:' "$RUNNER_TEMP/$suite.log"
+            if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/$suite.log"; then exit 1; fi
+          done
+          godot --headless --fixed-fps 60 --path game --quit-after 240 2>&1 | tee "$RUNNER_TEMP/attack-scene-smoke.log"
+          if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/attack-scene-smoke.log"; then exit 1; fi
+
+      - name: Render player attack poses
+        run: |
+          set -euo pipefail
+          xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/player_attack_capture.gd 2>&1 | tee "$RUNNER_TEMP/player-attack-capture.log"
+          grep -q 'CAPTURED_PLAYER_ATTACKS=16' "$RUNNER_TEMP/player-attack-capture.log"
+          if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/player-attack-capture.log"; then exit 1; fi
+
+      - name: Upload player attack review views
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bijatyka-player-attack-views
+          path: build/player_attack_views/*.png
+          if-no-files-found: error
+
       - name: Export Android ARM64 debug APK
         run: |
           set -o pipefail
@@ -74,6 +100,7 @@ jobs:
             assets/scripts/combat_fx_pool.gdc \
             assets/scripts/character_motion.gdc \
             assets/scripts/universal_base_motion.gdc \
+            assets/scripts/universal_base_combat.gdc \
             assets/scenes/foundation.tscn.remap \
             assets/scenes/player.tscn.remap \
             assets/assets/characters/thornbound/Retribution_Player_Thornbound_Warrior_MOBILE.glb.import \

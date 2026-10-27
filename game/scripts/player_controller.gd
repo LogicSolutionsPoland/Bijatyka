@@ -10,7 +10,7 @@ signal interrupted(duration: float)
 signal jump_impact(target: Node)
 
 const RAGE_SCRIPT := preload("res://scripts/rage_progression.gd")
-const FIGHT_ANIMATION_BUILDER := preload("res://scripts/fight_animation.gd")
+const FIGHT_ANIMATION_BUILDER := preload("res://scripts/universal_base_combat.gd")
 const CHARACTER_MOTION := preload("res://scripts/universal_base_motion.gd")
 const PLAYER_MODEL_PATH := "res://assets/characters/universal_base/Universal_Base_Characters_Male.glb"
 const GRAVITY := 24.0
@@ -108,14 +108,8 @@ func _load_player_visual() -> void:
 				_skeleton = model.find_child("Skeleton3D", true, false) as Skeleton3D
 				if _skeleton != null:
 					_character_motion_ready = CHARACTER_MOTION.install(_animation_player, _skeleton)
-					_fight_animations_ready = FIGHT_ANIMATION_BUILDER.install_retargeted(
-						_animation_player,
-						_skeleton,
-						ATTACKS,
-						CHARACTER_MOTION.BONE_MAP,
-						FIGHT_ANIMATION_BUILDER.LIBRARY_NAME,
-						CHARACTER_MOTION.FORWARD_AXIS_SIGN
-					)
+					_fight_animations_ready = FIGHT_ANIMATION_BUILDER.install(_animation_player, _skeleton, ATTACKS)
+				_animation_player.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_PHYSICS
 				_set_locomotion_animation("Idle")
 				return
 	_add_debug_visual()
@@ -220,7 +214,7 @@ func _update_movement(delta: float) -> void:
 		direction = direction.normalized()
 		var target_yaw := atan2(-direction.x, -direction.z)
 		var turn_delta := wrapf(target_yaw - rotation.y, -PI, PI)
-		if _character_action_time <= 0.0 and absf(turn_delta) > 0.72:
+		if attack_phase == "ready" and _character_action_time <= 0.0 and absf(turn_delta) > 0.72:
 			var turn_action := "Turn_Left" if turn_delta > 0.0 else "Turn_Right"
 			_play_character_action(turn_action, float(CHARACTER_MOTION.ACTIONS.get(turn_action, 0.28)))
 		rotation.y = lerp_angle(rotation.y, target_yaw, minf(1.0, delta * 16.0))
@@ -252,12 +246,16 @@ func _start_attack(kind: String, side: String) -> void:
 	attack_phase = "windup"
 	attack_phase_time = float(ATTACKS[kind].windup)
 	_attack_recovery_locked = false
+	_character_action_time = 0.0
 	attack_count += 1
 	attack_started.emit(kind)
 	_spawn_attack_sweep(kind, side)
 	if _animation_player != null:
 		if _fight_animations_ready:
 			_animation_player.play(FIGHT_ANIMATION_BUILDER.clip_path(kind, side), ATTACK_ANIMATION_BLEND_SECONDS)
+			# play() on the same currently playing clip does not restart it.
+			# Every accepted strike, including held input, needs a new windup.
+			_animation_player.seek(0.0, true)
 		else:
 			_animation_player.stop()
 
@@ -312,6 +310,8 @@ func _update_attack(delta: float) -> void:
 
 func _resolve_attack() -> void:
 	var profile: Dictionary = ATTACKS[attack_kind]
+	if _fight_animations_ready and _animation_player.current_animation == FIGHT_ANIMATION_BUILDER.clip_path(attack_kind, attack_side):
+		_animation_player.seek(float(profile.windup), true)
 	var target := _find_target(float(profile.range), float(profile.cone))
 	if target == null:
 		return
@@ -668,6 +668,10 @@ func _update_locomotion_animation() -> void:
 		_set_locomotion_animation("Idle")
 
 func _play_character_action(action_name: String, duration: float) -> void:
+	# Movement, landing, and casting must not silently replace a melee clip
+	# while its damage timer continues. Explicit hit/defeat reactions may win.
+	if attack_phase != "ready" and action_name not in ["Hit", "Defeat"]:
+		return
 	if not _character_motion_ready or _animation_player == null:
 		return
 	var clip := CHARACTER_MOTION.clip_path(action_name)
