@@ -84,7 +84,10 @@ static func install(animator: AnimationPlayer, skeleton: Skeleton3D, profiles: D
 	_overlay(flying, skeleton, _attack_offsets("airborne_kick"), float(profiles["kick"].windup))
 	if library.add_animation(&"airborne_kick", flying) != OK:
 		return false
-	if library.get_animation_list().size() != CLIP_NAMES.size():
+	var reach := _pose_action(guard, skeleton, _movement_offsets("grapple_reach"), 0.16)
+	if reach == null or library.add_animation(&"grapple_reach", reach) != OK:
+		return false
+	if library.get_animation_list().size() != CLIP_NAMES.size() + 1:
 		return false
 	if animator.has_animation_library(LIBRARY_NAME):
 		animator.remove_animation_library(LIBRARY_NAME)
@@ -94,6 +97,21 @@ static func _attack_offsets(name: String) -> Dictionary:
 	var left := name.begins_with("left_")
 	var side := -1.0 if left else 1.0
 	var limb := "l" if left else "r"
+	if name in ["left_jab", "right_cross"]:
+		# Make the imported source strike distinguishable from the legacy clip.
+		return {
+			"pelvis": Vector3(0.0, 0.10 * side, 0.0),
+			"spine_03": Vector3(0.06, 0.16 * side, 0.0),
+			"upperarm_" + limb: Vector3(-0.13, -0.10 * side, 0.03 * side),
+			"lowerarm_" + limb: Vector3(0.12, 0.0, 0.0),
+		}
+	if name in ["left_front_kick", "right_front_kick"]:
+		return {
+			"pelvis": Vector3(-0.10, 0.06 * side, 0.0),
+			"spine_03": Vector3(-0.11, 0.0, 0.0),
+			"thigh_" + limb: Vector3(-0.18, 0.0, 0.0),
+			"calf_" + limb: Vector3(-0.12, 0.0, 0.0),
+		}
 	if name.ends_with("_hook"):
 		return {
 			"pelvis": Vector3(0.0, 0.09 * side, 0.0),
@@ -113,9 +131,9 @@ static func _attack_offsets(name: String) -> Dictionary:
 	if name.ends_with("_high_kick"):
 		return {
 			"pelvis": Vector3(-0.07, 0.04 * side, 0.03 * side),
-			"spine_03": Vector3(-0.10, 0.0, -0.04 * side),
-			"thigh_" + limb: Vector3(-0.22, 0.0, 0.0),
-			"calf_" + limb: Vector3(-0.08, 0.0, 0.0),
+			"spine_03": Vector3(-0.18, 0.0, -0.06 * side),
+			"thigh_" + limb: Vector3(-0.44, 0.0, 0.0),
+			"calf_" + limb: Vector3(-0.16, 0.0, 0.0),
 		}
 	if name == "airborne_kick":
 		return {
@@ -128,6 +146,17 @@ static func _attack_offsets(name: String) -> Dictionary:
 	return {}
 
 static func _movement_offsets(name: String) -> Dictionary:
+	if name == "grapple_reach":
+		# Two extended arms and a forward chest brace precede a controlled strike.
+		return {
+			"pelvis": Vector3(0.11, 0.0, 0.0),
+			"spine_02": Vector3(0.16, 0.0, 0.0),
+			"spine_03": Vector3(0.16, 0.0, 0.0),
+			"upperarm_l": Vector3(0.32, 0.0, -0.18),
+			"upperarm_r": Vector3(0.32, 0.0, 0.18),
+			"lowerarm_l": Vector3(-0.18, 0.0, 0.0),
+			"lowerarm_r": Vector3(-0.18, 0.0, 0.0),
+		}
 	if name == "duck":
 		return {
 			"pelvis": Vector3(0.14, 0.0, 0.0),
