@@ -9,6 +9,7 @@ on:
       - codex/mobile-performance-apk-export-20261026
       - codex/mobile-zombies-5-fight-animations-20261026
       - codex/character-quality-slice-20261026
+      - codex/universal-base-characters-integration-20261027
 
 permissions:
   contents: read
@@ -71,18 +72,19 @@ jobs:
             assets/scripts/mobile_hud.gdc \
             assets/scripts/performance_diagnostics.gdc \
             assets/scripts/combat_fx_pool.gdc \
-            assets/scripts/high_detail_zombie_rig.gdc \
             assets/scripts/character_motion.gdc \
+            assets/scripts/universal_base_motion.gdc \
             assets/scenes/foundation.tscn.remap \
             assets/scenes/player.tscn.remap \
             assets/assets/characters/thornbound/Retribution_Player_Thornbound_Warrior_MOBILE.glb.import \
+            assets/assets/characters/universal_base/Universal_Base_Characters_Male.glb.import \
+            assets/assets/characters/universal_base/Universal_Base_Characters_Female.glb.import \
             assets/shaders/burning_horizon.gdshader \
             assets/shaders/radial_ground.gdshader \
             assets/shaders/flashlight_visibility.gdshader \
             assets/shaders/horde_crowd_animation.gdshader \
             assets/assets/audio/menu_music.mp3.import \
-            assets/assets/zombies/brutal_v2/Retribution_Zombie_01_Brutal_V2_RIGGED_LOD1.glb.import \
-            assets/assets/zombies/high_detail/Retribution_Zombie_Reconstructed.glb.import; do
+; do
             grep -Fxq "$entry" "$RUNNER_TEMP/apk-files.txt"
             test "$(unzip -p "$apk" "$entry" | wc -c)" -gt 0
           done
