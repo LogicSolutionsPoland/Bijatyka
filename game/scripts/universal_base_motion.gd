@@ -95,7 +95,7 @@ static func install(animation_player: AnimationPlayer, skeleton: Skeleton3D) -> 
 
 static func _build_locomotion(skeleton: Skeleton3D, skeleton_path: NodePath, animation_name: String) -> Animation:
 	var duration := 1.0
-	var key_times: Array[float] = [0.0, 0.25, 0.5, 0.75, 1.0]
+	var key_times: Array[float] = []
 	var animation := Animation.new()
 	match animation_name:
 		"Walk":
@@ -107,6 +107,7 @@ static func _build_locomotion(skeleton: Skeleton3D, skeleton_path: NodePath, ani
 		_:
 			duration = 1.2
 	animation.length = duration
+	key_times = [0.0, duration * 0.25, duration * 0.5, duration * 0.75, duration]
 	animation.step = 1.0 / 60.0
 	animation.loop_mode = Animation.LOOP_LINEAR if animation_name != "Jump" else Animation.LOOP_NONE
 	var zero := Vector3.ZERO
@@ -129,7 +130,7 @@ static func _build_locomotion(skeleton: Skeleton3D, skeleton_path: NodePath, ani
 			_add_rotation_track(animation, skeleton, skeleton_path, "RightUpperArm", key_times, [Vector3(arm_swing, 0.0, 0.0), zero, Vector3(-arm_swing, 0.0, 0.0), zero, Vector3(arm_swing, 0.0, 0.0)])
 			_add_rotation_track(animation, skeleton, skeleton_path, "Spine", key_times, [Vector3(0.02, 0.0, 0.0), zero, Vector3(-0.02, 0.0, 0.0), zero, Vector3(0.02, 0.0, 0.0)])
 		"Jump":
-			var jump_times: Array[float] = [0.0, 0.22, 0.72, 1.0]
+			var jump_times: Array[float] = [0.0, duration * 0.22, duration * 0.72, duration]
 			_add_rotation_track(animation, skeleton, skeleton_path, "LeftThigh", jump_times, [zero, Vector3(-0.28, 0.0, 0.0), Vector3(-0.12, 0.0, 0.0), zero])
 			_add_rotation_track(animation, skeleton, skeleton_path, "RightThigh", jump_times, [zero, Vector3(-0.28, 0.0, 0.0), Vector3(-0.12, 0.0, 0.0), zero])
 			_add_rotation_track(animation, skeleton, skeleton_path, "LeftShin", jump_times, [zero, Vector3(0.38, 0.0, 0.0), Vector3(0.18, 0.0, 0.0), zero])
