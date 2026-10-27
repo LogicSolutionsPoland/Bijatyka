@@ -13,11 +13,15 @@ enum Band {
 }
 
 const VISIBILITY_SHADER := preload("res://shaders/flashlight_visibility.gdshader")
+const DISTANT_TEETH_OVERLAY := preload("res://scripts/distant_zombie_teeth.gd")
 const MAX_RADIUS := 30.0
 const BRIGHT_RADIUS := 22.0
 const CLOSE_COMBAT_RADIUS := FoundationEnemy.DETAILED_RADIUS
 const SECTOR_HYSTERESIS_METERS := 0.65
 const CLASSIFICATION_INTERVAL := 0.12
+const TEETH_REFRESH_INTERVAL := 0.033
+const TEETH_GLOW_EXTRA_METERS := 10.0
+const TEETH_FRONT_FACING_DOT := 0.24
 # Camera-space footprint of the supplied 1536x707 gameplay reference.
 const OVAL_CENTER_UV := Vector2(0.44, 0.60)
 const OVAL_RADIUS_UV := Vector2(0.29, 0.22)
@@ -33,6 +37,9 @@ var _sector_visible: Dictionary = {}
 var _material: ShaderMaterial
 var _composite: MeshInstance3D
 var _classification_timer := 0.0
+var _teeth_timer := 0.0
+var _teeth_canvas: CanvasLayer
+var _teeth_overlay: Control
 var _counts := {}
 
 func configure(player_node: Node3D, camera_node: Camera3D, is_enabled: bool) -> void:
@@ -108,6 +115,11 @@ func _process(delta: float) -> void:
 	if _classification_timer >= CLASSIFICATION_INTERVAL:
 		_classification_timer = 0.0
 		_classify_enemies()
+	if enabled and is_instance_valid(_teeth_overlay):
+		_teeth_timer += delta
+		if _teeth_timer >= TEETH_REFRESH_INTERVAL:
+			_teeth_timer = 0.0
+			_update_distant_teeth()
 
 func _build_composite() -> void:
 	if not enabled or not is_instance_valid(camera):
@@ -127,6 +139,15 @@ func _build_composite() -> void:
 	_composite.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_composite.custom_aabb = AABB(Vector3(-4.0, -4.0, -4.0), Vector3(8.0, 8.0, 8.0))
 	camera.add_child(_composite)
+	# Canvas layer 0 draws after the 3D blackout pass but beneath the HUD.
+	# Far teeth can catch a tiny glint without revealing the rest of a zombie.
+	_teeth_canvas = CanvasLayer.new()
+	_teeth_canvas.name = "DistantTeethGlintsLayer"
+	_teeth_canvas.layer = 0
+	add_child(_teeth_canvas)
+	_teeth_overlay = DISTANT_TEETH_OVERLAY.new()
+	_teeth_overlay.name = "DistantTeethGlints"
+	_teeth_canvas.add_child(_teeth_overlay)
 
 func _upload_shader_parameters() -> void:
 	if _material == null or not is_instance_valid(player):
@@ -185,3 +206,59 @@ func _inside_camera_frustum(enemy: Node3D) -> bool:
 		return false
 	var screen_position := camera.unproject_position(point)
 	return camera.get_viewport().get_visible_rect().grow(24.0).has_point(screen_position)
+
+
+func _update_distant_teeth() -> void:
+	# Screen-space glints are much cheaper than extending animated characters
+	# or adding five realtime lights. Only the five registered ordinary zombies
+	# are considered; neither the boss nor distant silhouettes are unmasked.
+	var points: Array[Dictionary] = []
+	if not is_instance_valid(camera) or not is_instance_valid(player) or not camera.is_current():
+		_teeth_overlay.call("set_glints", points)
+		return
+	var viewport_size := camera.get_viewport().get_visible_rect().size
+	if viewport_size.x < 1.0 or viewport_size.y < 1.0:
+		_teeth_overlay.call("set_glints", points)
+		return
+	for enemy_variant in _tracked.values():
+		var enemy := enemy_variant as FoundationEnemy
+		if not is_instance_valid(enemy) or enemy.is_queued_for_deletion() or enemy.hp <= 0 or enemy.is_boss:
+			continue
+		var offset := enemy.global_position - player.global_position
+		offset.y = 0.0
+		var distance := offset.length()
+		# Strictly ten additional metres BEYOND the existing 30 m beam.
+		if distance <= MAX_RADIUS or distance >= MAX_RADIUS + TEETH_GLOW_EXTRA_METERS:
+			continue
+		var aim_dot := offset.normalized().dot(aim_direction)
+		if aim_dot <= 0.0:
+			continue
+		# The glint appears on the mouth, never on the back of the head.
+		var enemy_forward := Vector3(-sin(enemy.rotation.y), 0.0, -cos(enemy.rotation.y))
+		var to_player := -offset.normalized()
+		var front_dot := enemy_forward.dot(to_player)
+		if front_dot <= TEETH_FRONT_FACING_DOT:
+			continue
+		var mouth_world := enemy.global_position + Vector3.UP * 1.60 + enemy_forward * 0.22
+		if camera.is_position_behind(mouth_world):
+			continue
+		var screen_position := camera.unproject_position(mouth_world)
+		if not Rect2(Vector2.ZERO, viewport_size).grow(6.0).has_point(screen_position):
+			continue
+		# Do not draw glints through buildings, terrain or the base boundary.
+		# Enemy bodies use layer 2; only static occluders (1 and 4) are queried.
+		var ray := PhysicsRayQueryParameters3D.create(camera.global_position, mouth_world)
+		ray.collision_mask = 1 | 4
+		if not camera.get_world_3d().direct_space_state.intersect_ray(ray).is_empty():
+			continue
+		var fade := 1.0 - smoothstep(MAX_RADIUS + 5.0, MAX_RADIUS + TEETH_GLOW_EXTRA_METERS, distance)
+		var aim_strength := smoothstep(0.0, 0.45, aim_dot)
+		var front_strength := smoothstep(TEETH_FRONT_FACING_DOT, 0.78, front_dot)
+		var strength := fade * aim_strength * front_strength
+		if strength < 0.02:
+			continue
+		var size_scale := clampf((viewport_size.y / 720.0) * 35.0 / distance, 0.7, 1.6)
+		points.append({"center": screen_position, "strength": strength, "scale": size_scale})
+		if points.size() >= 5:
+			break
+	_teeth_overlay.call("set_glints", points)
