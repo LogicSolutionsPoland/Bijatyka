@@ -70,6 +70,11 @@ static func install(animation_player: AnimationPlayer, skeleton: Skeleton3D) -> 
 	if animation_player.add_animation_library(LIBRARY_NAME, action_library) != OK:
 		return false
 
+	var default_library := animation_player.get_animation_library(&"")
+	if default_library == null:
+		default_library = AnimationLibrary.new()
+		if animation_player.add_animation_library(&"", default_library) != OK:
+			return false
 	for animation_name in ["Idle", "Walk", "Sprint", "Jump", "Hit_React", "Death_Forward", "Death_Backward"]:
 		var animation: Animation
 		if animation_name in ["Idle", "Walk", "Sprint", "Jump"]:
@@ -81,9 +86,10 @@ static func install(animation_player: AnimationPlayer, skeleton: Skeleton3D) -> 
 				animation_name,
 				float(ACTIONS.get(animation_name, 0.5))
 			)
-		if animation_player.has_animation(StringName(animation_name)):
-			animation_player.remove_animation(StringName(animation_name))
-		if animation_player.add_animation(StringName(animation_name), animation) != OK:
+		var animation_key := StringName(animation_name)
+		if default_library.has_animation(animation_key):
+			default_library.remove_animation(animation_key)
+		if default_library.add_animation(animation_key, animation) != OK:
 			return false
 	return true
 
