@@ -118,6 +118,7 @@ func _check_guard(skeleton: Skeleton3D, label: String) -> void:
 	_check(left.distance_to(right) < 0.65, "%s holds a guard instead of the old T-pose" % label)
 
 func _check_hit_timing(player: FoundationPlayer, kind: String, side: String) -> void:
+	var animator := player._animation_player as AnimationPlayer
 	var enemy := Enemy.new() as FoundationEnemy
 	enemy.starting_health = 100
 	root.add_child(enemy)
