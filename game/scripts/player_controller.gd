@@ -12,6 +12,7 @@ signal jump_impact(target: Node)
 const RAGE_SCRIPT := preload("res://scripts/rage_progression.gd")
 const FIGHT_ANIMATION_BUILDER := preload("res://scripts/universal_base_combat.gd")
 const CHARACTER_MOTION := preload("res://scripts/universal_base_motion.gd")
+const PLAYER_RING_REFERENCE := preload("res://scripts/player_ring_reference.gd")
 const PLAYER_MODEL_PATH := "res://assets/characters/universal_base/Universal_Base_Characters_Male.glb"
 const GRAVITY := 24.0
 const MAX_HEALTH := 100
@@ -55,6 +56,9 @@ var _was_airborne := false
 var _animation_player: AnimationPlayer
 var _skeleton: Skeleton3D
 var _fight_animations_ready := false
+var _ring_animations_ready := false
+var _active_attack_clip: StringName = &""
+var _ring_attack_counts: Dictionary = {}
 var _character_motion_ready := false
 var _character_action_time := 0.0
 var _camera_yaw := 0.0
@@ -109,6 +113,8 @@ func _load_player_visual() -> void:
 				if _skeleton != null:
 					_character_motion_ready = CHARACTER_MOTION.install(_animation_player, _skeleton)
 					_fight_animations_ready = FIGHT_ANIMATION_BUILDER.install(_animation_player, _skeleton, ATTACKS)
+					if _fight_animations_ready:
+						_ring_animations_ready = PLAYER_RING_REFERENCE.install(_animation_player, _skeleton, ATTACKS)
 				_animation_player.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_PHYSICS
 				_set_locomotion_animation("Idle")
 				# Avoid displaying the imported T-pose on the first gameplay frame.
@@ -255,7 +261,17 @@ func _start_attack(kind: String, side: String) -> void:
 	_spawn_attack_sweep(kind, side)
 	if _animation_player != null:
 		if _fight_animations_ready:
-			_animation_player.play(FIGHT_ANIMATION_BUILDER.clip_path(kind, side), ATTACK_ANIMATION_BLEND_SECONDS)
+			_active_attack_clip = FIGHT_ANIMATION_BUILDER.clip_path(kind, side)
+			if _ring_animations_ready:
+				var strike_key := "%s_%s" % [kind, side]
+				var repetition := int(_ring_attack_counts.get(strike_key, 0))
+				var airborne := kind == "kick" and velocity.y > 0.1 and not is_on_floor()
+				var variant := PLAYER_RING_REFERENCE.attack_name(kind, side, repetition, airborne)
+				var ring_path := PLAYER_RING_REFERENCE.clip_path(variant)
+				if _animation_player.has_animation(ring_path):
+					_active_attack_clip = ring_path
+					_ring_attack_counts[strike_key] = repetition + 1
+			_animation_player.play(_active_attack_clip, ATTACK_ANIMATION_BLEND_SECONDS)
 			# play() on the same currently playing clip does not restart it.
 			# Every accepted strike, including held input, needs a new windup.
 			_animation_player.seek(0.0, true)
@@ -279,6 +295,7 @@ func _finish_attack() -> void:
 	attack_kind = ""
 	attack_phase_time = 0.0
 	_attack_recovery_locked = false
+	_active_attack_clip = &""
 	if not finished.is_empty():
 		attack_finished.emit(finished)
 
@@ -313,7 +330,7 @@ func _update_attack(delta: float) -> void:
 
 func _resolve_attack() -> void:
 	var profile: Dictionary = ATTACKS[attack_kind]
-	if _fight_animations_ready and _animation_player.current_animation == FIGHT_ANIMATION_BUILDER.clip_path(attack_kind, attack_side):
+	if _fight_animations_ready and _animation_player.current_animation == _active_attack_clip:
 		_animation_player.seek(float(profile.windup), true)
 	var target := _find_target(float(profile.range), float(profile.cone))
 	if target == null:
@@ -678,6 +695,11 @@ func _play_character_action(action_name: String, duration: float) -> void:
 	if not _character_motion_ready or _animation_player == null:
 		return
 	var clip := CHARACTER_MOTION.clip_path(action_name)
+	if _ring_animations_ready and action_name in ["Turn_Left", "Turn_Right"]:
+		var pivot := "pivot_left" if action_name == "Turn_Left" else "pivot_right"
+		var ring_clip := PLAYER_RING_REFERENCE.clip_path(pivot)
+		if _animation_player.has_animation(ring_clip):
+			clip = ring_clip
 	if not _animation_player.has_animation(clip):
 		return
 	_character_action_time = maxf(0.0, duration)
