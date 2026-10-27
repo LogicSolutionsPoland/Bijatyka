@@ -68,6 +68,7 @@ var _ring_attack_counts: Dictionary = {}
 var _engagement_target: FoundationEnemy
 var _previous_engagement_target: FoundationEnemy
 var _grabbed_target: FoundationEnemy
+var flashlight_visibility_manager: Node
 var _character_motion_ready := false
 var _character_action_time := 0.0
 var _camera_yaw := 0.0
@@ -288,6 +289,12 @@ func _select_chain_target() -> FoundationEnemy:
 		var distance := offset.length()
 		if distance > CHAIN_TARGET_RADIUS:
 			continue
+		# The visible player cannot automatically lock onto zombies hidden in darkness.
+		if is_instance_valid(flashlight_visibility_manager) and bool(flashlight_visibility_manager.get("enabled")):
+			if not flashlight_visibility_manager.is_visible_to_flashlight(enemy):
+				continue
+			if not flashlight_visibility_manager.is_point_in_sector(enemy.global_position):
+				continue
 		# Prevent auto-grabs through arena walls or player-base obstacles.
 		var sight := PhysicsRayQueryParameters3D.create(global_position + Vector3.UP, enemy.global_position + Vector3.UP, 1)
 		sight.exclude = [get_rid(), enemy.get_rid()]
@@ -341,8 +348,14 @@ func _begin_grapple() -> void:
 		return
 	attack_phase = "grapple"
 	attack_phase_time = CHAIN_GRAB_SECONDS
+	var offset := _engagement_target.global_position - global_position
+	offset.y = 0.0
+	if offset.length_squared() > 0.01:
+		rotation.y = atan2(-offset.x, -offset.z)
+	if not _engagement_target.begin_player_grapple(self, CHAIN_GRAB_SECONDS + TARGET_MELEE_CYCLE_SECONDS + 0.12):
+		_begin_strike()
+		return
 	_grabbed_target = _engagement_target
-	_grabbed_target.begin_player_grapple(self, CHAIN_GRAB_SECONDS + TARGET_MELEE_CYCLE_SECONDS + 0.12)
 	_play_engagement_pose("grapple_reach")
 
 func _begin_strike() -> void:
@@ -416,6 +429,8 @@ func _update_attack(delta: float) -> void:
 		attack_phase_time -= elapsed_time
 		if attack_phase_time <= 0.0:
 			# A blocked hop must not hit or warp through an obstacle.
+			_queued_attack_kind = ""
+			_queued_attack_side = ""
 			_finish_attack()
 		return
 	if elapsed_time + MELEE_TIMER_EPSILON < attack_phase_time:
@@ -454,7 +469,11 @@ func _resolve_attack() -> void:
 		var flat := _engagement_target.global_position - global_position
 		flat.y = 0.0
 		if flat.length() <= float(profile.range) + 0.28:
-			target = _engagement_target
+			# A moving enemy must still be physically reachable at the impact frame.
+			var sight := PhysicsRayQueryParameters3D.create(global_position + Vector3.UP, _engagement_target.global_position + Vector3.UP, 1)
+			sight.exclude = [get_rid(), _engagement_target.get_rid()]
+			if get_world_3d().direct_space_state.intersect_ray(sight).is_empty():
+				target = _engagement_target
 	if target == null:
 		target = _find_target(float(profile.range), float(profile.cone))
 	if target == null:
