@@ -18,6 +18,10 @@ const BRIGHT_RADIUS := 22.0
 const CLOSE_COMBAT_RADIUS := FoundationEnemy.DETAILED_RADIUS
 const SECTOR_HYSTERESIS_METERS := 0.65
 const CLASSIFICATION_INTERVAL := 0.12
+# Camera-space footprint of the supplied 1536x707 gameplay reference.
+const OVAL_CENTER_UV := Vector2(0.44, 0.60)
+const OVAL_RADIUS_UV := Vector2(0.29, 0.22)
+const OVAL_FEATHER := 0.055
 
 var player: Node3D
 var camera: Camera3D
@@ -81,6 +85,10 @@ func get_radial_weight(distance: float) -> float:
 	var t := clampf((distance - BRIGHT_RADIUS) / (MAX_RADIUS - BRIGHT_RADIUS), 0.0, 1.0)
 	return 1.0 - t * t * (3.0 - 2.0 * t)
 
+func get_oval_weight(screen_uv: Vector2) -> float:
+	var offset := (screen_uv - OVAL_CENTER_UV) / OVAL_RADIUS_UV
+	return 1.0 - smoothstep(1.0 - OVAL_FEATHER, 1.0, offset.length())
+
 func get_classification_counts() -> Dictionary:
 	return _counts.duplicate()
 
@@ -109,6 +117,9 @@ func _build_composite() -> void:
 	_material = ShaderMaterial.new()
 	_material.shader = VISIBILITY_SHADER
 	_material.render_priority = 127
+	_material.set_shader_parameter("oval_center_uv", OVAL_CENTER_UV)
+	_material.set_shader_parameter("oval_radius_uv", OVAL_RADIUS_UV)
+	_material.set_shader_parameter("oval_feather", OVAL_FEATHER)
 	_composite = MeshInstance3D.new()
 	_composite.name = "FlashlightVisibilityComposite"
 	_composite.mesh = quad

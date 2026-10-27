@@ -7,6 +7,9 @@ uniform vec3 flashlight_forward = vec3(0.0, 0.0, -1.0);
 uniform float bright_radius = 22.0;
 uniform float max_radius = 30.0;
 uniform float player_keep_radius = 2.1;
+uniform vec2 oval_center_uv = vec2(0.44, 0.60);
+uniform vec2 oval_radius_uv = vec2(0.29, 0.22);
+uniform float oval_feather = 0.055;
 uniform bool flashlight_enabled = true;
 
 void vertex() {
@@ -45,8 +48,15 @@ void fragment() {
 		float sector_weight = smoothstep(-0.22, 0.22, signed_forward_distance);
 		float fade_position = clamp((distance_to_player - bright_radius) / (max_radius - bright_radius), 0.0, 1.0);
 		float range_weight = 1.0 - fade_position * fade_position * (3.0 - 2.0 * fade_position);
-		float player_weight = 1.0 - smoothstep(player_keep_radius * 0.72, player_keep_radius, distance_to_player);
-		float illuminated_weight = max(sector_weight * range_weight, player_weight);
+		// The camera-following oval limits the visible scene to the reference
+		// footprint. Keep the existing world range and facing as further limits.
+		vec2 oval_uv = (SCREEN_UV - oval_center_uv) / oval_radius_uv;
+		float oval_weight = 1.0 - smoothstep(1.0 - oval_feather, 1.0, length(oval_uv));
+		// The third-person character crosses the oval edge. Exempt its raised
+		// geometry without leaving a bright disc on the floor underneath it.
+		float player_weight = (1.0 - smoothstep(player_keep_radius * 0.72, player_keep_radius, distance_to_player))
+			* smoothstep(0.005, 0.08, world_position.y - flashlight_origin.y);
+		float illuminated_weight = max(sector_weight * range_weight * oval_weight, player_weight);
 
 		ALBEDO = vec3(0.0);
 		ALPHA = 1.0 - illuminated_weight;

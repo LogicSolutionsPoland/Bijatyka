@@ -14,6 +14,7 @@ on:
       - codex/enemy-attack-animation-fix-20261027
       - codex/environment-nature-zasoby-20261027
       - codex/fight-scene-presentation-fix-20261027
+      - codex/flashlight-reference-oval-20261027
 
 permissions:
   contents: read
