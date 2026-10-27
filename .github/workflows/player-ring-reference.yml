@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - codex/ring-player-only-20261027
+      - codex/cinematic-zombie-chain-combat-20261027
   workflow_dispatch:
 
 permissions:
