@@ -1,0 +1,52 @@
+name: Tower lower skybox validation
+
+on:
+  push:
+    branches:
+      - codex/tower-lower-city-skybox-20261028
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  skybox:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+
+      - name: Import scene and shaders
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --editor --path game --import --quit 2>&1 | tee "$RUNNER_TEMP/godot-import.log"
+          if grep -E 'SCRIPT ERROR:|ERROR: Failed to load' "$RUNNER_TEMP/godot-import.log"; then exit 1; fi
+
+      - name: Verify rooftop sky, elevator floor switch, and respawn
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path game --script res://tests/burning_horizon_test.gd 2>&1 | tee "$RUNNER_TEMP/skybox-integration.log"
+          grep -q 'PASS: burning horizon integration' "$RUNNER_TEMP/skybox-integration.log"
+          if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/skybox-integration.log"; then exit 1; fi
+
+      - name: Check unchanged ground flashlight range and masking
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path game --script res://tests/flashlight_visibility_test.gd 2>&1 | tee "$RUNNER_TEMP/flashlight.log"
+          grep -q 'PASS: flashlight visibility and camera' "$RUNNER_TEMP/flashlight.log"
+          if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/flashlight.log"; then exit 1; fi
+
+      - name: Render actual rooftop panorama and flashlight mask under Compatibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/flashlight_render_probe.gd 2>&1 | tee "$RUNNER_TEMP/flashlight-render.log"
+          grep -q 'PASS: flashlight Compatibility render mask' "$RUNNER_TEMP/flashlight-render.log"
+          if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/flashlight-render.log"; then exit 1; fi
