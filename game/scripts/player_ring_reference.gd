@@ -92,7 +92,7 @@ static func install(animator: AnimationPlayer, skeleton: Skeleton3D, profiles: D
 		var airborne_punch := animator.get_animation(BASE.clip_path("punch", side)).duplicate(true) as Animation
 		if airborne_punch == null:
 			return false
-		var punch_name := side + "_airborne_punch"
+		var punch_name: String = String(side) + "_airborne_punch"
 		_overlay(airborne_punch, skeleton, _attack_offsets(punch_name), float(profiles["punch"].windup))
 		if library.add_animation(StringName(punch_name), airborne_punch) != OK:
 			return false
