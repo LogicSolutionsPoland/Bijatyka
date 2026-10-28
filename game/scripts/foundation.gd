@@ -26,7 +26,7 @@ const VISIBILITY_RADIUS := 30.0
 const MOBILE_3D_RENDER_SCALE := 0.50
 const MOBILE_BALANCED_RENDER_SCALE := 0.67
 const PLAYER_BASE_CENTER := Vector3(0.0, 0.0, -5.2)
-const PLAYER_BASE_POSITION := Vector3(0.0, 0.05, -5.2)
+const PLAYER_BASE_POSITION := PLAYER_BASE_CENTER + Vector3(0.0, StartingTower.HEIGHT + 0.05, 0.0)
 const PLAYER_BASE_SAFE_RADIUS := 6.35
 const PLAYER_BASE_BOUNDARY_RADIUS := 6.70
 const PLAYER_BASE_BOUNDARY_SEGMENTS := 48
@@ -182,6 +182,35 @@ func _process(delta: float) -> void:
 		_floor_material.set_shader_parameter("player_position", player.global_position)
 		_floor_material.set_shader_parameter("flashlight_forward", flashlight_visibility_manager.aim_direction)
 
+# The physical parapet stops regular movement. Confinement also catches
+# unusual aerial dashes or physics tunnelling; never move a grounded player
+# upward each tick, so normal floor contact and jumping keep working.
+func _physics_process(_delta: float) -> void:
+	_enforce_rooftop_boundary()
+
+
+func _enforce_rooftop_boundary() -> void:
+	if not is_instance_valid(player) or not is_instance_valid(starting_tower):
+		return
+	var local_at := starting_tower.to_local(player.global_position)
+	var safe_half := StartingTower.ROOF_SAFE_HALF_EXTENT
+	var adjusted_at := Vector3(
+		clampf(local_at.x, -safe_half, safe_half),
+		local_at.y,
+		clampf(local_at.z, -safe_half, safe_half)
+	)
+	# Reset only after falling below the solid roof; avoid disrupting contact
+	# when the capsule naturally settles on the rooftop at y = HEIGHT.
+	if local_at.y < StartingTower.HEIGHT - 0.50:
+		adjusted_at.y = StartingTower.HEIGHT + 0.05
+	if local_at.is_equal_approx(adjusted_at):
+		return
+	player.global_position = starting_tower.to_global(adjusted_at)
+	player.velocity.x = 0.0
+	player.velocity.z = 0.0
+	player.velocity.y = maxf(0.0, player.velocity.y)
+
+
 func _build_environment() -> void:
 	var world := WorldEnvironment.new()
 	var environment := Environment.new()
@@ -300,7 +329,7 @@ func _build_arena() -> void:
 		_add_arena_box("CourtyardRubble%d" % index, at, size, rust if index % 2 == 0 else concrete, false, angle)
 
 func _build_starting_tower() -> void:
-	# Replace the open ring's starting view with a real enclosed tower.
+	# Begin gameplay on the enclosed rooftop instead of inside the tower.
 	# Its northern exit faces the existing courtyard and boss approach.
 	starting_tower = STARTING_TOWER.new() as StartingTower
 	starting_tower.name = "StartingTower"

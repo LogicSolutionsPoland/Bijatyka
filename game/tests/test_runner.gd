@@ -367,13 +367,18 @@ func _test_ten_button_controls() -> void:
 		_check(is_equal_approx(StartingTower.HEIGHT, 20.0), "tower height is exactly 20 metres")
 		_check(absf(local_start.x) < half_interior - 0.5 and absf(local_start.z) < half_interior - 0.5,
 			"player starts clear of the tower walls")
+		_check(is_equal_approx(local_start.y, StartingTower.HEIGHT + 0.05),
+			"player starts at the tower rooftop, twenty metres above ground")
 		_check(player.safe_base_position == player.position,
-			"respawn returns player to the interior starting point")
+			"respawn returns player to the rooftop starting point")
 		var roof := tower.get_node_or_null("Roof") as StaticBody3D
 		_check(roof != null and is_equal_approx(roof.position.y + StartingTower.ROOF_THICKNESS * 0.5, StartingTower.HEIGHT),
 			"solid roof top reaches twenty metres")
 		_check(tower.get_node_or_null("DoorLeft") is StaticBody3D and tower.get_node_or_null("DoorRight") is StaticBody3D and tower.get_node_or_null("DoorHeader") is StaticBody3D,
 			"tower has separate doorway jambs and header instead of a solid wall")
+		for guard_name in ["RoofGuardWest", "RoofGuardEast", "RoofGuardNorth", "RoofGuardSouth"]:
+			_check(tower.get_node_or_null(guard_name) is StaticBody3D,
+				"roof has a solid guard wall: %s" % guard_name)
 		await physics_frame
 		var space := arena.get_world_3d().direct_space_state
 		var exit_ray := PhysicsRayQueryParameters3D.create(tower.to_global(Vector3(0.0, 1.25, -1.0)),
@@ -382,6 +387,13 @@ func _test_ten_button_controls() -> void:
 		var wall_ray := PhysicsRayQueryParameters3D.create(tower.to_global(Vector3(0.0, 1.25, 0.0)),
 			tower.to_global(Vector3(7.0, 1.25, 0.0)), 1)
 		_check(not space.intersect_ray(wall_ray).is_empty(), "tower exterior wall blocks movement")
+		var guard_ray := PhysicsRayQueryParameters3D.create(
+			tower.to_global(Vector3(0.0, StartingTower.HEIGHT + 1.0, 0.0)),
+			tower.to_global(Vector3(StartingTower.WIDTH, StartingTower.HEIGHT + 1.0, 0.0)), 1)
+		guard_ray.exclude = [player.get_rid()]
+		var guard_hit := space.intersect_ray(guard_ray)
+		_check(not guard_hit.is_empty() and guard_hit.collider.name == "RoofGuardEast",
+			"roof guard physically blocks the edge at player height")
 	var shoulder_arm := arena.camera.get_parent() as SpringArm3D
 	_check(shoulder_arm != null, "close third-person camera uses a collision-aware shoulder spring arm")
 	if shoulder_arm != null:
@@ -400,6 +412,19 @@ func _test_ten_button_controls() -> void:
 		_check(arena.camera.current, "third-person camera is active")
 	player.set_physics_process(false)
 	arena.set_process(false)
+	if tower != null:
+		# Simulate leaving the rooftop and falling below the roof collision.
+		player.global_position = tower.to_global(Vector3(StartingTower.WIDTH, StartingTower.HEIGHT - 2.0, 0.0))
+		player.velocity = Vector3(10.0, -8.0, 0.0)
+		arena._enforce_rooftop_boundary()
+		var recovered := tower.to_local(player.global_position)
+		_check(recovered.y >= StartingTower.HEIGHT + 0.05
+			and absf(recovered.x) <= StartingTower.ROOF_SAFE_HALF_EXTENT
+			and player.velocity == Vector3.ZERO,
+			"rooftop safety restores an out-of-bounds player instead of letting them descend")
+		player._reset_at_safe_base()
+		_check(player.global_position.is_equal_approx(Foundation.PLAYER_BASE_POSITION),
+			"respawn re-centres player on the rooftop")
 	for enemy: Node in get_nodes_in_group("enemies"):
 		enemy.set_physics_process(false)
 	await process_frame
@@ -543,7 +568,7 @@ func _test_ten_button_controls() -> void:
 	await physics_frame
 	player.velocity = Vector3(0, -10, 0)
 	player.move_and_slide()
-	_check(player.is_on_floor(), "jump fixture is grounded on the courtyard")
+	_check(player.is_on_floor(), "jump fixture is grounded on the tower rooftop")
 	_tap(hud._button_for_action("jump"))
 	_check(player.velocity.y > 0.0 and player.jump_impact_armed, "bottom-right button jumps and arms landing impact")
 	player._reset_at_safe_base()

@@ -4,6 +4,7 @@ class_name StartingTower
 ## Hollow, 20-metre-tall starting tower built from a small number of
 ## collision boxes and one batched trim mesh. Local origin is ground level.
 ## The unobstructed northern doorway faces the existing boss/arena route.
+## Temporary rooftop guards prevent descent until a later gameplay update.
 const HEIGHT := 20.0
 const WIDTH := 9.0
 const WALL_THICKNESS := 0.50
@@ -11,6 +12,9 @@ const ROOF_THICKNESS := 0.30
 const DOOR_WIDTH := 2.80
 const DOOR_HEIGHT := 3.40
 const WALL_HEIGHT := HEIGHT - ROOF_THICKNESS
+const ROOF_GUARD_HEIGHT := 2.0
+# Safe area for a player capsule inside the rooftop guard walls.
+const ROOF_SAFE_HALF_EXTENT := WIDTH * 0.5 - WALL_THICKNESS - 0.40
 
 var _wall_material: Material
 var _trim_material: Material
@@ -58,6 +62,17 @@ func _build_shell() -> void:
 	# Roof's top face is exactly HEIGHT (20 metres) above the courtyard.
 	_add_solid_box("Roof", Vector3(0.0, HEIGHT - ROOF_THICKNESS * 0.5, 0.0),
 		Vector3(WIDTH, ROOF_THICKNESS, WIDTH))
+	# A complete collidable parapet prevents jumping or dashing off the roof.
+	# No ladder, stairs, gap, or slide down is exposed at this stage.
+	var guard_y := HEIGHT + ROOF_GUARD_HEIGHT * 0.5
+	_add_solid_box("RoofGuardWest", Vector3(-edge, guard_y, 0.0),
+		Vector3(WALL_THICKNESS, ROOF_GUARD_HEIGHT, WIDTH))
+	_add_solid_box("RoofGuardEast", Vector3(edge, guard_y, 0.0),
+		Vector3(WALL_THICKNESS, ROOF_GUARD_HEIGHT, WIDTH))
+	_add_solid_box("RoofGuardNorth", Vector3(0.0, guard_y, -edge),
+		Vector3(WIDTH, ROOF_GUARD_HEIGHT, WALL_THICKNESS))
+	_add_solid_box("RoofGuardSouth", Vector3(0.0, guard_y, edge),
+		Vector3(WIDTH, ROOF_GUARD_HEIGHT, WALL_THICKNESS))
 
 
 func _add_solid_box(label: String, at: Vector3, dimensions: Vector3) -> void:
