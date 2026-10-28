@@ -6,7 +6,7 @@
 // runs 0 to 1 there). Pencil.add_screen_pass picks the right one.
 // Put it on a QuadMesh child of the camera (Pencil.add_screen_pass does it).
 shader_type spatial;
-render_mode unshaded, depth_test_disabled, cull_disabled;
+render_mode unshaded, depth_test_disabled, depth_draw_never, cull_disabled;
 
 uniform sampler2D screen_tex : hint_screen_texture, filter_linear;
 uniform sampler2D depth_tex : hint_depth_texture, filter_nearest;

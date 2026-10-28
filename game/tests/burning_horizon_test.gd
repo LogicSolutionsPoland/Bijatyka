@@ -20,6 +20,11 @@ func run() -> void:
 	var backdrop: Node3D = arena.burning_horizon
 	check(backdrop.get_child_count() == 4, "four panels enclose all compass directions")
 	check(backdrop.find_children("*", "CollisionObject3D").is_empty(), "horde and camera cannot collide with scenery")
+	var rooftop_sky := arena._rooftop_city_sky
+	var city_material := rooftop_sky.sky_material as PanoramaSkyMaterial
+	check(city_material != null and city_material.panorama.get_width() == 1536, "the supplied burning-city photograph is loaded as a rooftop panorama")
+	check(arena._environment.sky == rooftop_sky and not backdrop.visible, "rooftop spawn displays the city instead of the procedural walls")
+	check(arena.flashlight_visibility_manager.rooftop_sky_visible, "flashlight lets rooftop sky pixels through")
 	for at in [Vector3.ZERO, Vector3(70, 0, -50), Vector3(-40, 15, 60)]:
 		arena.player.global_position = at
 		backdrop.follow_player(at)
@@ -38,6 +43,15 @@ func run() -> void:
 	var old_rotation := backdrop.global_rotation
 	arena._apply_camera_look(1.5, -0.1)
 	check(backdrop.global_rotation.is_equal_approx(old_rotation), "looking around does not rotate the skyline")
+	arena.player.global_position = Vector3(0.0, 0.05, -5.2)
+	arena._update_rooftop_sky()
+	check(arena._environment.sky == arena._ground_sky and backdrop.visible, "ground floor restores Burning Horizon")
+	check(not arena.flashlight_visibility_manager.rooftop_sky_visible, "ground floor retains black sky in flashlight mode")
+	arena.player._reset_at_safe_base()
+	arena._update_rooftop_sky()
+	check(arena.player.global_position.is_equal_approx(Foundation.PLAYER_BASE_POSITION), "respawn returns to the tower rooftop")
+	check(arena._environment.sky == rooftop_sky and not backdrop.visible, "respawn restores the city panorama")
+	check(arena.flashlight_visibility_manager.rooftop_sky_visible, "respawn restores visible rooftop sky")
 	check(Foundation.ZOMBIE_HORDE_SIZE == 5 and Foundation.ZOMBIE_SPAWN_DISTANCE == 50.0, "5-zombie horde keeps 50 m concealed replacements")
 	check(Foundation.ZOMBIE_PERFORMANCE_CAPACITY == 200, "stress scenarios retain 200-zombie capacity")
 	arena.queue_free()

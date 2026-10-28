@@ -15,6 +15,28 @@ func _run() -> void:
 	for frame in range(12):
 		await process_frame
 	var player_position: Vector3 = game.player.global_position
+	# Sky pixels must show the supplied image at rooftop spawn, then return
+	# to black at ground level without revealing world geometry outside the oval.
+	var skyline_point := root.get_visible_rect().size * Vector2(0.50, 0.08)
+	game.hud._root.visible = false
+	await RenderingServer.frame_post_draw
+	var roof_sky := _sample(root.get_texture().get_image(), skyline_point)
+	print("ROOFTOP_SKY_SAMPLE " + JSON.stringify({"roof": roof_sky, "sky_active": game._rooftop_sky_active}))
+	_check(maxf(roof_sky.r, maxf(roof_sky.g, roof_sky.b)) > 0.04, "rooftop city is visible above the arena")
+	game.player.set_physics_process(false)
+	game.player.global_position = Vector3(0.0, 0.05, -5.2)
+	game.camera_rig.global_position = game.player.global_position + Vector3.UP * Foundation.CAMERA_PIVOT_HEIGHT
+	game._update_rooftop_sky()
+	for frame in range(4):
+		await process_frame
+	await RenderingServer.frame_post_draw
+	var ground_sky := _sample(root.get_texture().get_image(), skyline_point)
+	_check(maxf(ground_sky.r, maxf(ground_sky.g, ground_sky.b)) < 0.03, "ground-level sky stays black with the flashlight")
+	game.player.global_position = player_position
+	game.camera_rig.global_position = game.player.global_position + Vector3.UP * Foundation.CAMERA_PIVOT_HEIGHT
+	game._update_rooftop_sky()
+	game.player.set_physics_process(true)
+	game.hud._root.visible = true
 	game._boss_enemy.global_position = player_position + Vector3(3.0, 0.05, 5.0)
 	game._update_boss_locator()
 	var viewport_size := game.camera.get_viewport().get_visible_rect().size

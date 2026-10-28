@@ -13,6 +13,7 @@ enum Band {
 }
 
 const VISIBILITY_SHADER := preload("res://shaders/flashlight_visibility.gdshader")
+const ROOFTOP_CITY_TEXTURE := preload("res://assets/environment/rooftop_burning_city.jpg")
 const DISTANT_TEETH_OVERLAY := preload("res://scripts/distant_zombie_teeth.gd")
 const MAX_RADIUS := 30.0
 const BRIGHT_RADIUS := 22.0
@@ -32,6 +33,7 @@ const OVAL_FEATHER := 0.055
 var player: Node3D
 var camera: Camera3D
 var enabled := true
+var rooftop_sky_visible := false
 var aim_direction := Vector3.FORWARD
 var _tracked: Dictionary = {}
 var _bands: Dictionary = {}
@@ -57,6 +59,11 @@ func set_aim_yaw(yaw: float) -> void:
 	# camera's actual forward vector so the lit half always fills the view.
 	aim_direction = Vector3(-sin(yaw), 0.0, -cos(yaw)).normalized()
 	_upload_shader_parameters()
+
+func set_rooftop_sky_visible(is_visible: bool) -> void:
+	rooftop_sky_visible = is_visible
+	if _material != null:
+		_material.set_shader_parameter("rooftop_sky_visible", is_visible)
 
 func track_enemy(enemy: Node3D) -> void:
 	if not is_instance_valid(enemy):
@@ -151,6 +158,7 @@ func _build_composite() -> void:
 	_material = ShaderMaterial.new()
 	_material.shader = VISIBILITY_SHADER
 	_material.render_priority = 127
+	_material.set_shader_parameter("rooftop_panorama", ROOFTOP_CITY_TEXTURE)
 	_material.set_shader_parameter("oval_center_uv", OVAL_CENTER_UV)
 	_material.set_shader_parameter("oval_radius_uv", OVAL_RADIUS_UV)
 	_material.set_shader_parameter("oval_feather", OVAL_FEATHER)
@@ -177,6 +185,7 @@ func _upload_shader_parameters() -> void:
 	_material.set_shader_parameter("flashlight_origin", player.global_position)
 	_material.set_shader_parameter("flashlight_forward", aim_direction)
 	_material.set_shader_parameter("flashlight_enabled", enabled)
+	_material.set_shader_parameter("rooftop_sky_visible", rooftop_sky_visible)
 
 func _classify_enemies() -> void:
 	_counts = {

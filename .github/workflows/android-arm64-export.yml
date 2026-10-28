@@ -15,6 +15,7 @@ on:
       - codex/environment-nature-zasoby-20261027
       - codex/fight-scene-presentation-fix-20261027
       - codex/flashlight-reference-oval-20261027
+      - codex/rooftop-burning-city-20261028
 
 permissions:
   contents: read
@@ -141,6 +142,7 @@ jobs:
             assets/assets/environment/nature/Rock_Medium_1.gltf.import \
             assets/assets/environment/nature/Bush_Common.gltf.import \
             assets/shaders/burning_horizon.gdshader \
+            assets/assets/environment/rooftop_burning_city.jpg.import \
             assets/shaders/radial_ground.gdshader \
             assets/shaders/flashlight_visibility.gdshader \
             assets/shaders/horde_crowd_animation.gdshader \

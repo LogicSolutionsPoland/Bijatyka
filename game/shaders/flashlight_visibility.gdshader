@@ -2,6 +2,7 @@ shader_type spatial;
 render_mode unshaded, blend_mix, depth_test_disabled, depth_draw_never, cull_disabled, fog_disabled;
 
 uniform sampler2D depth_texture : hint_depth_texture, repeat_disable, filter_nearest;
+uniform sampler2D rooftop_panorama : source_color, repeat_enable, filter_linear_mipmap;
 uniform vec3 flashlight_origin = vec3(0.0);
 uniform vec3 flashlight_forward = vec3(0.0, 0.0, -1.0);
 uniform float bright_radius = 22.0;
@@ -11,6 +12,7 @@ uniform vec2 oval_center_uv = vec2(0.44, 0.60);
 uniform vec2 oval_radius_uv = vec2(0.29, 0.22);
 uniform float oval_feather = 0.055;
 uniform bool flashlight_enabled = true;
+uniform bool rooftop_sky_visible = false;
 
 void vertex() {
 	// A camera-local QuadMesh spans the viewport in clip space. This single
@@ -24,9 +26,18 @@ void fragment() {
 	}
 
 	float depth = textureLod(depth_texture, SCREEN_UV, 0.0).r;
-	// Uncovered sky has no depth and must be black in the flashlight mode.
-	// Skip two inverse matrix transforms for those fullscreen pixels.
-	if (depth >= 0.999999) {
+	// Compatibility may expose its clear sky depth as zero. Neither extreme
+	// represents a foreground surface after the pencil pass stops writing depth.
+	if (rooftop_sky_visible && (depth <= 0.000001 || depth >= 0.999999)) {
+			vec4 far_view = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, 1.0, 1.0);
+			vec3 world_ray = normalize((INV_VIEW_MATRIX * vec4(far_view.xyz / far_view.w, 0.0)).xyz);
+			vec2 panorama_uv = vec2(
+				0.5 + atan(world_ray.x, -world_ray.z) / (2.0 * 3.14159265),
+				acos(clamp(world_ray.y, -1.0, 1.0)) / 3.14159265
+			);
+			ALBEDO = texture(rooftop_panorama, panorama_uv).rgb;
+			ALPHA = 1.0;
+	} else if (depth >= 0.999999) {
 		ALBEDO = vec3(0.0);
 		ALPHA = 1.0;
 	} else {

@@ -23,7 +23,8 @@ func _run() -> void:
 			if node.material_override == game._emissive_material(fire):
 				flames.append(node)
 	_check(flames.size() == 2, "both brazier flames use one prepared material")
-	_check(game._ruin_materials.size() <= 8, "arena uses a small set of shared ruin materials")
+	# The starting tower adds two shared finishes to the original arena set.
+	_check(game._ruin_materials.size() <= 10, "arena and rooftop tower use a small set of shared ruin materials")
 	_check(game.burning_horizon.get_child_count() == 4, "Burning Horizon retains four panels")
 	_check(game.burning_horizon.get_child(0).material_override == game.burning_horizon.get_child(1).material_override, "horizon panels share their material")
 	_check(game.get_node("QuarantineCourtyardGround") != null, "ground and collision remain")

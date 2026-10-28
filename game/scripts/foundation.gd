@@ -1,6 +1,7 @@
 extends Node3D
 
 const BURNING_HORIZON := preload("res://scripts/burning_horizon.gd")
+const ROOFTOP_CITY_TEXTURE := preload("res://assets/environment/rooftop_burning_city.jpg")
 const GAME_MUSIC := preload("res://assets/audio/menu_music.mp3")
 const PLAYER_SCENE := preload("res://scenes/player.tscn")
 const PLAYER_SCRIPT := preload("res://scripts/player_controller.gd")
@@ -30,6 +31,7 @@ const PLAYER_BASE_POSITION := PLAYER_BASE_CENTER + Vector3(0.0, StartingTower.HE
 const PLAYER_BASE_SAFE_RADIUS := 6.35
 const PLAYER_BASE_BOUNDARY_RADIUS := 6.70
 const PLAYER_BASE_BOUNDARY_SEGMENTS := 48
+const ROOFTOP_SKY_MIN_HEIGHT := StartingTower.HEIGHT - 1.0
 # Reference: close third-person shoulder framing; keep Thornbound large at screen-left with combat clear ahead.
 # Height is measured above the player's ground origin, not added to an existing camera offset.
 const CAMERA_PIVOT_HEIGHT := 1.20
@@ -70,6 +72,10 @@ var _boss_enemy: FoundationEnemy
 var _key_light: DirectionalLight3D
 var _high_detail_zombie_sample_assigned := false
 var burning_horizon: Node3D
+var _environment: Environment
+var _ground_sky: Sky
+var _rooftop_city_sky: Sky
+var _rooftop_sky_active := false
 var arena_map: Node3D
 var starting_tower: StartingTower
 var game_music_player: AudioStreamPlayer
@@ -113,6 +119,7 @@ func _ready() -> void:
 	burning_horizon.name = "BurningHorizon"
 	add_child(burning_horizon)
 	burning_horizon.follow_player(player.global_position)
+	_update_rooftop_sky()
 	_build_hud()
 	_spawn_enemies()
 	_setup_performance_diagnostics()
@@ -162,6 +169,7 @@ func _process(delta: float) -> void:
 	if player == null or camera_rig == null:
 		return
 	burning_horizon.follow_player(player.global_position)
+	_update_rooftop_sky()
 	var target_position := player.global_position + Vector3(0.0, CAMERA_PIVOT_HEIGHT, 0.0)
 	camera_rig.global_position = camera_rig.global_position.lerp(target_position, 1.0 - exp(-delta * 7.5))
 	_update_camera_framing()
@@ -223,10 +231,16 @@ func _enforce_rooftop_boundary() -> void:
 func _build_environment() -> void:
 	var world := WorldEnvironment.new()
 	var environment := Environment.new()
-	environment.background_mode = Environment.BG_COLOR if flashlight_visibility_enabled else Environment.BG_SKY
-	environment.sky = BURNING_HORIZON.make_sky()
-	if flashlight_visibility_enabled:
-		environment.background_color = Color.BLACK
+	_environment = environment
+	_ground_sky = BURNING_HORIZON.make_sky()
+	var city_material := PanoramaSkyMaterial.new()
+	city_material.panorama = ROOFTOP_CITY_TEXTURE
+	_rooftop_city_sky = Sky.new()
+	_rooftop_city_sky.sky_material = city_material
+	# The flashlight still blacks out sky at ground level. On the roof, the
+	# city photograph is a direction-fixed background behind the 3D arena.
+	environment.background_mode = Environment.BG_SKY
+	environment.sky = _ground_sky
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	environment.ambient_light_color = Color.WHITE if flashlight_visibility_enabled else Color(0.43, 0.39, 0.40)
 	environment.ambient_light_energy = 0.72 if flashlight_visibility_enabled else 0.62
@@ -252,6 +266,16 @@ func _build_environment() -> void:
 	sun.shadow_enabled = false
 	_key_light = sun
 	add_child(sun)
+
+func _update_rooftop_sky() -> void:
+	var on_roof := player.global_position.y >= ROOFTOP_SKY_MIN_HEIGHT
+	if on_roof == _rooftop_sky_active:
+		return
+	_rooftop_sky_active = on_roof
+	_environment.sky = _rooftop_city_sky if on_roof else _ground_sky
+	# Keep the original four-panel Burning Horizon for ground-level play.
+	burning_horizon.visible = not on_roof
+	flashlight_visibility_manager.set_rooftop_sky_visible(on_roof)
 
 func _build_arena() -> void:
 	var ground := StaticBody3D.new()
