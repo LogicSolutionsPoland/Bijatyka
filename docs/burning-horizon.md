@@ -20,3 +20,9 @@ Validation:
 - Physical Android appearance and performance still require device validation.
 
 Manual check: walk and turn through 360 degrees, approach world boundaries, jump, use an airborne dash, look up/down, and return to base. Confirm scenery stays present, the horde crosses the horizon unobstructed, and the boss marker stays usable. No APK or release is produced by this feature workflow.
+
+## Rooftop lower hemisphere (28 October 2026)
+
+The 1536x768 burning-city photograph is the **bottom of the starting-tower skybox**, not a complete sphere. The image's skyline (roughly 45% of the picture height) is aligned with the sky horizon; the photo's fiery clouds occupy the lower part of the upper view and its zombie crowds occupy the downward view. The original procedural cloud sky fills higher elevations, with a soft transition from about 34° to 45° above the horizon. The panorama remains camera-direction-fixed, has no physics or simulated zombie instances, and does not change the foreground arena.
+
+On the roof, the flashlight shader now leaves sky pixels untouched, so the environment renders one consistent sky (rather than sampling the image again at a conflicting projection). At ground level, the original Burning Horizon and black flashlight sky remain. The rooftop-to-ground and respawn checks continue to cover this switch. A single 2:1 concept painting is not a true seamless 360° equirectangular photograph; its side join should be inspected on a physical phone.
