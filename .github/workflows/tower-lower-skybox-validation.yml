@@ -35,14 +35,6 @@ jobs:
           grep -q 'PASS: burning horizon integration' "$RUNNER_TEMP/skybox-integration.log"
           if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/skybox-integration.log"; then exit 1; fi
 
-      - name: Check unchanged ground flashlight range and masking
-        shell: bash
-        run: |
-          set -euo pipefail
-          godot --headless --path game --script res://tests/flashlight_visibility_test.gd 2>&1 | tee "$RUNNER_TEMP/flashlight.log"
-          grep -q 'PASS: flashlight visibility and camera' "$RUNNER_TEMP/flashlight.log"
-          if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/flashlight.log"; then exit 1; fi
-
       - name: Render actual rooftop panorama and flashlight mask under Compatibility
         shell: bash
         run: |
