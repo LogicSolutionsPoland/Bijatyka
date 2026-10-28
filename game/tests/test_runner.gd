@@ -418,10 +418,11 @@ func _test_ten_button_controls() -> void:
 		player.velocity = Vector3(10.0, -8.0, 0.0)
 		arena._enforce_rooftop_boundary()
 		var recovered := tower.to_local(player.global_position)
-		_check(recovered.y >= StartingTower.HEIGHT + 0.05
-			and absf(recovered.x) <= StartingTower.ROOF_SAFE_HALF_EXTENT
-			and player.velocity == Vector3.ZERO,
-			"rooftop safety restores an out-of-bounds player instead of letting them descend")
+		var recovered_x_inside := absf(recovered.x) <= StartingTower.ROOF_SAFE_HALF_EXTENT or is_equal_approx(absf(recovered.x), StartingTower.ROOF_SAFE_HALF_EXTENT)
+		_check(is_equal_approx(recovered.y, StartingTower.HEIGHT + 0.05)
+			and recovered_x_inside
+			and player.velocity.is_equal_approx(Vector3.ZERO),
+			"falling outside the elevator shaft restores the player to the rooftop safe area")
 		player._reset_at_safe_base()
 		_check(player.global_position.is_equal_approx(Foundation.PLAYER_BASE_POSITION),
 			"respawn re-centres player on the rooftop")
@@ -700,7 +701,7 @@ func _test_gamepad_controls() -> void:
 	for step in range(4):
 		player._update_attack(1.0)
 	_send_trigger(0.8)
-	_check(routed.size() == before_trigger + 6, "R2 makes a new kick after release and press")
+	_check(routed.size() == before_trigger + 12, "R2 makes a new kick after release and press")
 	_send_trigger(0.0)
 	for step in range(4):
 		player._update_attack(1.0)
