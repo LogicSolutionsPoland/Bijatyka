@@ -413,12 +413,43 @@ func _test_ten_button_controls() -> void:
 	player.set_physics_process(false)
 	arena.set_process(false)
 	if tower != null:
+		var lift := tower.elevator
+		_check(lift != null and not arena._headback_camera, "rooftop starts with the original wide camera")
+		if lift != null:
+			var opening_yaw := arena._camera_yaw
+			_check(arena._interact_with_starting_elevator(), "roof lift boards the player")
+			_check(not arena._headback_camera, "boarding alone does not switch the camera before arrival")
+			lift._physics_process(6.0)
+			arena._update_camera_mode(1.0)
+			arena._update_camera_framing()
+			_check(tower.to_local(player.global_position).y < 0.3 and arena._headback_camera,
+				"a completed elevator descent places the player on the ground and activates head-back view")
+			_check(arena.spawn_director.surrounding_assault
+				and arena.spawn_director.population_limit == Foundation.ZOMBIE_HORDE_SIZE,
+				"the ground-floor camera switch activates the five-zombie surrounding encounter")
+			_check(is_equal_approx(shoulder_arm.spring_length, Foundation.HEADBACK_FOLLOW_DISTANCE)
+				and is_equal_approx(arena.camera.fov, Foundation.HEADBACK_VERTICAL_FOV)
+				and shoulder_arm.collision_mask == 1 and arena.camera.current,
+				"head-back view stays close, collision-aware, and active")
+			_check(is_equal_approx(arena._camera_yaw, opening_yaw) and shoulder_arm.position.x > 0.0,
+				"elevator camera keeps player look direction and shoulder framing")
+			player.set_physics_process(false)
+			_check(arena._interact_with_starting_elevator(), "ground lift boards the player for the return trip")
+			lift._physics_process(6.0)
+			arena._update_camera_mode(1.0)
+			arena._update_camera_framing()
+			_check(tower.to_local(player.global_position).y > StartingTower.HEIGHT
+				and not arena._headback_camera
+				and is_equal_approx(shoulder_arm.spring_length, Foundation.CAMERA_FOLLOW_DISTANCE)
+				and is_equal_approx(arena.camera.fov, Foundation.CAMERA_VERTICAL_FOV),
+				"riding back to the roof restores the opening camera")
+			player.set_physics_process(false)
 		# Simulate leaving the rooftop and falling below the roof collision.
 		player.global_position = tower.to_global(Vector3(StartingTower.WIDTH, StartingTower.HEIGHT - 2.0, 0.0))
 		player.velocity = Vector3(10.0, -8.0, 0.0)
 		arena._enforce_rooftop_boundary()
 		var recovered := tower.to_local(player.global_position)
-		_check(recovered.y >= StartingTower.HEIGHT + 0.05
+		_check(recovered.y > StartingTower.HEIGHT + 0.05 or is_equal_approx(recovered.y, StartingTower.HEIGHT + 0.05)
 			and absf(recovered.x) <= StartingTower.ROOF_SAFE_HALF_EXTENT
 			and player.velocity == Vector3.ZERO,
 			"rooftop safety restores an out-of-bounds player instead of letting them descend")
@@ -643,23 +674,23 @@ func _test_gamepad_controls() -> void:
 		_send_pad(button, true)
 		_send_pad(button, true)
 		_check(routed.size() == before + 1, "duplicate %s down event cannot double-strike" % buttons[button])
-		hud._process(0.49)
-		player._update_attack(0.49)
+		hud._process(0.19)
+		player._update_attack(0.19)
 		_check(routed.size() == before + 1, "%s has no early repeat" % buttons[button])
 		hud._process(0.01)
 		player._update_attack(0.01)
-		_check(routed.size() == before + 2, "%s repeats after 0.50 seconds" % buttons[button])
-		for repeat in range(3):
-			for frame in range(50):
+		_check(routed.size() == before + 2, "%s repeats after 0.20 seconds" % buttons[button])
+		for repeat in range(9):
+			for frame in range(20):
 				hud._process(0.01)
 				player._update_attack(0.01)
-		_check(routed.size() == before + 5, "%s permits five attempts over the first 2.0 seconds" % buttons[button])
+		_check(routed.size() == before + 11, "%s permits one immediate hit plus ten 0.20-second repeats" % buttons[button])
 		_send_pad(button, false)
 		for frame in range(20):
 			player._update_attack(0.01)
-		_check(player.attack_count == attacks_before + 5, "%s starts five distinct melee attempts" % buttons[button])
+		_check(player.attack_count == attacks_before + 11, "%s starts eleven distinct melee attempts" % buttons[button])
 		hud._process(0.2)
-		_check(routed.size() == before + 5, "%s stops repeating on release" % buttons[button])
+		_check(routed.size() == before + 11, "%s stops repeating on release" % buttons[button])
 		for step in range(4):
 			player._update_attack(1.0)
 
@@ -683,20 +714,20 @@ func _test_gamepad_controls() -> void:
 	_send_trigger(0.45)
 	_send_trigger(0.8)
 	_check(routed.size() == before_trigger + 1, "R2 trigger noise cannot double-strike")
-	hud._process(0.49)
-	player._update_attack(0.49)
+	hud._process(0.19)
+	player._update_attack(0.19)
 	_check(routed.size() == before_trigger + 1, "held R2 has no early repeat")
 	hud._process(0.01)
 	player._update_attack(0.01)
-	_check(routed.size() == before_trigger + 2, "held R2 repeats after 0.50 seconds")
-	for repeat in range(3):
-		for frame in range(50):
+	_check(routed.size() == before_trigger + 2, "held R2 repeats after 0.20 seconds")
+	for repeat in range(9):
+		for frame in range(20):
 			hud._process(0.01)
 			player._update_attack(0.01)
-	_check(routed.size() == before_trigger + 5 and player.attack_count == attacks_before_trigger + 5, "held R2 permits five distinct right-kick attempts over 2.0 seconds")
+	_check(routed.size() == before_trigger + 11 and player.attack_count == attacks_before_trigger + 11, "held R2 permits ten repeats at the five-per-second cadence")
 	_send_trigger(0.0)
 	hud._process(0.4)
-	_check(routed.size() == before_trigger + 5, "releasing R2 stops repeats")
+	_check(routed.size() == before_trigger + 11, "releasing R2 stops repeats")
 	for step in range(4):
 		player._update_attack(1.0)
 	_send_trigger(0.8)
