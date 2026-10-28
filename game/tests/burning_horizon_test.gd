@@ -21,8 +21,12 @@ func run() -> void:
 	check(backdrop.get_child_count() == 4, "four panels enclose all compass directions")
 	check(backdrop.find_children("*", "CollisionObject3D").is_empty(), "horde and camera cannot collide with scenery")
 	var rooftop_sky := arena._rooftop_city_sky
-	var city_material := rooftop_sky.sky_material as PanoramaSkyMaterial
-	check(city_material != null and city_material.panorama.get_width() == 1536, "the supplied burning-city photograph is loaded as a rooftop panorama")
+	var city_material := rooftop_sky.sky_material as ShaderMaterial
+	check(city_material != null, "rooftop sky uses a dedicated lower-hemisphere material")
+	if city_material != null:
+		check(city_material.shader == Foundation.ROOFTOP_LOWER_SKY_SHADER, "lower city is isolated from the ground-level procedural sky")
+		var city_texture := city_material.get_shader_parameter("lower_city_panorama") as Texture2D
+		check(city_texture != null and city_texture.get_width() == 1536 and city_texture.get_height() == 768, "the detailed rooftop city photograph is bound at full resolution")
 	check(arena._environment.sky == rooftop_sky and not backdrop.visible, "rooftop spawn displays the city instead of the procedural walls")
 	check(arena.flashlight_visibility_manager.rooftop_sky_visible, "flashlight lets rooftop sky pixels through")
 	for at in [Vector3.ZERO, Vector3(70, 0, -50), Vector3(-40, 15, 60)]:
