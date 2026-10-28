@@ -36,6 +36,19 @@ jobs:
           godot --headless --path game --script res://tests/player_animation_test.gd 2>&1 | tee "$RUNNER_TEMP/player.log"
           grep -q 'PASS: player martial animation' "$RUNNER_TEMP/player.log"
           if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/player.log"; then exit 1; fi
+      - name: Ten-second rehearsal on actual player skeleton
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path game --script res://tests/player_choreography_test.gd 2>&1 | tee "$RUNNER_TEMP/choreography.log"
+          grep -q 'PASS: ten-second player choreography' "$RUNNER_TEMP/choreography.log"
+          if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/choreography.log"; then exit 1; fi
+      - name: Preview rehearsal scene load
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path game --scene res://scenes/player_choreography_preview.tscn --quit-after 8 2>&1 | tee "$RUNNER_TEMP/preview.log"
+          if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/preview.log"; then exit 1; fi
       - name: Existing enemy animation regression
         shell: bash
         run: |
@@ -79,7 +92,7 @@ jobs:
           apk=build/Bijatyka-Cinematic-Combat-ARM64.apk
           unzip -tqq "$apk"
           unzip -Z1 "$apk" > "$RUNNER_TEMP/apk-files.txt"
-          for entry in lib/arm64-v8a/libgodot_android.so assets/project.binary assets/scripts/player_controller.gdc assets/scripts/player_ring_reference.gdc assets/scripts/enemy.gdc assets/scenes/foundation.tscn.remap assets/assets/characters/universal_base/Universal_Base_Characters_Male.glb.import; do
+          for entry in lib/arm64-v8a/libgodot_android.so assets/project.binary assets/scripts/player_controller.gdc assets/scripts/player_ring_reference.gdc assets/scripts/player_choreography.gdc assets/scripts/player_choreography_preview.gdc assets/scenes/player_choreography_preview.tscn.remap assets/scripts/enemy.gdc assets/scenes/foundation.tscn.remap assets/assets/characters/universal_base/Universal_Base_Characters_Male.glb.import; do
             grep -Fxq "$entry" "$RUNNER_TEMP/apk-files.txt"
             test "$(unzip -p "$apk" "$entry" | wc -c)" -gt 0
           done
