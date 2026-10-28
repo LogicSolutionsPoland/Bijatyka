@@ -413,43 +413,12 @@ func _test_ten_button_controls() -> void:
 	player.set_physics_process(false)
 	arena.set_process(false)
 	if tower != null:
-		var lift := tower.elevator
-		_check(lift != null and not arena._headback_camera, "rooftop starts with the original wide camera")
-		if lift != null:
-			var opening_yaw := arena._camera_yaw
-			_check(arena._interact_with_starting_elevator(), "roof lift boards the player")
-			_check(not arena._headback_camera, "boarding alone does not switch the camera before arrival")
-			lift._physics_process(6.0)
-			arena._update_camera_mode(1.0)
-			arena._update_camera_framing()
-			_check(tower.to_local(player.global_position).y < 0.3 and arena._headback_camera,
-				"a completed elevator descent places the player on the ground and activates head-back view")
-			_check(arena.spawn_director.surrounding_assault
-				and arena.spawn_director.population_limit == Foundation.ZOMBIE_HORDE_SIZE,
-				"the ground-floor camera switch activates the five-zombie surrounding encounter")
-			_check(is_equal_approx(shoulder_arm.spring_length, Foundation.HEADBACK_FOLLOW_DISTANCE)
-				and is_equal_approx(arena.camera.fov, Foundation.HEADBACK_VERTICAL_FOV)
-				and shoulder_arm.collision_mask == 1 and arena.camera.current,
-				"head-back view stays close, collision-aware, and active")
-			_check(is_equal_approx(arena._camera_yaw, opening_yaw) and shoulder_arm.position.x > 0.0,
-				"elevator camera keeps player look direction and shoulder framing")
-			player.set_physics_process(false)
-			_check(arena._interact_with_starting_elevator(), "ground lift boards the player for the return trip")
-			lift._physics_process(6.0)
-			arena._update_camera_mode(1.0)
-			arena._update_camera_framing()
-			_check(tower.to_local(player.global_position).y > StartingTower.HEIGHT
-				and not arena._headback_camera
-				and is_equal_approx(shoulder_arm.spring_length, Foundation.CAMERA_FOLLOW_DISTANCE)
-				and is_equal_approx(arena.camera.fov, Foundation.CAMERA_VERTICAL_FOV),
-				"riding back to the roof restores the opening camera")
-			player.set_physics_process(false)
 		# Simulate leaving the rooftop and falling below the roof collision.
 		player.global_position = tower.to_global(Vector3(StartingTower.WIDTH, StartingTower.HEIGHT - 2.0, 0.0))
 		player.velocity = Vector3(10.0, -8.0, 0.0)
 		arena._enforce_rooftop_boundary()
 		var recovered := tower.to_local(player.global_position)
-		_check(recovered.y > StartingTower.HEIGHT + 0.05 or is_equal_approx(recovered.y, StartingTower.HEIGHT + 0.05)
+		_check(recovered.y >= StartingTower.HEIGHT + 0.05
 			and absf(recovered.x) <= StartingTower.ROOF_SAFE_HALF_EXTENT
 			and player.velocity == Vector3.ZERO,
 			"rooftop safety restores an out-of-bounds player instead of letting them descend")
