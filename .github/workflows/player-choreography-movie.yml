@@ -1,0 +1,64 @@
+name: Record ten-second player choreography MP4
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - codex/cinematic-zombie-chain-combat-20261027
+    paths:
+      - game/scripts/player_choreography.gd
+      - game/scripts/player_choreography_preview.gd
+      - game/scenes/player_choreography_preview.tscn
+      - .github/workflows/player-choreography-movie.yml
+
+permissions:
+  contents: read
+
+jobs:
+  render-motion:
+    name: Render actual player skeleton on white stage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Godot 4.7.2
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+      - name: Install offline video render dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb ffmpeg libgl1-mesa-dri libgl1
+      - name: Import game assets and model
+        run: |
+          set -euo pipefail
+          godot --headless --editor --path game --import --quit 2>&1 | tee /tmp/choreography-import.log
+          if grep -E 'SCRIPT ERROR:|ERROR: Failed to load' /tmp/choreography-import.log; then exit 1; fi
+      - name: Record 300 animation frames using Godot Movie Maker
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          xvfb-run -a -s "-screen 0 1024x576x24"             godot --path game --rendering-method gl_compatibility             --scene res://scenes/player_choreography_preview.tscn             --resolution 960x540 --fixed-fps 30 --quit-after 300             --write-movie "$GITHUB_WORKSPACE/build/Player-Choreography-10s.avi"             2>&1 | tee /tmp/choreography-movie.log
+          if grep -E 'SCRIPT ERROR:|ERROR: Failed to load|ERROR: Player rehearsal' /tmp/choreography-movie.log; then exit 1; fi
+          test -s build/Player-Choreography-10s.avi
+      - name: Convert to Android-friendly MP4 and validate duration
+        run: |
+          set -euo pipefail
+          ffmpeg -hide_banner -loglevel error -y             -i build/Player-Choreography-10s.avi             -an -c:v libx264 -preset veryfast -crf 23 -pix_fmt yuv420p             -movflags +faststart build/Bijatyka-Player-Choreography-10s.mp4
+          test -s build/Bijatyka-Player-Choreography-10s.mp4
+          ffprobe -v error -show_entries format=duration -of default=nw=1 build/Bijatyka-Player-Choreography-10s.mp4
+          python3 - <<'PY'
+          import subprocess
+          d = float(subprocess.check_output(["ffprobe","-v","error","-show_entries","format=duration","-of","default=nk=1:nw=1","build/Bijatyka-Player-Choreography-10s.mp4"]).decode())
+          assert 9.5 <= d <= 10.5, f"Unexpected movie length {d}"
+          PY
+      - name: Upload playable MP4
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bijatyka-Player-Choreography-10s-MP4
+          path: build/Bijatyka-Player-Choreography-10s.mp4
+          if-no-files-found: error
+          retention-days: 30
