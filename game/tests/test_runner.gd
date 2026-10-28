@@ -359,6 +359,29 @@ func _test_ten_button_controls() -> void:
 	var hud: FoundationHUD = arena.hud
 	_check(player.rage.rage_changed.is_connected(arena._refresh_hud), "game startup completes and connects the combat HUD after model initialization")
 	_check(Foundation.ZOMBIE_HORDE_SIZE == 5 and arena.spawn_director.population_limit == 5, "normal gameplay retains exactly five ordinary zombies")
+	var tower := arena.starting_tower
+	_check(tower != null and tower.get_parent() == arena, "game spawns the starting tower in the arena")
+	if tower != null:
+		var local_start := tower.to_local(player.global_position)
+		var half_interior := StartingTower.WIDTH * 0.5 - StartingTower.WALL_THICKNESS
+		_check(is_equal_approx(StartingTower.HEIGHT, 20.0), "tower height is exactly 20 metres")
+		_check(absf(local_start.x) < half_interior - 0.5 and absf(local_start.z) < half_interior - 0.5,
+			"player starts clear of the tower walls")
+		_check(player.safe_base_position == player.position,
+			"respawn returns player to the interior starting point")
+		var roof := tower.get_node_or_null("Roof") as StaticBody3D
+		_check(roof != null and is_equal_approx(roof.position.y + StartingTower.ROOF_THICKNESS * 0.5, StartingTower.HEIGHT),
+			"solid roof top reaches twenty metres")
+		_check(tower.get_node_or_null("DoorLeft") is StaticBody3D and tower.get_node_or_null("DoorRight") is StaticBody3D and tower.get_node_or_null("DoorHeader") is StaticBody3D,
+			"tower has separate doorway jambs and header instead of a solid wall")
+		await physics_frame
+		var space := arena.get_world_3d().direct_space_state
+		var exit_ray := PhysicsRayQueryParameters3D.create(tower.to_global(Vector3(0.0, 1.25, -1.0)),
+			tower.to_global(Vector3(0.0, 1.25, -7.0)), 1)
+		_check(space.intersect_ray(exit_ray).is_empty(), "north doorway allows an unobstructed ground-level exit")
+		var wall_ray := PhysicsRayQueryParameters3D.create(tower.to_global(Vector3(0.0, 1.25, 0.0)),
+			tower.to_global(Vector3(7.0, 1.25, 0.0)), 1)
+		_check(not space.intersect_ray(wall_ray).is_empty(), "tower exterior wall blocks movement")
 	var shoulder_arm := arena.camera.get_parent() as SpringArm3D
 	_check(shoulder_arm != null, "close third-person camera uses a collision-aware shoulder spring arm")
 	if shoulder_arm != null:
