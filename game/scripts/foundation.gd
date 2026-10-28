@@ -2,6 +2,7 @@ extends Node3D
 
 const BURNING_HORIZON := preload("res://scripts/burning_horizon.gd")
 const ROOFTOP_CITY_TEXTURE := preload("res://assets/environment/rooftop_burning_city.jpg")
+const ROOFTOP_LOWER_SKY_SHADER := preload("res://shaders/rooftop_lower_city_sky.gdshader")
 const GAME_MUSIC := preload("res://assets/audio/menu_music.mp3")
 const PLAYER_SCENE := preload("res://scenes/player.tscn")
 const PLAYER_SCRIPT := preload("res://scripts/player_controller.gd")
@@ -247,12 +248,15 @@ func _build_environment() -> void:
 	var environment := Environment.new()
 	_environment = environment
 	_ground_sky = BURNING_HORIZON.make_sky()
-	var city_material := PanoramaSkyMaterial.new()
-	city_material.panorama = ROOFTOP_CITY_TEXTURE
+	var city_material := ShaderMaterial.new()
+	city_material.shader = ROOFTOP_LOWER_SKY_SHADER
+	city_material.set_shader_parameter("lower_city_panorama", ROOFTOP_CITY_TEXTURE)
 	_rooftop_city_sky = Sky.new()
 	_rooftop_city_sky.sky_material = city_material
-	# The flashlight still blacks out sky at ground level. On the roof, the
-	# city photograph is a direction-fixed background behind the 3D arena.
+	_rooftop_city_sky.process_mode = Sky.PROCESS_MODE_QUALITY
+	# The photo fills the lower field of view from the rooftop while the
+	# existing procedural sky continues overhead. The flashlight still
+	# blacks out the ground-level sky; the world sky is unobscured on the roof.
 	environment.background_mode = Environment.BG_SKY
 	environment.sky = _ground_sky
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
