@@ -51,6 +51,7 @@ func _run() -> void:
 		var foot := skeleton.get_bone_global_pose(skeleton.find_bone("foot_l")).origin
 		var signature := "%d|%d|%d|%d|%d" % [roundi(l.x * 10.0), roundi(l.y * 10.0), roundi(r.x * 10.0), roundi(r.y * 10.0), roundi(foot.y * 10.0)]
 		pose_signatures[signature] = true
+		print("CHOREOGRAPHY_DIAG t=%.2f sig=%s hand_l=%s hand_r=%s playing=%s" % [time, signature, l, r, animator.current_animation])
 	_check(pose_signatures.size() >= 6, "time samples produce distinct combat poses rather than a static rig")
 	_check(player.attack_phase == "ready" and player.attack_count == 0, "preview does not apply game damage or alter melee cadence")
 
