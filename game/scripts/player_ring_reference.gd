@@ -17,8 +17,8 @@ const PUNCH_VARIANTS := {
 	"right": ["right_cross", "right_hook", "right_uppercut"],
 }
 const KICK_VARIANTS := {
-	"left": ["left_front_kick", "left_high_kick"],
-	"right": ["right_front_kick", "right_high_kick"],
+	"left": ["left_front_kick", "left_high_kick", "left_sweep_kick"],
+	"right": ["right_front_kick", "right_high_kick", "right_sweep_kick"],
 }
 const MOVEMENT_DURATIONS := {
 	"duck": 0.36,
@@ -33,14 +33,18 @@ const CLIP_NAMES := [
 	"left_uppercut", "right_uppercut",
 	"left_front_kick", "right_front_kick",
 	"left_high_kick", "right_high_kick",
+	"left_sweep_kick", "right_sweep_kick",
 	"duck", "slip_left", "slip_right",
 	"pivot_left", "pivot_right", "airborne_kick",
+	"left_airborne_punch", "right_airborne_punch",
 ]
 
 static func clip_path(clip_name: String) -> StringName:
 	return StringName("%s/%s" % [String(LIBRARY_NAME), clip_name])
 
 static func attack_name(kind: String, side: String, repetition: int, airborne: bool = false) -> String:
+	if kind == "punch" and airborne:
+		return side + "_airborne_punch"
 	if kind == "kick" and airborne:
 		return "airborne_kick"
 	var variants: Dictionary = PUNCH_VARIANTS if kind == "punch" else KICK_VARIANTS
@@ -84,6 +88,14 @@ static func install(animator: AnimationPlayer, skeleton: Skeleton3D, profiles: D
 	_overlay(flying, skeleton, _attack_offsets("airborne_kick"), float(profiles["kick"].windup))
 	if library.add_animation(&"airborne_kick", flying) != OK:
 		return false
+	for side in ["left", "right"]:
+		var airborne_punch := animator.get_animation(BASE.clip_path("punch", side)).duplicate(true) as Animation
+		if airborne_punch == null:
+			return false
+		var punch_name := side + "_airborne_punch"
+		_overlay(airborne_punch, skeleton, _attack_offsets(punch_name), float(profiles["punch"].windup))
+		if library.add_animation(StringName(punch_name), airborne_punch) != OK:
+			return false
 	var reach := _pose_action(guard, skeleton, _movement_offsets("grapple_reach"), 0.16)
 	if reach == null or library.add_animation(&"grapple_reach", reach) != OK:
 		return false
@@ -134,6 +146,27 @@ static func _attack_offsets(name: String) -> Dictionary:
 			"spine_03": Vector3(-0.18, 0.0, -0.06 * side),
 			"thigh_" + limb: Vector3(-0.44, 0.0, 0.0),
 			"calf_" + limb: Vector3(-0.16, 0.0, 0.0),
+		}
+	if name.ends_with("_sweep_kick"):
+		# A turning body kick: chamber from the source kick, rotate the hips
+		# through contact and counter-rotate the chest to keep balance.
+		return {
+			"pelvis": Vector3(-0.12, 0.36 * side, 0.08 * side),
+			"spine_02": Vector3(-0.10, -0.16 * side, -0.08 * side),
+			"spine_03": Vector3(-0.14, -0.12 * side, -0.08 * side),
+			"thigh_" + limb: Vector3(-0.24, 0.18 * side, 0.16 * side),
+			"calf_" + limb: Vector3(-0.11, 0.0, 0.0),
+		}
+	if name.ends_with("_airborne_punch"):
+		return {
+			"pelvis": Vector3(0.10, 0.12 * side, 0.0),
+			"spine_02": Vector3(0.15, 0.08 * side, 0.0),
+			"spine_03": Vector3(0.12, 0.10 * side, 0.0),
+			"upperarm_" + limb: Vector3(0.20, -0.08 * side, 0.0),
+			"thigh_l": Vector3(0.22, 0.0, 0.0),
+			"thigh_r": Vector3(0.16, 0.0, 0.0),
+			"calf_l": Vector3(0.28, 0.0, 0.0),
+			"calf_r": Vector3(0.22, 0.0, 0.0),
 		}
 	if name == "airborne_kick":
 		return {

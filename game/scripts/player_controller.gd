@@ -318,6 +318,12 @@ func _start_attack(kind: String, side: String) -> void:
 	attack_side = side
 	_attack_recovery_locked = false
 	_character_action_time = 0.0
+	# A leap strike uses the current momentum and strike clip. Ground-only
+	# approach and grapple would suspend the player in the middle of a jump.
+	if not is_on_floor() and velocity.y > 0.1:
+		_engagement_target = null
+		_begin_strike()
+		return
 	_engagement_target = _select_chain_target()
 	if is_instance_valid(_engagement_target):
 		var separation := global_position.distance_to(_engagement_target.global_position)
@@ -375,7 +381,7 @@ func _begin_strike() -> void:
 			if _ring_animations_ready:
 				var strike_key := "%s_%s" % [attack_kind, attack_side]
 				var repetition := int(_ring_attack_counts.get(strike_key, 0))
-				var airborne := attack_kind == "kick" and velocity.y > 0.1 and not is_on_floor()
+				var airborne := velocity.y > 0.1 and not is_on_floor()
 				var variant := PLAYER_RING_REFERENCE.attack_name(attack_kind, attack_side, repetition, airborne)
 				var ring_path := PLAYER_RING_REFERENCE.clip_path(variant)
 				if _animation_player.has_animation(ring_path):

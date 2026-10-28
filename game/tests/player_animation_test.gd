@@ -42,6 +42,7 @@ func _run() -> void:
 
 	_check_attack_priority(player)
 	_check_cinematic_chain(player)
+	_check_airborne_strikes(player)
 
 	_check_locomotion_does_not_restart(animator, player)
 	for action in ["jump", "dash", "attack_punch", "attack_kick", "pad_jump", "pad_dash", "pad_punch_left", "pad_blast", "pad_kick_left", "pad_kick_right"]:
@@ -52,7 +53,7 @@ func _run() -> void:
 func _check_ring_bank(player: FoundationPlayer) -> void:
 	var animator := player._animation_player as AnimationPlayer
 	var all_names: Array = Player.PLAYER_RING_REFERENCE.CLIP_NAMES
-	_check(all_names.size() == 16, "reference animation bank retains 16 reusable player clips")
+	_check(all_names.size() == 20, "reference animation bank includes 20 reusable player clips")
 	_check(animator.has_animation(Player.PLAYER_RING_REFERENCE.clip_path("grapple_reach")), "grapple reach player clip installed")
 	_check(is_equal_approx(Player.TARGET_MELEE_CYCLE_SECONDS, 0.5), "maximum attack cadence is two strikes per second")
 	for raw_name in all_names:
@@ -170,7 +171,7 @@ func _check_repeated_strikes(player: FoundationPlayer, kind: String, side: Strin
 		animator.advance(float(Player.ATTACKS[kind].active))
 		player._update_attack(float(Player.ATTACKS[kind].active))
 	_check(player.attack_count == count_before + 5, "%s %s retains five sequential strikes at a two-per-second cadence" % [side, kind])
-	_check(observed.size() == (3 if kind == "punch" else 2), "%s %s cycles distinct ring variants" % [side, kind])
+	_check(observed.size() == 3, "%s %s cycles distinct ring variants" % [side, kind])
 	player._finish_attack()
 	# Buffered repeats also need a new animation, even without a ready frame.
 	player.request_attack(kind, side)
@@ -239,6 +240,19 @@ func _check_cinematic_chain(player: FoundationPlayer) -> void:
 	player._previous_engagement_target = null
 	first.queue_free()
 	second.queue_free()
+
+func _check_airborne_strikes(player: FoundationPlayer) -> void:
+	for kind in ["punch", "kick"]:
+		player._finish_attack()
+		player.velocity = Vector3(0.0, 4.0, 0.0)
+		_check(player.request_attack(kind, "left"), "%s accepted during jump" % kind)
+		_check(player.attack_phase == "windup" and player._engagement_target == null,
+			"%s starts without a ground grapple during jump" % kind)
+		var expected := "left_airborne_punch" if kind == "punch" else "airborne_kick"
+		_check(player._active_attack_clip == Player.PLAYER_RING_REFERENCE.clip_path(expected),
+			"%s selects its airborne animation" % kind)
+	player._finish_attack()
+	player.velocity = Vector3.ZERO
 
 
 func _check_locomotion_does_not_restart(animator: AnimationPlayer, player: FoundationPlayer) -> void:
