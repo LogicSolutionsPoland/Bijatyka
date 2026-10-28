@@ -29,6 +29,7 @@ camera_right={"deadzone":0.2,"events":[Object(InputEventJoypadMotion,"axis":2,"a
 camera_up={"deadzone":0.2,"events":[Object(InputEventJoypadMotion,"axis":3,"axis_value":-1.0)]}
 camera_down={"deadzone":0.2,"events":[Object(InputEventJoypadMotion,"axis":3,"axis_value":1.0)]}
 jump={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":32)]}
+interact_elevator={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":69)]}
 dash={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":4194321)]}
 attack_punch={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":74)]}
 attack_kick={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":75)]}

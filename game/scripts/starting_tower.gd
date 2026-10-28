@@ -1,16 +1,19 @@
 extends Node3D
 class_name StartingTower
 
+const STARTING_ELEVATOR := preload("res://scripts/starting_elevator.gd")
+
 ## Hollow, 20-metre-tall starting tower built from a small number of
 ## collision boxes and one batched trim mesh. Local origin is ground level.
 ## The unobstructed northern doorway faces the existing boss/arena route.
-## Temporary rooftop guards prevent descent until a later gameplay update.
+## A covered elevator shaft connects the guarded rooftop with the courtyard.
 const HEIGHT := 20.0
 const WIDTH := 9.0
 const WALL_THICKNESS := 0.50
 const ROOF_THICKNESS := 0.30
 const DOOR_WIDTH := 2.80
 const DOOR_HEIGHT := 3.40
+const ELEVATOR_SHAFT_SIZE := 2.80
 const WALL_HEIGHT := HEIGHT - ROOF_THICKNESS
 const ROOF_GUARD_HEIGHT := 2.0
 # Safe area for a player capsule inside the rooftop guard walls.
@@ -18,6 +21,7 @@ const ROOF_SAFE_HALF_EXTENT := WIDTH * 0.5 - WALL_THICKNESS - 0.40
 
 var _wall_material: Material
 var _trim_material: Material
+var elevator: StartingElevator
 var _unit_box := BoxMesh.new()
 
 
@@ -37,6 +41,7 @@ func _ready() -> void:
 		_trim_material = fallback
 	_build_shell()
 	_build_trim()
+	_build_elevator()
 
 
 func _build_shell() -> void:
@@ -59,11 +64,20 @@ func _build_shell() -> void:
 		Vector3(doorway_section_width, WALL_HEIGHT, WALL_THICKNESS))
 	_add_solid_box("DoorHeader", Vector3(0.0, (WALL_HEIGHT + DOOR_HEIGHT) * 0.5, -edge),
 		Vector3(DOOR_WIDTH, WALL_HEIGHT - DOOR_HEIGHT, WALL_THICKNESS))
-	# Roof's top face is exactly HEIGHT (20 metres) above the courtyard.
-	_add_solid_box("Roof", Vector3(0.0, HEIGHT - ROOF_THICKNESS * 0.5, 0.0),
-		Vector3(WIDTH, ROOF_THICKNESS, WIDTH))
-	# A complete collidable parapet prevents jumping or dashing off the roof.
-	# No ladder, stairs, gap, or slide down is exposed at this stage.
+	# Leave a square shaft through the roof for the player elevator. The
+	# lift platform or its safety hatch closes the opening at every other time.
+	var roof_side_width := (WIDTH - ELEVATOR_SHAFT_SIZE) * 0.5
+	var roof_side_center := (WIDTH + ELEVATOR_SHAFT_SIZE) * 0.25
+	_add_solid_box("Roof", Vector3(-roof_side_center, HEIGHT - ROOF_THICKNESS * 0.5, 0.0),
+		Vector3(roof_side_width, ROOF_THICKNESS, WIDTH))
+	_add_solid_box("RoofEast", Vector3(roof_side_center, HEIGHT - ROOF_THICKNESS * 0.5, 0.0),
+		Vector3(roof_side_width, ROOF_THICKNESS, WIDTH))
+	_add_solid_box("RoofNorth", Vector3(0.0, HEIGHT - ROOF_THICKNESS * 0.5, roof_side_center),
+		Vector3(ELEVATOR_SHAFT_SIZE, ROOF_THICKNESS, roof_side_width))
+	_add_solid_box("RoofSouth", Vector3(0.0, HEIGHT - ROOF_THICKNESS * 0.5, -roof_side_center),
+		Vector3(ELEVATOR_SHAFT_SIZE, ROOF_THICKNESS, roof_side_width))
+	# A complete collidable parapet keeps players inside the rooftop safe area.
+	# The elevator is the only designed route between the roof and courtyard.
 	var guard_y := HEIGHT + ROOF_GUARD_HEIGHT * 0.5
 	_add_solid_box("RoofGuardWest", Vector3(-edge, guard_y, 0.0),
 		Vector3(WALL_THICKNESS, ROOF_GUARD_HEIGHT, WIDTH))
@@ -73,6 +87,13 @@ func _build_shell() -> void:
 		Vector3(WIDTH, ROOF_GUARD_HEIGHT, WALL_THICKNESS))
 	_add_solid_box("RoofGuardSouth", Vector3(0.0, guard_y, edge),
 		Vector3(WIDTH, ROOF_GUARD_HEIGHT, WALL_THICKNESS))
+
+
+func _build_elevator() -> void:
+	elevator = STARTING_ELEVATOR.new() as StartingElevator
+	elevator.name = "Elevator"
+	elevator.configure(_wall_material, _trim_material)
+	add_child(elevator)
 
 
 func _add_solid_box(label: String, at: Vector3, dimensions: Vector3) -> void:

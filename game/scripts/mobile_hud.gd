@@ -4,6 +4,7 @@ class_name FoundationHUD
 signal action_requested(action: String)
 signal aura_chosen(aura_id: String)
 signal camera_dragged(delta: Vector2)
+signal elevator_requested
 
 const MOUSE_POINTER_ID := -2
 const NO_POINTER_ID := -1
@@ -47,6 +48,7 @@ var _magic_tag: Label
 var _notice: Label
 var _boss_marker: Label
 var _action_buttons: Dictionary = {}
+var _elevator_button: Button
 var _pressed_pointers: Dictionary = {}
 var _held_melee_repeat_timers: Dictionary = {}
 var _held_gamepad_actions: Dictionary = {}
@@ -237,6 +239,40 @@ func _create_action_button(caption: String, action: String, at: Vector2, dimensi
 	button.pressed.connect(_emit_action.bind(action))
 	return button
 
+func _ensure_elevator_button() -> void:
+	if _elevator_button != null:
+		return
+	_elevator_button = Button.new()
+	_elevator_button.name = "ElevatorButton"
+	_elevator_button.position = Vector2(18.0, 162.0)
+	_elevator_button.size = Vector2(156.0, 62.0)
+	_elevator_button.text = "LIFT"
+	_elevator_button.focus_mode = Control.FOCUS_NONE
+	_elevator_button.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_elevator_button.toggle_mode = true
+	_elevator_button.process_mode = Node.PROCESS_MODE_ALWAYS
+	_elevator_button.add_theme_font_size_override("font_size", 15)
+	_elevator_button.add_theme_color_override("font_color", Color(0.96, 0.96, 0.90))
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color(0.10, 0.09, 0.07, 0.90)
+	normal.border_color = Color(0.92, 0.43, 0.17, 0.96)
+	normal.set_border_width_all(2)
+	normal.set_corner_radius_all(12)
+	_elevator_button.add_theme_stylebox_override("normal", normal)
+	var pressed := normal.duplicate() as StyleBoxFlat
+	pressed.bg_color = Color(0.38, 0.16, 0.08, 0.96)
+	_elevator_button.add_theme_stylebox_override("pressed", pressed)
+	_root.add_child(_elevator_button)
+
+func set_elevator_prompt(prompt: String) -> void:
+	if prompt.is_empty():
+		if _elevator_button != null:
+			_elevator_button.visible = false
+		return
+	_ensure_elevator_button()
+	_elevator_button.text = prompt
+	_elevator_button.visible = true
+
 func _emit_action(action: String) -> void:
 	if get_tree().paused or _selection_panel != null:
 		return
@@ -412,6 +448,13 @@ func _handle_pointer(pointer_id: int, screen_position: Vector2, pressed: bool) -
 		return true
 	if get_tree().paused or _selection_panel != null:
 		return false
+	if _elevator_button != null and _elevator_button.is_visible_in_tree():
+		var elevator_local := _elevator_button.get_global_transform_with_canvas().affine_inverse() * screen_position
+		if Rect2(Vector2.ZERO, _elevator_button.size).has_point(elevator_local):
+			_pressed_pointers[pointer_id] = _elevator_button
+			_elevator_button.set_pressed_no_signal(true)
+			elevator_requested.emit()
+			return true
 	for button: Button in _action_buttons.values():
 		var local := button.get_global_transform_with_canvas().affine_inverse() * screen_position
 		if button.is_visible_in_tree() and Rect2(Vector2.ZERO, button.size).has_point(local):

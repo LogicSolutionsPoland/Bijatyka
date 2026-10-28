@@ -166,6 +166,10 @@ func _process(delta: float) -> void:
 	camera_rig.global_position = camera_rig.global_position.lerp(target_position, 1.0 - exp(-delta * 7.5))
 	_update_camera_framing()
 	_update_gamepad_camera(delta)
+	if Input.is_action_just_pressed("interact_elevator"):
+		_on_elevator_requested()
+	if hud != null and is_instance_valid(starting_tower) and is_instance_valid(starting_tower.elevator):
+		hud.set_elevator_prompt(starting_tower.elevator.get_prompt_for_player(player))
 	player.set_camera_yaw(_camera_yaw)
 	if flashlight_visibility_manager != null:
 		flashlight_visibility_manager.set_aim_yaw(_camera_yaw)
@@ -192,7 +196,12 @@ func _physics_process(_delta: float) -> void:
 func _enforce_rooftop_boundary() -> void:
 	if not is_instance_valid(player) or not is_instance_valid(starting_tower):
 		return
+	if is_instance_valid(starting_tower.elevator) and starting_tower.elevator.is_player_riding(player):
+		return
 	var local_at := starting_tower.to_local(player.global_position)
+	# Ground-floor travel is a normal gameplay route after leaving the lift.
+	if local_at.y < 5.0:
+		return
 	var safe_half := StartingTower.ROOF_SAFE_HALF_EXTENT
 	var adjusted_at := Vector3(
 		clampf(local_at.x, -safe_half, safe_half),
@@ -201,7 +210,7 @@ func _enforce_rooftop_boundary() -> void:
 	)
 	# Reset only after falling below the solid roof; avoid disrupting contact
 	# when the capsule naturally settles on the rooftop at y = HEIGHT.
-	if local_at.y < StartingTower.HEIGHT - 0.50:
+	if local_at.y < StartingTower.HEIGHT - 0.50 and not starting_tower.elevator.contains_local_shaft(local_at):
 		adjusted_at.y = StartingTower.HEIGHT + 0.05
 	if local_at.is_equal_approx(adjusted_at):
 		return
@@ -535,6 +544,7 @@ func _build_hud() -> void:
 	hud = HUD_SCRIPT.new() as FoundationHUD
 	hud.name = "MobileCombatHUD"
 	hud.action_requested.connect(_on_hud_action)
+	hud.elevator_requested.connect(_on_elevator_requested)
 	hud.aura_chosen.connect(_on_aura_chosen)
 	hud.camera_dragged.connect(_on_camera_dragged)
 	add_child(hud)
@@ -624,6 +634,14 @@ func _spawn_enemy(kind: String, at: Vector3, boss_target: bool = false, high_det
 		label.modulate = Color(1.0, 0.18, 0.12)
 		enemy.attach_status_label(label)
 	return enemy
+
+func _on_elevator_requested() -> void:
+	_interact_with_starting_elevator()
+
+func _interact_with_starting_elevator() -> bool:
+	if get_tree().paused or not is_instance_valid(player) or not is_instance_valid(starting_tower) or not is_instance_valid(starting_tower.elevator):
+		return false
+	return starting_tower.elevator.interact(player)
 
 func _on_hud_action(action: String) -> void:
 	if get_tree().paused:
