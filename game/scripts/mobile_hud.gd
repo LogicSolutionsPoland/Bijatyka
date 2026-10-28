@@ -11,6 +11,7 @@ const NO_POINTER_ID := -1
 const MOVE_DRAG_MAX_DISTANCE := 96.0
 const MOVE_DRAG_DEADZONE := 0.12
 const CAMERA_GESTURE_SPLIT := 0.5
+const PLAYER_CONTROLLER := preload("res://scripts/player_controller.gd")
 const AURA_LABELS := {
 	"light": "LIGHT", "judgment": "JUDGMENT", "fire": "FIRE", "shadow": "SHADOW"
 }
@@ -31,7 +32,7 @@ const GAMEPAD_ACTIONS := {
 	&"pad_spell_0": "spell_0", &"pad_spell_1": "spell_1",
 	&"pad_spell_2": "spell_2", &"pad_spell_3": "spell_3"
 }
-const MELEE_HOLD_REPEAT_INTERVAL := 0.50
+const MELEE_HOLD_REPEAT_INTERVAL := PLAYER_CONTROLLER.TARGET_MELEE_CYCLE_SECONDS
 const MELEE_TIMER_EPSILON := 0.0001
 const TRIGGER_PRESS_THRESHOLD := 0.55
 const TRIGGER_RELEASE_THRESHOLD := 0.35
@@ -94,7 +95,7 @@ func _process(delta: float) -> void:
 		var repeat_time := float(held.timer) - minf(delta, MELEE_HOLD_REPEAT_INTERVAL)
 		if repeat_time <= MELEE_TIMER_EPSILON:
 			_emit_action(held.action)
-			repeat_time += MELEE_HOLD_REPEAT_INTERVAL
+			repeat_time = MELEE_HOLD_REPEAT_INTERVAL
 		held.timer = repeat_time
 	for raw_pointer_id in _pressed_pointers.keys():
 		var pointer_id := int(raw_pointer_id)
@@ -110,7 +111,7 @@ func _process(delta: float) -> void:
 		repeat_time -= minf(delta, MELEE_HOLD_REPEAT_INTERVAL)
 		if repeat_time <= MELEE_TIMER_EPSILON:
 			_emit_action(action)
-			repeat_time += MELEE_HOLD_REPEAT_INTERVAL
+			repeat_time = MELEE_HOLD_REPEAT_INTERVAL
 		_held_melee_repeat_timers[pointer_id] = repeat_time
 
 func _is_melee_action(action: String) -> bool:
