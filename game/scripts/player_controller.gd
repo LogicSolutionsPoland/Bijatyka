@@ -13,6 +13,7 @@ const RAGE_SCRIPT := preload("res://scripts/rage_progression.gd")
 const FIGHT_ANIMATION_BUILDER := preload("res://scripts/universal_base_combat.gd")
 const CHARACTER_MOTION := preload("res://scripts/universal_base_motion.gd")
 const PLAYER_RING_REFERENCE := preload("res://scripts/player_ring_reference.gd")
+const PLAYER_CHOREOGRAPHY := preload("res://scripts/player_choreography.gd")
 const PLAYER_MODEL_PATH := "res://assets/characters/universal_base/Universal_Base_Characters_Male.glb"
 const GRAVITY := 24.0
 const MAX_HEALTH := 100
@@ -63,6 +64,7 @@ var _animation_player: AnimationPlayer
 var _skeleton: Skeleton3D
 var _fight_animations_ready := false
 var _ring_animations_ready := false
+var _choreography_ready := false
 var _active_attack_clip: StringName = &""
 var _ring_attack_counts: Dictionary = {}
 var _engagement_target: FoundationEnemy
@@ -132,6 +134,24 @@ func _load_player_visual() -> void:
 					_animation_player.seek(0.05, true)
 				return
 	_add_debug_visual()
+
+## Explicit preview only: keep the 10s study out of normal melee state/timing.
+## The demo scene can call this; the production player never auto-plays it.
+func play_choreography_preview() -> bool:
+	if _animation_player == null or _skeleton == null or not _ring_animations_ready:
+		return false
+	if attack_phase != "ready":
+		return false
+	if not _choreography_ready:
+		_choreography_ready = PLAYER_CHOREOGRAPHY.install(_animation_player, _skeleton)
+	if not _choreography_ready:
+		return false
+	var path := PLAYER_CHOREOGRAPHY.clip_path()
+	if not _animation_player.has_animation(path):
+		return false
+	_animation_player.play(path, ATTACK_ANIMATION_BLEND_SECONDS)
+	_animation_player.seek(0.0, true)
+	return true
 
 func _add_debug_visual() -> void:
 	var body := MeshInstance3D.new()
