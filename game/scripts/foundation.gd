@@ -16,6 +16,7 @@ const PENCIL := preload("res://scripts/pencil.gd")
 const RADIAL_GROUND_SHADER := preload("res://shaders/radial_ground.gdshader")
 const RUIN_SURFACE_SHADER := preload("res://shaders/ruined_surface.gdshader")
 const ARENA_MAP_SCRIPT := preload("res://scripts/arena_map_upgrade.gd")
+const STARTING_TOWER := preload("res://scripts/starting_tower.gd")
 const ZOMBIE_HORDE_SIZE := 5
 const ZOMBIE_PERFORMANCE_CAPACITY := 200
 const ZOMBIE_SPAWN_DISTANCE := 50.0
@@ -70,6 +71,7 @@ var _key_light: DirectionalLight3D
 var _high_detail_zombie_sample_assigned := false
 var burning_horizon: Node3D
 var arena_map: Node3D
+var starting_tower: StartingTower
 var game_music_player: AudioStreamPlayer
 var spawn_director: Node3D
 var horde_far_visuals: HordeFarVisuals
@@ -87,6 +89,7 @@ func _ready() -> void:
 	_start_game_music()
 	_build_environment()
 	_build_arena()
+	_build_starting_tower()
 	arena_map = ARENA_MAP_SCRIPT.new() as Node3D
 	arena_map.name = "AshenQuarantineMap"
 	add_child(arena_map)
@@ -295,6 +298,24 @@ func _build_arena() -> void:
 		var size := Vector3(0.35 + float(index % 3) * 0.12, 0.22 + float(index % 2) * 0.15, 0.48 + float(index % 4) * 0.08)
 		var at := Vector3(cos(angle) * radius, size.y * 0.5, sin(angle) * radius - 5.2)
 		_add_arena_box("CourtyardRubble%d" % index, at, size, rust if index % 2 == 0 else concrete, false, angle)
+
+func _build_starting_tower() -> void:
+	# Replace the open ring's starting view with a real enclosed tower.
+	# Its northern exit faces the existing courtyard and boss approach.
+	starting_tower = STARTING_TOWER.new() as StartingTower
+	starting_tower.name = "StartingTower"
+	starting_tower.position = PLAYER_BASE_CENTER
+	starting_tower.configure(_material(Color(0.16, 0.18, 0.19), 0.94),
+		_material(Color(0.32, 0.19, 0.13), 0.84))
+	add_child(starting_tower)
+	# Exclude the tower volume from concealed enemy placement, even in
+	# performance scenarios; the existing enemy-safe base remains intact.
+	var half_width := StartingTower.WIDTH * 0.5
+	_spawn_blockers.append(AABB(
+		PLAYER_BASE_CENTER + Vector3(-half_width, 0.0, -half_width),
+		Vector3(StartingTower.WIDTH, StartingTower.HEIGHT, StartingTower.WIDTH)
+	))
+
 
 func _add_arena_box(label: String, at: Vector3, dimensions: Vector3, material: Material, collidable: bool, yaw: float = 0.0) -> void:
 	var root: Node3D
