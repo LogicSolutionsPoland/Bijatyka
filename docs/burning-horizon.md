@@ -9,7 +9,7 @@ Cost: four quads / eight triangles, one shared unshaded opaque material, plus a 
 
 The backdrop subtree is exempt from distance culling. Gameplay remains at 30 m visibility, with 20 ordinary zombies spawning at 50 m and the existing boss locator. Floor color fades to the backdrop haze between 24 and 30 m. Sky below the horizon covers the space between the circular floor boundary and square panorama. Following player elevation is intentional for aerial dash coverage, so the skyline behaves like an artificial skybox rather than world-anchored architecture.
 
-On the 20 m starting and respawn rooftop, the supplied burning-city photograph is a direction-fixed panoramic sky behind the arena. The procedural four-panel Burning Horizon is hidden at that elevation and restored when the player takes the elevator to ground level. The flashlight retains its normal world geometry mask; sky pixels reveal the panorama on the rooftop and return to black at ground level. The photograph adds one 1536 × 768 JPEG (~380 KB) and no collision or light sources.
+On the 20 m starting and respawn rooftop, the supplied burning-city photograph is a direction-fixed panoramic sky behind the arena. Its visible streets and zombie crowd remain part of the static photograph; they do not add simulated enemies to the gameplay horde. The rooftop camera rises and widens to clear the tower parapet and frame the city crowd. The procedural four-panel Burning Horizon and close combat camera return on the ground floor. The flashlight retains its normal world geometry mask; sky pixels reveal the panorama on the rooftop and return to black at ground level. The photograph adds one 1536 × 768 JPEG (~380 KB) and no collision or light sources.
 
 Validation:
 

@@ -32,10 +32,16 @@ const PLAYER_BASE_SAFE_RADIUS := 6.35
 const PLAYER_BASE_BOUNDARY_RADIUS := 6.70
 const PLAYER_BASE_BOUNDARY_SEGMENTS := 48
 const ROOFTOP_SKY_MIN_HEIGHT := StartingTower.HEIGHT - 1.0
-# Reference: close third-person shoulder framing; keep Thornbound large at screen-left with combat clear ahead.
+# Ground-floor reference: close third-person shoulder framing; keep Thornbound
+# large at screen-left with combat clear ahead. The rooftop photo gets its own
+# wider, elevated camera profile so the zombie-filled city clears the parapet.
 # Height is measured above the player's ground origin, not added to an existing camera offset.
 const CAMERA_PIVOT_HEIGHT := 1.20
 const CAMERA_FOLLOW_DISTANCE := 2.5
+const ROOFTOP_CAMERA_PIVOT_LIFT := 3.2
+const ROOFTOP_CAMERA_FOLLOW_DISTANCE := 5.0
+const ROOFTOP_CAMERA_PITCH_BIAS_DEGREES := 10.0
+const ROOFTOP_CAMERA_BLEND_SPEED := 3.0
 const CAMERA_TARGET_SCREEN_X := 0.35
 const CAMERA_VERTICAL_FOV := 66.0
 const CAMERA_PITCH_DEGREES := -16.0
@@ -53,9 +59,10 @@ var camera_arm: SpringArm3D
 var camera: Camera3D
 var flashlight_visibility_manager: Node
 var flashlight_visibility_enabled := true
-var _last_framing_viewport_size := Vector2.ZERO
 var _camera_yaw := 0.0
 var _camera_pitch := deg_to_rad(CAMERA_PITCH_DEGREES)
+var _rooftop_camera_blend := 0.0
+var _rooftop_camera_target := 0.0
 var hud: FoundationHUD
 var _status_timer := 0.0
 var _pending_notice := ""
@@ -170,8 +177,15 @@ func _process(delta: float) -> void:
 		return
 	burning_horizon.follow_player(player.global_position)
 	_update_rooftop_sky()
-	var target_position := player.global_position + Vector3(0.0, CAMERA_PIVOT_HEIGHT, 0.0)
+	_rooftop_camera_blend = move_toward(
+		_rooftop_camera_blend,
+		_rooftop_camera_target,
+		delta * ROOFTOP_CAMERA_BLEND_SPEED
+	)
+	var target_position := player.global_position + Vector3.UP * _camera_pivot_height()
 	camera_rig.global_position = camera_rig.global_position.lerp(target_position, 1.0 - exp(-delta * 7.5))
+	camera_arm.spring_length = _camera_follow_distance()
+	camera_arm.rotation.x = _effective_camera_pitch()
 	_update_camera_framing()
 	_update_gamepad_camera(delta)
 	if Input.is_action_just_pressed("interact_elevator"):
@@ -269,6 +283,7 @@ func _build_environment() -> void:
 
 func _update_rooftop_sky() -> void:
 	var on_roof := player.global_position.y >= ROOFTOP_SKY_MIN_HEIGHT
+	_rooftop_camera_target = 1.0 if on_roof else 0.0
 	if on_roof == _rooftop_sky_active:
 		return
 	_rooftop_sky_active = on_roof
@@ -528,17 +543,19 @@ func _add_brazier(at: Vector3, flame_color: Color) -> void:
 func _build_camera() -> void:
 	camera_rig = Node3D.new()
 	camera_rig.name = "FollowCameraRig"
-	camera_rig.position = player.global_position + Vector3(0.0, CAMERA_PIVOT_HEIGHT, 0.0)
+	_rooftop_camera_blend = 1.0 if player.global_position.y >= ROOFTOP_SKY_MIN_HEIGHT else 0.0
+	_rooftop_camera_target = _rooftop_camera_blend
+	camera_rig.position = player.global_position + Vector3.UP * _camera_pivot_height()
 	_camera_yaw = player.rotation.y
 	camera_rig.rotation.y = _camera_yaw
 	add_child(camera_rig)
 	camera_arm = SpringArm3D.new()
 	camera_arm.name = "CollisionSpringArm"
-	camera_arm.spring_length = CAMERA_FOLLOW_DISTANCE
+	camera_arm.spring_length = _camera_follow_distance()
 	camera_arm.margin = 0.15
 	camera_arm.collision_mask = 1
 	camera_arm.add_excluded_object(player.get_rid())
-	camera_arm.rotation.x = _camera_pitch
+	camera_arm.rotation.x = _effective_camera_pitch()
 	camera_rig.add_child(camera_arm)
 	camera = Camera3D.new()
 	camera.name = "BehindPlayerCamera"
@@ -555,14 +572,22 @@ func _update_camera_framing() -> void:
 	if camera_arm == null or camera == null or not is_instance_valid(camera):
 		return
 	var viewport_size := camera.get_viewport().get_visible_rect().size
-	if viewport_size.y <= 1.0 or viewport_size.is_equal_approx(_last_framing_viewport_size):
+	if viewport_size.y <= 1.0:
 		return
-	_last_framing_viewport_size = viewport_size
 	var aspect := viewport_size.x / viewport_size.y
 	var half_horizontal_fov := atan(tan(deg_to_rad(CAMERA_VERTICAL_FOV * 0.5)) * aspect)
 	# Camera-space shoulder framing keeps the player in the lower-left reference
 	# region without shifting the player model away from the protected base.
-	camera_arm.position.x = (0.5 - CAMERA_TARGET_SCREEN_X) * 2.0 * CAMERA_FOLLOW_DISTANCE * tan(half_horizontal_fov)
+	camera_arm.position.x = (0.5 - CAMERA_TARGET_SCREEN_X) * 2.0 * _camera_follow_distance() * tan(half_horizontal_fov)
+
+func _camera_pivot_height() -> float:
+	return CAMERA_PIVOT_HEIGHT + ROOFTOP_CAMERA_PIVOT_LIFT * _rooftop_camera_blend
+
+func _camera_follow_distance() -> float:
+	return lerpf(CAMERA_FOLLOW_DISTANCE, ROOFTOP_CAMERA_FOLLOW_DISTANCE, _rooftop_camera_blend)
+
+func _effective_camera_pitch() -> float:
+	return _camera_pitch + deg_to_rad(ROOFTOP_CAMERA_PITCH_BIAS_DEGREES) * _rooftop_camera_blend
 
 func _build_hud() -> void:
 	hud = HUD_SCRIPT.new() as FoundationHUD
@@ -600,7 +625,7 @@ func _apply_camera_look(yaw_delta: float, pitch_delta: float) -> void:
 	if camera_rig != null:
 		camera_rig.rotation.y = _camera_yaw
 	if camera_arm != null:
-		camera_arm.rotation.x = _camera_pitch
+		camera_arm.rotation.x = _effective_camera_pitch()
 	if player != null:
 		player.set_camera_yaw(_camera_yaw)
 	if flashlight_visibility_manager != null:

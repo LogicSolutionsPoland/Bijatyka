@@ -399,13 +399,16 @@ func _test_ten_button_controls() -> void:
 	if shoulder_arm != null:
 		_check(
 			shoulder_arm.position.x > 0.0
-			and is_equal_approx(shoulder_arm.rotation_degrees.x, Foundation.CAMERA_PITCH_DEGREES)
+			and is_equal_approx(
+				shoulder_arm.rotation_degrees.x,
+				Foundation.CAMERA_PITCH_DEGREES + Foundation.ROOFTOP_CAMERA_PITCH_BIAS_DEGREES
+			)
 			and shoulder_arm.rotation_degrees.x < 0.0
 			and -arena.camera.global_transform.basis.z.y < 0.0,
-			"camera sits above and to the right and looks down toward combat"
+			"rooftop camera sits above and to the right and looks across the panorama"
 		)
-		_check(is_equal_approx(arena.camera_rig.position.y - player.global_position.y, Foundation.CAMERA_PIVOT_HEIGHT), "camera follow rig maintains the intended eye-level height")
-		_check(is_equal_approx(shoulder_arm.spring_length, Foundation.CAMERA_FOLLOW_DISTANCE) and shoulder_arm.collision_mask == 1, "camera holds close distance and retracts near level geometry")
+		_check(is_equal_approx(arena.camera_rig.position.y - player.global_position.y, Foundation.CAMERA_PIVOT_HEIGHT + Foundation.ROOFTOP_CAMERA_PIVOT_LIFT), "roof camera rises above the parapet")
+		_check(is_equal_approx(shoulder_arm.spring_length, Foundation.ROOFTOP_CAMERA_FOLLOW_DISTANCE) and shoulder_arm.collision_mask == 1, "roof camera widens its view while retaining collision retraction")
 		var horizontal_half_span := shoulder_arm.spring_length * tan(deg_to_rad(arena.camera.fov * 0.5)) * (float(root.size.x) / float(root.size.y))
 		var estimated_actor_x := 0.5 - shoulder_arm.position.x / (2.0 * horizontal_half_span)
 		_check(estimated_actor_x > 0.28 and estimated_actor_x < 0.43, "over-shoulder composition places the character left of screen center")

@@ -19,7 +19,7 @@ func _run() -> void:
 	_check(game.flashlight_visibility_enabled, "project config enables the reversible flashlight mode")
 	_check(game.flashlight_visibility_manager.enabled, "shared flashlight visibility manager is active")
 	_check(game.player.global_position.distance_to(Foundation.PLAYER_BASE_POSITION) < 0.1, "player stays at the existing protected base position")
-	_check(is_equal_approx(game.camera_arm.spring_length, Foundation.CAMERA_FOLLOW_DISTANCE), "raised over-shoulder follow distance remains intact")
+	_check(is_equal_approx(game.camera_arm.spring_length, Foundation.ROOFTOP_CAMERA_FOLLOW_DISTANCE), "rooftop camera uses the wider city-view distance")
 	_check(game.camera.projection == Camera3D.PROJECTION_PERSPECTIVE, "camera keeps perspective projection instead of a 180-degree lens")
 	_check(is_equal_approx(game.camera.fov, Foundation.CAMERA_VERTICAL_FOV), "camera keeps the existing 66-degree perspective")
 	_check(game._camera_pitch < 0.0 and -game.camera.global_transform.basis.z.y < 0.0, "default camera looks down toward the lit ground")
@@ -120,7 +120,7 @@ func _run() -> void:
 	var old_rig_position := game.camera_rig.global_position
 	game.player.global_position += Vector3.RIGHT * 2.0
 	game._process(1.0 / 60.0)
-	_check(game.camera_rig.global_position.distance_to(game.player.global_position + Vector3.UP * Foundation.CAMERA_PIVOT_HEIGHT) < old_rig_position.distance_to(game.player.global_position + Vector3.UP * Foundation.CAMERA_PIVOT_HEIGHT), "camera follows player movement with smoothing")
+	_check(game.camera_rig.global_position.distance_to(game.player.global_position + Vector3.UP * game._camera_pivot_height()) < old_rig_position.distance_to(game.player.global_position + Vector3.UP * game._camera_pivot_height()), "camera follows player movement with smoothing")
 	game.player.velocity.y = 6.0
 	game.player.global_position.y += 0.2
 	game._process(1.0 / 60.0)
@@ -131,7 +131,7 @@ func _run() -> void:
 	game._camera_yaw = 0.0
 	game._camera_pitch = deg_to_rad(Foundation.CAMERA_PITCH_DEGREES)
 	game.camera_rig.rotation.y = 0.0
-	game.camera_arm.rotation.x = game._camera_pitch
+	game.camera_arm.rotation.x = game._effective_camera_pitch()
 	game.flashlight_visibility_manager.set_aim_yaw(0.0)
 	for frame in range(30):
 		await process_frame
@@ -149,7 +149,7 @@ func _run() -> void:
 	game.player.global_position = Foundation.PLAYER_BASE_POSITION
 	game.player.velocity = Vector3.ZERO
 	game.player.dash_time = 0.0
-	game.camera_rig.global_position = game.player.global_position + Vector3.UP * Foundation.CAMERA_PIVOT_HEIGHT
+	game.camera_rig.global_position = game.player.global_position + Vector3.UP * game._camera_pivot_height()
 	game.camera_rig.rotation.y = 0.0
 	for frame in range(30):
 		await process_frame
