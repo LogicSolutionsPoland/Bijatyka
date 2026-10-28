@@ -52,7 +52,10 @@ func _run() -> void:
 	game._update_boss_locator()
 	var viewport_size := game.camera.get_viewport().get_visible_rect().size
 	var lit_world := game.camera.project_position(viewport_size * Vector2(0.44, 0.53), 5.0)
-	var dark_world := game.camera.project_position(viewport_size * Vector2(0.82, 0.58), 5.0)
+	# Projection is calculated in the camera viewport, which differs from
+	# the root rect on software-Compatibility runs. Aim further right so the
+	# measured probe lands genuinely OUTSIDE the 0.29-width flashlight oval.
+	var dark_world := game.camera.project_position(viewport_size * Vector2(0.96, 0.58), 5.0)
 	var lit_probe := _add_probe(game, lit_world, Color(1.0, 0.05, 0.03))
 	var dark_probe := _add_probe(game, dark_world, Color(0.02, 1.0, 0.04))
 	_check(game.flashlight_visibility_manager.is_point_in_sector(lit_world) and lit_world.distance_to(player_position) < 22.0, "lit probe is within the original range and sector")
