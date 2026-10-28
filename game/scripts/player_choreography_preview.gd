@@ -54,10 +54,10 @@ func _setup_white_stage() -> void:
 
 	var camera := Camera3D.new()
 	camera.name = "PreviewCamera"
-	camera.position = Vector3(3.6, 2.65, -6.2)
+	camera.position = Vector3(1.3, 1.9, -3.2)
 	add_child(camera)
 	camera.look_at(Vector3(0.0, 1.0, 0.0), Vector3.UP)
-	camera.fov = 46.0
+	camera.fov = 40.0
 	camera.current = true
 
 func _animation_finished(animation_name: StringName) -> void:
