@@ -20,7 +20,7 @@ const MAX_HEALTH := 100
 const MAX_MAGIC := 100.0
 const DASH_DISTANCE := 15.0
 const DASH_DURATION := 0.30
-const TARGET_MELEE_HITS_PER_SECOND := 2.0
+const TARGET_MELEE_HITS_PER_SECOND := 5.0
 const TARGET_MELEE_CYCLE_SECONDS := 1.0 / TARGET_MELEE_HITS_PER_SECOND
 const MELEE_TIMER_EPSILON := 0.0001
 const ATTACK_ANIMATION_BLEND_SECONDS := 0.06
@@ -32,8 +32,8 @@ const CHAIN_HOP_SPEED := 9.5
 const CHAIN_GRAB_SECONDS := 0.16
 const LOCOMOTION_ANIMATION_BLEND_SECONDS := 0.12
 const ATTACKS := {
-	"punch": {"windup": 0.20, "active": TARGET_MELEE_CYCLE_SECONDS - 0.20, "recovery": 0.24, "range": 1.55, "damage": 18, "cone": 0.42},
-	"kick": {"windup": 0.24, "active": TARGET_MELEE_CYCLE_SECONDS - 0.24, "recovery": 0.28, "range": 2.15, "damage": 28, "cone": 0.30}
+	"punch": {"windup": 0.10, "active": TARGET_MELEE_CYCLE_SECONDS - 0.10, "recovery": 0.24, "range": 1.55, "damage": 18, "cone": 0.42},
+	"kick": {"windup": 0.12, "active": TARGET_MELEE_CYCLE_SECONDS - 0.12, "recovery": 0.28, "range": 2.15, "damage": 28, "cone": 0.30}
 }
 const SPELLS := {
 	"light": {"cost": 20.0, "range": 8.0, "color": Color(1.0, 0.84, 0.32)},
@@ -216,10 +216,10 @@ func _read_desktop_input(delta: float) -> void:
 			request_attack(kind)
 			_desktop_attack_repeat_timers[input_action] = TARGET_MELEE_CYCLE_SECONDS
 		elif Input.is_action_pressed(input_action):
-			var repeat_time := float(_desktop_attack_repeat_timers.get(input_action, TARGET_MELEE_CYCLE_SECONDS)) - delta
+			var repeat_time := float(_desktop_attack_repeat_timers.get(input_action, TARGET_MELEE_CYCLE_SECONDS)) - minf(delta, TARGET_MELEE_CYCLE_SECONDS)
 			if repeat_time <= MELEE_TIMER_EPSILON:
 				request_attack(kind)
-				repeat_time += TARGET_MELEE_CYCLE_SECONDS
+				repeat_time = TARGET_MELEE_CYCLE_SECONDS
 			_desktop_attack_repeat_timers[input_action] = repeat_time
 		else:
 			_desktop_attack_repeat_timers.erase(input_action)
