@@ -13,7 +13,6 @@ enum Band {
 }
 
 const VISIBILITY_SHADER := preload("res://shaders/flashlight_visibility.gdshader")
-const ROOFTOP_CITY_TEXTURE := preload("res://assets/environment/rooftop_burning_city.jpg")
 const DISTANT_TEETH_OVERLAY := preload("res://scripts/distant_zombie_teeth.gd")
 const MAX_RADIUS := 30.0
 const BRIGHT_RADIUS := 22.0
@@ -158,7 +157,6 @@ func _build_composite() -> void:
 	_material = ShaderMaterial.new()
 	_material.shader = VISIBILITY_SHADER
 	_material.render_priority = 127
-	_material.set_shader_parameter("rooftop_panorama", ROOFTOP_CITY_TEXTURE)
 	_material.set_shader_parameter("oval_center_uv", OVAL_CENTER_UV)
 	_material.set_shader_parameter("oval_radius_uv", OVAL_RADIUS_UV)
 	_material.set_shader_parameter("oval_feather", OVAL_FEATHER)
