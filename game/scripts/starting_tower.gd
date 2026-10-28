@@ -37,7 +37,6 @@ func _ready() -> void:
 
 func _build_shell() -> void:
 	var edge := (WIDTH - WALL_THICKNESS) * 0.5
-	var half_open_section := (WIDTH - DOOR_WIDTH) * 0.25
 	var doorway_section_width := (WIDTH - DOOR_WIDTH) * 0.5
 	var section_center := (DOOR_WIDTH + doorway_section_width) * 0.5
 	# Side and back walls are solid. No floor collider is needed: the
@@ -91,8 +90,16 @@ func _build_trim() -> void:
 			_append_trim(placements, Vector3(x, WALL_HEIGHT * 0.5, z),
 				Vector3(0.17, WALL_HEIGHT, 0.17))
 	for level in [0.35, 4.8, 9.6, 14.4, 19.5]:
-		_append_trim(placements, Vector3(0.0, level, -outer),
-			Vector3(WIDTH + 0.18, 0.15, 0.12))
+		# Do not visually bridge the ground-floor entrance.
+		if level < DOOR_HEIGHT:
+			var front_section := (WIDTH - DOOR_WIDTH) * 0.5
+			var front_offset := (DOOR_WIDTH + front_section) * 0.5
+			for side in [-1.0, 1.0]:
+				_append_trim(placements, Vector3(side * front_offset, level, -outer),
+					Vector3(front_section, 0.15, 0.12))
+		else:
+			_append_trim(placements, Vector3(0.0, level, -outer),
+				Vector3(WIDTH + 0.18, 0.15, 0.12))
 		_append_trim(placements, Vector3(0.0, level, outer),
 			Vector3(WIDTH + 0.18, 0.15, 0.12))
 		_append_trim(placements, Vector3(-outer, level, 0.0),
