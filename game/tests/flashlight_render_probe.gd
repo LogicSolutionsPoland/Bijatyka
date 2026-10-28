@@ -31,13 +31,22 @@ func _run() -> void:
 	for frame in range(4):
 		await process_frame
 	await RenderingServer.frame_post_draw
-	var ground_sky := _sample(root.get_texture().get_image(), city_view_point)
+	# The ground camera points downward, so the old city-view point can hit
+	# actual arena geometry. Sample a clear sky pixel above the skyline.
+	var clear_sky_point := root.get_visible_rect().size * Vector2(0.50, 0.02)
+	var ground_sky := _sample(root.get_texture().get_image(), clear_sky_point)
 	_check(maxf(ground_sky.r, maxf(ground_sky.g, ground_sky.b)) < 0.03, "ground-level sky stays black with the flashlight")
 	game.player.global_position = player_position
 	game._update_rooftop_sky()
 	game._rooftop_camera_blend = 1.0
 	game.camera_rig.global_position = game.player.global_position + Vector3.UP * game._camera_pivot_height()
-	game.player.set_physics_process(true)
+	game.camera_arm.spring_length = Foundation.ROOFTOP_CAMERA_FOLLOW_DISTANCE
+	game.camera_arm.rotation.x = game._effective_camera_pitch()
+	game._update_camera_framing()
+	# Hold the camera and player still while projecting colored pixel probes;
+	# the roof's camera profile otherwise moves during projection.
+	game.set_process(false)
+	game.player.set_physics_process(false)
 	game.hud._root.visible = true
 	game._boss_enemy.global_position = player_position + Vector3(3.0, 0.05, 5.0)
 	game._update_boss_locator()
