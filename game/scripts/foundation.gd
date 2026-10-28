@@ -1,6 +1,7 @@
 extends Node3D
 
 const BURNING_HORIZON := preload("res://scripts/burning_horizon.gd")
+const CONSTELLATION_SKYBOX_TEXTURE := preload("res://assets/environment/jesus_satan_constellation_skybox.png")
 const GAME_MUSIC := preload("res://assets/audio/menu_music.mp3")
 const PLAYER_SCENE := preload("res://scenes/player.tscn")
 const PLAYER_SCRIPT := preload("res://scripts/player_controller.gd")
@@ -214,10 +215,12 @@ func _enforce_rooftop_boundary() -> void:
 func _build_environment() -> void:
 	var world := WorldEnvironment.new()
 	var environment := Environment.new()
-	environment.background_mode = Environment.BG_COLOR if flashlight_visibility_enabled else Environment.BG_SKY
-	environment.sky = BURNING_HORIZON.make_sky()
-	if flashlight_visibility_enabled:
-		environment.background_color = Color.BLACK
+	environment.background_mode = Environment.BG_SKY
+	var panorama_material := PanoramaSkyMaterial.new()
+	panorama_material.panorama = CONSTELLATION_SKYBOX_TEXTURE
+	var panorama_sky := Sky.new()
+	panorama_sky.sky_material = panorama_material
+	environment.sky = panorama_sky
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	environment.ambient_light_color = Color.WHITE if flashlight_visibility_enabled else Color(0.43, 0.39, 0.40)
 	environment.ambient_light_energy = 0.72 if flashlight_visibility_enabled else 0.62
