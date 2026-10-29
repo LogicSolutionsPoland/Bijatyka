@@ -351,6 +351,11 @@ func _test_elevator_ground_wave() -> void:
 			break
 	check(director._live.size() == 13 and director._initial_population_pending == 0,
 		"the budgeted ground wave fills all thirteen slots without a visible birth")
+	for index in range(5, positions.size()):
+		var horizontal := positions[index] - player.global_position
+		horizontal.y = 0.0
+		check(horizontal.length() >= 34.0 and horizontal.length() <= 45.0,
+			"ground wave arrives close enough to reach the player during its opening rush")
 	for at in positions:
 		check(director.is_concealed(at), "every ground wave member starts concealed")
 	elevator.rider_arrived.emit(&"ground")

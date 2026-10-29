@@ -23,6 +23,8 @@ var player: FoundationPlayer
 var camera: Camera3D
 var population_limit := 5
 var spawn_distance := 50.0
+var initial_spawn_min_distance := INITIAL_SPAWN_MIN_DISTANCE
+var initial_spawn_max_distance := INITIAL_SPAWN_MAX_DISTANCE
 var visibility_radius := 30.0
 var blocked_boxes: Array[AABB] = []
 var last_candidate_count := 0
@@ -117,15 +119,15 @@ func _sample_candidate() -> Vector3:
 
 func _sample_initial_candidate() -> Vector3:
 	# Start with a full 360-degree annulus so the opening invasion is already
-	# distributed around the arena. Its 36–64 m band stays concealed and within
-	# the zombie AI's 70 m active radius.
+	# distributed around the arena. The default 36–64 m band stays concealed
+	# and within the zombie AI's 70 m active radius.
 	_initial_sample_index += 1
 	var index := float(_initial_sample_index)
 	var angle := TAU * fmod(index * 0.61803398875, 1.0)
 	var radial_fraction := fmod(index * 0.7548776662466927, 1.0)
 	var radius_squared := lerpf(
-		INITIAL_SPAWN_MIN_DISTANCE * INITIAL_SPAWN_MIN_DISTANCE,
-		INITIAL_SPAWN_MAX_DISTANCE * INITIAL_SPAWN_MAX_DISTANCE,
+		initial_spawn_min_distance * initial_spawn_min_distance,
+		initial_spawn_max_distance * initial_spawn_max_distance,
 		radial_fraction
 	)
 	var radius := sqrt(radius_squared)

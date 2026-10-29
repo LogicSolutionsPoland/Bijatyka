@@ -702,6 +702,10 @@ func _on_elevator_rider_arrived(floor: StringName) -> void:
 	if not _performance_scenario.is_empty():
 		return
 	spawn_director.population_limit = GROUND_ZOMBIE_HORDE_SIZE
+	# Bring this new wave into the fight during its 4.5 s opening assault,
+	# while keeping every visual envelope outside the 30 m culling edge.
+	spawn_director.initial_spawn_min_distance = 34.0
+	spawn_director.initial_spawn_max_distance = 45.0
 	# Existing rooftop zombies count toward the wave. The remaining slots use
 	# the concealed all-around opening sampler, capped at two births per tick.
 	spawn_director.request_initial_population()
@@ -941,6 +945,8 @@ func stop_performance_scenario() -> void:
 		if enemy is FoundationEnemy and not enemy.is_boss:
 			enemy.queue_free()
 	spawn_director.population_limit = GROUND_ZOMBIE_HORDE_SIZE if _ground_wave_started else ZOMBIE_HORDE_SIZE
+	spawn_director.initial_spawn_min_distance = 34.0 if _ground_wave_started else CONCEALED_SPAWN.INITIAL_SPAWN_MIN_DISTANCE
+	spawn_director.initial_spawn_max_distance = 45.0 if _ground_wave_started else CONCEALED_SPAWN.INITIAL_SPAWN_MAX_DISTANCE
 	_performance_scenario = ""
 	# Restore the active floor's ordinary population with a concealed map spread.
 	seed(int(Time.get_ticks_usec() & 0x7fffffff))
