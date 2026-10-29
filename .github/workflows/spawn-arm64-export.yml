@@ -31,7 +31,7 @@ jobs:
       - name: Verify spawn, controls, and camera
         run: |
           set -euo pipefail
-          for suite in test_runner concealed_spawn_test flashlight_visibility_test burning_horizon_test; do
+          for suite in test_runner concealed_spawn_test flashlight_visibility_test flashlight_enemy_reveal_test burning_horizon_test; do
             godot --headless --path game --script "res://tests/$suite.gd" 2>&1 | tee "$RUNNER_TEMP/$suite.log"
             grep -q 'PASS:' "$RUNNER_TEMP/$suite.log"
             if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/$suite.log"; then exit 1; fi
@@ -55,7 +55,8 @@ jobs:
           unzip -Z1 "$apk" > "$RUNNER_TEMP/apk-files.txt"
           for entry in lib/arm64-v8a/libgodot_android.so assets/project.binary \
             assets/scripts/concealed_spawn.gdc assets/scripts/foundation.gdc \
-            assets/scripts/starting_elevator.gdc assets/scripts/player_controller.gdc; do
+            assets/scripts/starting_elevator.gdc assets/scripts/player_controller.gdc \
+            assets/scripts/flashlight_enemy_reveal.gdc; do
             grep -Fxq "$entry" "$RUNNER_TEMP/apk-files.txt"
             test "$(unzip -p "$apk" "$entry" | wc -c)" -gt 0
           done

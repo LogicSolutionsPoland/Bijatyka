@@ -172,6 +172,7 @@ func _run() -> void:
 	_check(Foundation.ZOMBIE_HORDE_SIZE == 5 and Foundation.ZOMBIE_PERFORMANCE_CAPACITY == 200, "game population remains 5 with 200-zombie debug-only stress capacity")
 	_check(game.burning_horizon.get_child_count() == 4, "Burning Horizon remains present while masked")
 	_check(game._boss_enemy != null and game._boss_enemy.hp > 0, "boss simulation remains independent from flashlight visibility")
+	_check(manager._tracked.has(game._boss_enemy.get_instance_id()), "boss is registered for the same whole-body flashlight reveal")
 	_check(is_equal_approx(Foundation.MOBILE_3D_RENDER_SCALE, 0.50), "mobile performance preset starts at half-resolution 3D")
 	if OS.is_debug_build() and game.performance_diagnostics != null:
 		var local_lights := game.find_children("*", "OmniLight3D", true, false)

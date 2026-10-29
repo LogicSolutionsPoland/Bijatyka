@@ -125,9 +125,9 @@ static func add_screen_pass(camera: Camera3D, engine_normals := false) -> Shader
 	quad.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var m := ShaderMaterial.new()
 	m.shader = load(shader_for_screen(engine_normals))
-	# FlashlightVisibilityComposite uses priority 127. Graphite must be applied
+	# FlashlightVisibilityComposite uses priority 126. Graphite must be applied
 	# to the lit scene first so its paper never brightens the dark half.
-	m.render_priority = 126
+	m.render_priority = 125
 	quad.material_override = m
 	camera.add_child(quad)
 	return m

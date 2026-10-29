@@ -1,6 +1,6 @@
 extends Node
 class_name FlashlightVisibilityManager
-## One shared screen mask and one cached classifier for the ordinary horde.
+## One shared screen mask and one cached classifier for all enemies.
 ## The shader handles the exact projected footprint; this manager prevents
 ## hidden actors from entering the detailed-rig and MultiMesh render queues.
 
@@ -156,7 +156,8 @@ func _build_composite() -> void:
 	quad.size = Vector2(2.0, 2.0)
 	_material = ShaderMaterial.new()
 	_material.shader = VISIBILITY_SHADER
-	_material.render_priority = 127
+	# Leave the last transparent priority for depth-tested, whole enemy bodies.
+	_material.render_priority = 126
 	_material.set_shader_parameter("oval_center_uv", OVAL_CENTER_UV)
 	_material.set_shader_parameter("oval_radius_uv", OVAL_RADIUS_UV)
 	_material.set_shader_parameter("oval_feather", OVAL_FEATHER)
@@ -211,7 +212,7 @@ func _classify_enemies() -> void:
 				var threshold := -SECTOR_HYSTERESIS_METERS if was_in_sector else SECTOR_HYSTERESIS_METERS
 				in_sector = offset.dot(aim_direction) >= threshold
 				_sector_visible[id] = in_sector
-			var on_screen := not enabled or _inside_camera_frustum(enemy)
+			var on_screen := not enabled or _body_intersects_beam(enemy)
 			var is_visible := not enabled or (in_sector and on_screen)
 			if is_visible:
 				band = Band.VISIBLE_CLOSE if distance_squared <= CLOSE_COMBAT_RADIUS * CLOSE_COMBAT_RADIUS else Band.VISIBLE_DISTANT
@@ -220,6 +221,8 @@ func _classify_enemies() -> void:
 		_bands[id] = band
 		if enemy.has_method("set_flashlight_render_visible"):
 			enemy.call("set_flashlight_render_visible", band == Band.VISIBLE_CLOSE or band == Band.VISIBLE_DISTANT)
+		if enemy.has_method("set_flashlight_full_body_visible"):
+			enemy.call("set_flashlight_full_body_visible", enabled and (band == Band.VISIBLE_CLOSE or band == Band.VISIBLE_DISTANT))
 		match band:
 			Band.VISIBLE_CLOSE: _counts.visible_close += 1
 			Band.VISIBLE_DISTANT: _counts.visible_distant += 1
@@ -227,14 +230,33 @@ func _classify_enemies() -> void:
 			Band.DARK_DISTANT: _counts.dark_distant += 1
 			Band.BEYOND_RENDER: _counts.beyond_render += 1
 
-func _inside_camera_frustum(enemy: Node3D) -> bool:
+func _body_intersects_beam(enemy: Node3D) -> bool:
 	if not is_instance_valid(camera) or not camera.is_current():
 		return true
-	var point := enemy.global_position + Vector3.UP * 1.0
-	if camera.is_position_behind(point):
+	var viewport_size := camera.get_viewport().get_visible_rect().size
+	if viewport_size.x < 1.0 or viewport_size.y < 1.0:
 		return false
-	var screen_position := camera.unproject_position(point)
-	return camera.get_viewport().get_visible_rect().grow(24.0).has_point(screen_position)
+	var boss := enemy is FoundationEnemy and (enemy as FoundationEnemy).is_boss
+	var height := 2.85 if boss else 2.1
+	var half_width := 0.80 if boss else 0.55
+	var side := camera.global_basis.x * half_width
+	# Head, torso, feet and both sides allow a partially lit body to qualify.
+	# Only an unobstructed sample inside the actual oval can start the reveal.
+	for level in [0.52, 0.92, 0.08]:
+		for lateral in [0.0, -1.0, 1.0]:
+			var point: Vector3 = enemy.global_position + Vector3.UP * height * level + side * lateral
+			if camera.is_position_behind(point):
+				continue
+			var uv := camera.unproject_position(point) / viewport_size
+			if get_oval_weight(uv) <= 0.01:
+				continue
+			var ray := PhysicsRayQueryParameters3D.create(camera.global_position, point)
+			ray.collision_mask = 1 | 4
+			if player is CollisionObject3D:
+				ray.exclude = [(player as CollisionObject3D).get_rid()]
+			if camera.get_world_3d().direct_space_state.intersect_ray(ray).is_empty():
+				return true
+	return false
 
 
 func _update_distant_teeth() -> void:

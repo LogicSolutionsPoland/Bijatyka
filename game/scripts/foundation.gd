@@ -136,7 +136,7 @@ func _ready() -> void:
 	_setup_performance_diagnostics()
 	_update_distance_visibility()
 	# Convert lit mesh materials, then draw the graphite pass before the
-	# flashlight's priority-127 black mask.
+	# flashlight's priority-126 black mask.
 	PENCIL.convert(self)
 	PENCIL.set_param(self, &"wash", 0.16)
 	var pencil_screen := PENCIL.add_screen_pass(camera)
@@ -682,6 +682,8 @@ func _spawn_enemy(kind: String, at: Vector3, boss_target: bool = false, high_det
 	add_child(enemy)
 	if enemy.is_boss:
 		_boss_enemy = enemy
+		flashlight_visibility_manager.track_enemy(enemy)
+		enemy.tree_exiting.connect(flashlight_visibility_manager.untrack_enemy.bind(enemy.get_instance_id()))
 		var label := Label3D.new()
 		label.text = "BOSS"
 		label.position = Vector3(0.0, 3.35, 0.0)

@@ -31,7 +31,9 @@ func configure(capacity: int) -> void:
 	var silhouette := _make_silhouette()
 	var animated_surface := ShaderMaterial.new()
 	animated_surface.shader = load("res://shaders/horde_crowd_animation.gdshader") as Shader
-	silhouette.surface_set_material(0, animated_surface)
+	# The shared classifier submits only enemies touching the flashlight beam.
+	# Keep their complete low-poly bodies visible across the mask edge too.
+	silhouette.surface_set_material(0, FoundationEnemy.FLASHLIGHT_REVEAL.material_for(animated_surface))
 	var batch := MultiMesh.new()
 	batch.transform_format = MultiMesh.TRANSFORM_3D
 	batch.use_colors = true

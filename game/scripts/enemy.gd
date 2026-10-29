@@ -12,6 +12,7 @@ const ENEMY_MODEL_YAW_OFFSET := PI
 const FIGHT_ANIMATION_BUILDER := preload("res://scripts/universal_base_enemy_combat.gd")
 const ENEMY_FIGHT_LIBRARY := &"enemy_combat"
 const SHADOW_POLICY := preload("res://scripts/shadow_policy.gd")
+const FLASHLIGHT_REVEAL := preload("res://scripts/flashlight_enemy_reveal.gd")
 const GRAVITY := 24.0
 const RENDER_RADIUS := 30.0
 const DETAILED_RADIUS := 18.0
@@ -60,6 +61,7 @@ var _attack_latched := false
 var _lod_band := -1
 var _full_animation_selected := false
 var _flashlight_render_visible := true
+var _flashlight_full_body_visible := false
 var combat_target: Node3D
 var _decision_time := 0.0
 var _wander_time := 0.0
@@ -337,6 +339,9 @@ func _adopt_detailed_model(model: Node3D) -> void:
 			_animation_player.animation_finished.connect(_on_animation_finished)
 	if is_boss:
 		_apply_variant_overlay()
+	# Style newly acquired and reused rigs before selecting their reveal material.
+	Pencil.convert(model)
+	_update_flashlight_body_materials()
 	SHADOW_POLICY.disable_in_tree(model)
 	set_quality_shadow_enabled(_quality_shadows_enabled)
 
@@ -344,6 +349,8 @@ func _release_detailed_model() -> void:
 	if _model == null:
 		return
 	var model := _model
+	for mesh in _base_visual_meshes:
+		FLASHLIGHT_REVEAL.set_mesh_revealed(mesh, false)
 	if _animation_player != null:
 		_animation_player.stop()
 		_animation_player.speed_scale = 1.0
@@ -614,6 +621,16 @@ func set_flashlight_render_visible(is_visible: bool) -> void:
 		return
 	_flashlight_render_visible = is_visible
 	_update_visual_visibility()
+
+func set_flashlight_full_body_visible(is_visible: bool) -> void:
+	if _flashlight_full_body_visible == is_visible:
+		return
+	_flashlight_full_body_visible = is_visible
+	_update_flashlight_body_materials()
+
+func _update_flashlight_body_materials() -> void:
+	for mesh in _base_visual_meshes:
+		FLASHLIGHT_REVEAL.set_mesh_revealed(mesh, _flashlight_full_body_visible)
 
 func _set_full_animation_selected(selected: bool) -> void:
 	if is_boss:
