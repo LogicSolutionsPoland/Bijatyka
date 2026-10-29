@@ -100,11 +100,11 @@ void fragment() {
 		}
 		ALBEDO = vec3(0.68, 0.80, 1.0);
 		ALPHA = clamp(air_glow * 3.0, 0.0, 0.68);
-		return;
+	} else {
+		// Increase the shaft's contrast in the blackout while preserving the
+		// screen-mask falloff on lit surfaces.
+		float shaft_strength = clamp(air_glow * 2.0, 0.0, 0.50);
+		ALPHA = 1.0 - illuminated_weight * (1.0 - shaft_strength);
+		ALBEDO = vec3(0.72, 0.80, 0.92) * shaft_strength / max(ALPHA, 0.001);
 	}
-	// Increase the shaft's contrast in the blackout while preserving the
-	// screen-mask falloff on lit surfaces.
-	float shaft_strength = clamp(air_glow * 2.0, 0.0, 0.50);
-	ALPHA = 1.0 - illuminated_weight * (1.0 - shaft_strength);
-	ALBEDO = vec3(0.72, 0.80, 0.92) * shaft_strength / max(ALPHA, 0.001);
 }
