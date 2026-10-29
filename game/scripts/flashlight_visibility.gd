@@ -14,6 +14,7 @@ enum Band {
 
 const VISIBILITY_SHADER := preload("res://shaders/flashlight_visibility.gdshader")
 const BEAM_VOLUME_SHADER := preload("res://shaders/flashlight_beam_volume.gdshader")
+const BEAM_SECTIONS_SHADER := preload("res://shaders/flashlight_beam_sections.gdshader")
 const DISTANT_TEETH_OVERLAY := preload("res://scripts/distant_zombie_teeth.gd")
 const MAX_RADIUS := 30.0
 const BRIGHT_RADIUS := 22.0
@@ -214,6 +215,7 @@ func _build_beam_light() -> void:
 	spotlight.shadow_enabled = false
 	player.add_child(spotlight)
 	_build_visible_beam_volume()
+	_build_visible_beam_sections()
 
 func _build_visible_beam_volume() -> void:
 	var material := ShaderMaterial.new()
@@ -246,6 +248,60 @@ func _build_visible_beam_volume() -> void:
 		var sheet_basis := Basis(Vector3.BACK, azimuth) * Basis(Vector3.RIGHT, PI * 0.5)
 		sheet.transform = Transform3D(sheet_basis, Vector3(0.0, 0.0, -MAX_RADIUS * 0.5))
 		spotlight.add_child(sheet)
+
+
+func _build_visible_beam_sections() -> void:
+	var material := ShaderMaterial.new()
+	material.shader = BEAM_SECTIONS_SHADER
+	material.render_priority = 127
+	material.set_shader_parameter("beam_color", Color(0.72, 0.84, 1.0))
+	material.set_shader_parameter("section_opacity", 0.075)
+	material.set_shader_parameter("beam_range", MAX_RADIUS)
+	material.set_shader_parameter("fade_end_start", 24.0)
+
+	# Camera-facing sections expose scattering from the third-person view,
+	# which follows the beam and sees longitudinal sheets nearly edge-on.
+	var vertices := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	var indices := PackedInt32Array()
+	for distance in [4.0, 7.0, 10.0, 13.0, 16.0, 19.0, 22.0, 25.0, 28.0]:
+		var radius := distance * BEAM_TANGENT
+		var base := vertices.size()
+		vertices.append_array(PackedVector3Array([
+			Vector3(-radius, -radius, -distance),
+			Vector3(radius, -radius, -distance),
+			Vector3(radius, radius, -distance),
+			Vector3(-radius, radius, -distance),
+		]))
+		uvs.append_array(PackedVector2Array([
+			Vector2(0.0, 0.0), Vector2(1.0, 0.0),
+			Vector2(1.0, 1.0), Vector2(0.0, 1.0),
+		]))
+		indices.append_array(PackedInt32Array([
+			base, base + 1, base + 2,
+			base, base + 2, base + 3,
+		]))
+
+	var arrays: Array = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = vertices
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	arrays[Mesh.ARRAY_INDEX] = indices
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+
+	var sections := MeshInstance3D.new()
+	sections.name = "PlayerFlashlightBeamSections"
+	sections.mesh = mesh
+	sections.material_override = material
+	sections.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var maximum_width := MAX_RADIUS * BEAM_TANGENT
+	sections.custom_aabb = AABB(
+		Vector3(-maximum_width, -maximum_width, -MAX_RADIUS + 1.9),
+		Vector3(maximum_width * 2.0, maximum_width * 2.0, MAX_RADIUS - 3.9)
+	)
+	spotlight.add_child(sections)
+
 
 func _upload_shader_parameters() -> void:
 	if not is_instance_valid(player):
