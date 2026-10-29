@@ -103,7 +103,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Bijatyka-boss-flashlight-mask-frames
-          path: build/flashlight_probe/*.png
+          path: game/build/flashlight_probe/*.png
           if-no-files-found: ignore
 
       - name: Check zombie animation import and state connections
