@@ -1,0 +1,185 @@
+name: Bijatyka performance validation
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+      - 'codex/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: godot-validation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Import, tests, and playable scene smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Godot 4.7.2
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+
+      - name: Import Godot project and assets
+        run: |
+          set -o pipefail
+          godot --headless --editor --path game --import --quit 2>&1 | tee "$RUNNER_TEMP/godot-import.log"
+          if grep -E "SCRIPT ERROR:|ERROR: Failed to load" "$RUNNER_TEMP/godot-import.log"; then exit 1; fi
+
+      - name: Measure reused runtime combat effects
+        run: |
+          set -o pipefail
+          godot --headless --path game --script res://tests/runtime_creation_benchmark.gd 2>&1 | tee "$RUNNER_TEMP/runtime-creation-benchmark.log"
+          grep -q "PASS: runtime pooled effect benchmark" "$RUNNER_TEMP/runtime-creation-benchmark.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/runtime-creation-benchmark.log"; then exit 1; fi
+
+      - name: Run gameplay and controls checks
+        run: |
+          set -o pipefail
+          godot --headless --path game --script res://tests/test_runner.gd 2>&1 | tee "$RUNNER_TEMP/gameplay-tests.log"
+          grep -q "PASS: " "$RUNNER_TEMP/gameplay-tests.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/gameplay-tests.log"; then exit 1; fi
+
+      - name: Check player martial animation and hit synchronization
+        run: |
+          set -o pipefail
+          godot --headless --path game --script res://tests/player_animation_test.gd 2>&1 | tee "$RUNNER_TEMP/player-animation-tests.log"
+          grep -q "PASS: player martial animation" "$RUNNER_TEMP/player-animation-tests.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/player-animation-tests.log"; then exit 1; fi
+
+      - name: Check current Universal Base player rig and material budget
+        run: |
+          set -o pipefail
+          godot --headless --path game --script res://tests/player_character_quality_test.gd 2>&1 | tee "$RUNNER_TEMP/player-character-quality.log"
+          grep -q "PASS: current Universal Base player quality" "$RUNNER_TEMP/player-character-quality.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/player-character-quality.log"; then exit 1; fi
+
+      - name: Capture current player in-game views
+        run: |
+          set -o pipefail
+          xvfb-run -a -s "-screen 0 1600x1000x24" env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/player_character_capture.gd 2>&1 | tee "$RUNNER_TEMP/player-character-captures.log"
+          grep -q "CAPTURED_PLAYER_VIEWS=" "$RUNNER_TEMP/player-character-captures.log"
+          for view in front rear movement punch kick; do test -s "build/character_views/$view.png"; done
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/player-character-captures.log"; then exit 1; fi
+      - name: Upload current player screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bijatyka-Universal-Base-player-views
+          path: build/character_views/*.png
+          if-no-files-found: error
+
+      - name: Check flashlight sector, camera framing, and aim controls
+        run: |
+          set -o pipefail
+          godot --headless --path game --script res://tests/flashlight_visibility_test.gd 2>&1 | tee "$RUNNER_TEMP/flashlight-visibility-tests.log"
+          grep -q "PASS: flashlight visibility and camera" "$RUNNER_TEMP/flashlight-visibility-tests.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/flashlight-visibility-tests.log"; then exit 1; fi
+
+      - name: Check whole enemy reveal and Compatibility silhouette pixels
+        run: |
+          set -euo pipefail
+          godot --headless --path game --script res://tests/flashlight_enemy_reveal_test.gd 2>&1 | tee "$RUNNER_TEMP/flashlight-enemy-reveal.log"
+          grep -q "PASS: flashlight whole enemy reveal" "$RUNNER_TEMP/flashlight-enemy-reveal.log"
+          xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/flashlight_enemy_render_probe.gd 2>&1 | tee "$RUNNER_TEMP/flashlight-enemy-pixels.log"
+          grep -q "PASS: flashlight whole enemy Compatibility pixels" "$RUNNER_TEMP/flashlight-enemy-pixels.log"
+          xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/flashlight_boss_render_probe.gd 2>&1 | tee "$RUNNER_TEMP/flashlight-boss-pixels.log"
+          grep -q "PASS: skinned boss flashlight silhouette" "$RUNNER_TEMP/flashlight-boss-pixels.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/flashlight-enemy-reveal.log" "$RUNNER_TEMP/flashlight-enemy-pixels.log" "$RUNNER_TEMP/flashlight-boss-pixels.log"; then exit 1; fi
+
+      - name: Check zombie animation import and state connections
+        run: |
+          set -o pipefail
+          godot --headless --path game --script res://tests/zombie_animation_test.gd 2>&1 | tee "$RUNNER_TEMP/zombie-animation-tests.log"
+          grep -q "PASS: zombie animation" "$RUNNER_TEMP/zombie-animation-tests.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/zombie-animation-tests.log"; then exit 1; fi
+
+      - name: Check current enemy attack animations and boss rig
+        run: |
+          set -o pipefail
+          godot --headless --path game --script res://tests/enemy_attack_animation_test.gd 2>&1 | tee "$RUNNER_TEMP/enemy-attack-animation-tests.log"
+          grep -q "PASS: enemy attack animation" "$RUNNER_TEMP/enemy-attack-animation-tests.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/enemy-attack-animation-tests.log"; then exit 1; fi
+
+      - name: Check runtime effect pools and zombie replacement safety
+        run: |
+          set -o pipefail
+          godot --headless --path game --script res://tests/runtime_creation_test.gd 2>&1 | tee "$RUNNER_TEMP/runtime-pooling-tests.log"
+          grep -q "PASS: runtime effect pooling" "$RUNNER_TEMP/runtime-pooling-tests.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/runtime-pooling-tests.log"; then exit 1; fi
+
+      - name: Check concealed spawning and assault handoff
+        run: |
+          set -o pipefail
+          godot --headless --path game --script res://tests/concealed_spawn_test.gd 2>&1 | tee "$RUNNER_TEMP/concealed-spawn-tests.log"
+          grep -q "PASS: concealed spawn" "$RUNNER_TEMP/concealed-spawn-tests.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/concealed-spawn-tests.log"; then exit 1; fi
+
+      - name: Check fog visibility tiers and horde performance
+        run: |
+          set -o pipefail
+          godot --headless --path game --script res://tests/horde_performance_test.gd 2>&1 | tee "$RUNNER_TEMP/horde-performance-tests.log"
+          grep -q "PASS: horde performance" "$RUNNER_TEMP/horde-performance-tests.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/horde-performance-tests.log"; then exit 1; fi
+
+      - name: Check resident zombie rig budget and death lifecycle
+        run: |
+          set -o pipefail
+          godot --headless --path game --script res://tests/rig_budget_lifecycle_test.gd 2>&1 | tee "$RUNNER_TEMP/rig-budget-tests.log"
+          grep -q "PASS: resident rig and death lifecycle" "$RUNNER_TEMP/rig-budget-tests.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/rig-budget-tests.log"; then exit 1; fi
+
+      - name: Run 15, 20, 69, 100, and 200 zombie headless comparison scenarios
+        run: |
+          set -o pipefail
+          godot --headless --path game --script res://tests/horde_scenario_benchmark.gd 2>&1 | tee "$RUNNER_TEMP/horde-scenario-benchmark.log"
+          grep -q "PASS: horde scenario benchmark" "$RUNNER_TEMP/horde-scenario-benchmark.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/horde-scenario-benchmark.log"; then exit 1; fi
+
+      - name: Check Burning Horizon integration
+        run: |
+          set -o pipefail
+          godot --headless --path game --script res://tests/burning_horizon_test.gd 2>&1 | tee "$RUNNER_TEMP/burning-horizon-tests.log"
+          grep -q "PASS: burning horizon integration" "$RUNNER_TEMP/burning-horizon-tests.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/burning-horizon-tests.log"; then exit 1; fi
+
+      - name: Check shared environment materials and visual invariants
+        run: |
+          set -o pipefail
+          godot --headless --path game --script res://tests/environment_render_test.gd 2>&1 | tee "$RUNNER_TEMP/environment-material-tests.log"
+          grep -q "PASS: environment materials and visual invariants" "$RUNNER_TEMP/environment-material-tests.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/environment-material-tests.log"; then exit 1; fi
+
+      - name: Compile Compatibility shaders and sample software-rendered scene
+        run: |
+          set -o pipefail
+          xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/environment_render_probe.gd 2>&1 | tee "$RUNNER_TEMP/environment-render-probe.log"
+          grep -q "RENDERED_DESKTOP_ENVIRONMENT_SAMPLE" "$RUNNER_TEMP/environment-render-probe.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/environment-render-probe.log"; then exit 1; fi
+
+      - name: Verify flashlight mask pixels in Compatibility software rendering
+        run: |
+          set -o pipefail
+          xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/flashlight_render_probe.gd 2>&1 | tee "$RUNNER_TEMP/flashlight-render-probe.log"
+          grep -q "PASS: flashlight Compatibility render mask" "$RUNNER_TEMP/flashlight-render-probe.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/flashlight-render-probe.log"; then exit 1; fi
+          xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/flashlight_beam_volume_test.gd 2>&1 | tee "$RUNNER_TEMP/flashlight-beam-volume.log"
+          grep -q "PASS: visible flashlight air beam" "$RUNNER_TEMP/flashlight-beam-volume.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/flashlight-beam-volume.log"; then exit 1; fi
+
+      - name: Smoke-run playable scene for 600 frames
+        run: |
+          set -o pipefail
+          godot --headless --fixed-fps 60 --path game --quit-after 600 2>&1 | tee "$RUNNER_TEMP/godot-scene-smoke.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/godot-scene-smoke.log"; then exit 1; fi

@@ -1,0 +1,81 @@
+# Retribution: Mark of Sin — Thornbound Trial
+
+A separate Godot 4.7.2 Compatibility renderer project for a playable third-person combat foundation. The original Retribution repository is not included or restructured by this project.
+
+## Run
+
+Open `game/project.godot` in Godot 4.7.2, or run from a shell:
+
+```sh
+godot --path game
+```
+
+The test runner is headless and dependency-free:
+
+```sh
+godot --headless --editor --path game --quit
+godot --headless --path game --script res://tests/test_runner.gd
+```
+
+## Controls
+
+| Action | Keyboard | Gamepad | Touch |
+|---|---|---|---|
+| Move | WASD / arrows | Left stick | Drag on left half |
+| Camera | Drag on right half | Right stick | Swipe on right half |
+| Left punch | — | LB / L1 | Left PUNCH |
+| Right punch | J | RB / R1 | Right PUNCH |
+| Left / right kick | K (right) | LT / L2, RT / R2 | Left / right KICK |
+| Blast | — | Y / Triangle (Fire school) | — |
+| Jump | Space | A / Cross | JUMP |
+| Dash | Shift | X / Square | DASH |
+| Cast selected spell | L | B / Circle | Use the selected MAGIC slot |
+| Magic slots 1 / 2 / 3 / 4 | — | D-pad Up / Right / Down / Left | Four direct MAGIC slots |
+| Cycle unlocked spells | U | — | Use the desired MAGIC slot directly |
+
+Xbox X / PlayStation Square performs dash, while B / Circle casts the selected unlocked spell. D-pad directions cast and select their corresponding spell slots. LB / L1 performs left punch, RB / R1 performs right punch, LT / L2 performs left kick, and RT / R2 performs right kick. Y / Triangle casts Blast directly after the Fire aura is unlocked; it costs 15 magic, deals 20 fire damage, and applies the existing burn effect without changing the selected B spell. Both trigger axes calibrate their resting value per controller and poll it each frame, so L2 and R2 work with both zero-rest and negative-rest axis conventions. Press and release thresholds make a tap attack once and a hold repeat at the melee cadence.
+
+The touch buttons form two columns at the screen edges, in this exact order:
+
+| Left side | Right side |
+|---|---|
+| PUNCH (left arm) | PUNCH (right arm) |
+| KICK (left leg) | KICK (right leg) |
+| MAGIC (slot 1) | MAGIC (slot 2) |
+| MAGIC (slot 3) | MAGIC (slot 4) |
+| DASH | JUMP |
+
+There is no on-screen analog stick: dragging on the left half moves, while swiping on the right half rotates the camera. The gamepad left stick moves and the right stick rotates the camera. Its buttons and trigger use Godot's logical mappings and feed the same HUD action signal as touch.
+Magic slots fill in the order distinct spells are unlocked through aura choices.
+All four stay visible while locked; unlocked slots show the spell name below MAGIC.
+Spells stay in their slots through normal RAGE decay and all slots lock again on a soul reset.
+A touch or gamepad tap triggers one action immediately; holding a melee button repeats at 0.20-second intervals, up to five hit attempts per second. Jump, dash, and magic act only on a fresh press. Independent fingers or both sticks allow moving, looking, and attacking together. Gameplay input is blocked during aura selection and pause; release buttons before pressing them again after a menu.
+
+Each attack press starts exactly one action. The player has four timed, full-body skeletal clips: left and right punches, plus left and right kicks. Every clip includes a chamber, contact, follow-through, and guarded recovery; the contact marker matches that move's existing hit timing. Punch and kick presses now play a bright, animated sweep across the center of the screen, so the move is visible even when it misses. A confirmed hit adds an expanding emissive burst at the target. The character keeps the model's imported idle animation between attacks. Holding a melee key repeats at the same cadence; every hit remains a distinct manual attack.
+
+Both punch clips extend the striking fist along the player's forward direction at contact, including after the player turns. The unanimated fallback punch pose uses the same direction. The headless rig check measures each wrist relative to its shoulder and player heading.
+
+The imported Thornbound rig has no finger joints, so the existing hand meshes remain unchanged.
+
+The zombie rig is turned to face the same forward direction used by its approach and attack logic.
+
+The camera uses a close right-shoulder viewpoint. The follow pivot sits **1.20 m** above the player's ground origin, with **2.5 m** spring-arm reach, a **16° downward** initial pitch and **66°** vertical field of view. The character stays to the left of screen center while the open center looks down the forward combat lane. The camera smoothly follows facing direction, the spring arm retracts near walls, and it ignores the player's own collision body. Heights are absolute offsets from the player origin, not an extra 1.5 m on top of another pivot.
+
+## Carried-forward rules and current scope
+
+- The Thornbound mobile GLB player and rigged LOD1 zombie were copied from user-supplied Retribution assets; no music is used.
+- The endless invasion keeps up to 15 ordinary zombies active in normal play. Defeated shamblers are replaced through the concealed 50 m spawn flow, while the existing 30 m visibility radius and distant-animation throttling keep the crowd lightweight. The 200-zombie capacity remains available only in the development stress tests.
+- The yard's enemies have telegraphed windups. Ordinary zombies can interrupt, slow, or lengthen recovery but never reduce HP. The boss can damage the player.
+- Shadows are disabled on every scene light, imported player/enemy model, and procedural mesh. Distance-based enemy detail never switches them back on, and the HUD notice has no text shadow.
+- Jump landing impacts can hit and damage enemies. Dash uses the previously selected 15 m mobility distance.
+- RAGE begins at zero, only confirmed positive damage adds RAGE, it continuously decays, missed attacks do not count, aura choices occur at 10/30/50/70/90, aura layers gate on current RAGE, and unlocked spells persist until a soul reset. Condemnation depends on the run maximum and is one-shot.
+- The provisional values (+3 per effective hit, 1 per second decay, cap 1000, threshold `max(3, 25% of run maximum)`) are source-design defaults, not approved balance. They are configurable in `rage_progression.gd`.
+- The selected aura unlocks the matching existing magic school (`light`, `judgment`, `fire`, `shadow`). The foundation keeps the existing spell costs, direct damage, healing, judgment stun, fire burn, and shadow slow/lifesteal behaviors, with solo energy regeneration and no spell cooldown.
+
+## Android
+
+The project uses the source-confirmed Godot 4.7.2 Compatibility renderer, ETC2/ASTC texture import, and ARM64 as the intended Android architecture. The Android export preset and package build are validated in GitHub Actions. Device performance has not been measured yet; no Android hardware result is claimed.
+
+Android starts at **0.67x 3D render scale** with bilinear upscaling. The HUD stays crisp at native resolution. In a debug APK, hold the empty top-right corner for 1.5 seconds to show FPS and compare 3D render scale or the fullscreen flashlight mask. See `docs/mobile-fps-recovery-20261025.md` for the on-phone comparison.
+
+The test build uses the Bijatyka app name and package ID so it installs beside earlier Retribution foundation APKs signed with a different debug key.

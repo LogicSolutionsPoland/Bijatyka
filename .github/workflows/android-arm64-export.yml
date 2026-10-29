@@ -1,0 +1,185 @@
+name: Android ARM64 APK export (manual)
+run-name: Android ARM64 APK export — ${{ github.ref_name }}
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - game/**
+      - project.godot
+      - .github/workflows/android-arm64-export.yml
+  push:
+    branches:
+      - codex/arena-map-apk-export-20261025
+      - codex/fix-mobile-5fps-20261025
+      - codex/mobile-performance-apk-export-20261026
+      - codex/mobile-zombies-5-fight-animations-20261026
+      - codex/character-quality-slice-20261026
+      - codex/universal-base-characters-integration-20261027
+      - codex/player-attack-animation-fix-20261027
+      - codex/enemy-attack-animation-fix-20261027
+      - codex/environment-nature-zasoby-20261027
+      - codex/fight-scene-presentation-fix-20261027
+      - codex/flashlight-reference-oval-20261027
+      - codex/rooftop-burning-city-20261028
+      - codex/roof-spawn-cage-30cm-20261029
+
+permissions:
+  contents: read
+
+jobs:
+  export-android-arm64:
+    name: Export and upload Android ARM64 APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Godot 4.7.2 and Android export templates
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: true
+
+      - name: Verify Android build tools
+        run: |
+          set -eu
+          test -n "${ANDROID_HOME:-}"
+          test -d "$ANDROID_HOME"
+          java -version
+          godot --version
+
+      - name: Import Godot project and assets
+        run: |
+          set -o pipefail
+          godot --headless --editor --path game --import --quit 2>&1 | tee "$RUNNER_TEMP/android-import.log"
+          if grep -E "SCRIPT ERROR:|ERROR: Failed to load" "$RUNNER_TEMP/android-import.log"; then exit 1; fi
+
+      - name: Validate enemy and player animation and controls
+        run: |
+          set -euo pipefail
+          for suite in environment_render_test enemy_attack_animation_test zombie_animation_test player_animation_test test_runner; do
+            godot --headless --path game --script "res://tests/$suite.gd" 2>&1 | tee "$RUNNER_TEMP/$suite.log"
+            grep -q 'PASS:' "$RUNNER_TEMP/$suite.log"
+            if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/$suite.log"; then exit 1; fi
+          done
+          godot --headless --fixed-fps 60 --path game --quit-after 240 2>&1 | tee "$RUNNER_TEMP/attack-scene-smoke.log"
+          if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/attack-scene-smoke.log"; then exit 1; fi
+
+      - name: Verify flashlight oval and Compatibility pixels
+        run: |
+          set -euo pipefail
+          godot --headless --path game --script res://tests/flashlight_visibility_test.gd 2>&1 | tee "$RUNNER_TEMP/flashlight-visibility.log"
+          grep -q 'PASS: flashlight visibility and camera' "$RUNNER_TEMP/flashlight-visibility.log"
+          if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/flashlight-visibility.log"; then exit 1; fi
+          xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/flashlight_render_probe.gd 2>&1 | tee "$RUNNER_TEMP/flashlight-render.log"
+          grep -q 'PASS: flashlight Compatibility render mask' "$RUNNER_TEMP/flashlight-render.log"
+          if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/flashlight-render.log"; then exit 1; fi
+          xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/flashlight_beam_volume_test.gd 2>&1 | tee "$RUNNER_TEMP/flashlight-beam-volume.log"
+          grep -q 'PASS: visible flashlight air beam' "$RUNNER_TEMP/flashlight-beam-volume.log"
+          if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/flashlight-beam-volume.log"; then exit 1; fi
+
+      - name: Render player attack poses
+        run: |
+          set -euo pipefail
+          xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/player_attack_capture.gd 2>&1 | tee "$RUNNER_TEMP/player-attack-capture.log"
+          grep -q 'CAPTURED_PLAYER_ATTACKS=16' "$RUNNER_TEMP/player-attack-capture.log"
+          if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/player-attack-capture.log"; then exit 1; fi
+
+      - name: Render enemy attack poses
+        run: |
+          set -euo pipefail
+          xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/enemy_attack_capture.gd 2>&1 | tee "$RUNNER_TEMP/enemy-attack-capture.log"
+          grep -q 'CAPTURED_ENEMY_ATTACKS=48' "$RUNNER_TEMP/enemy-attack-capture.log"
+          if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/enemy-attack-capture.log"; then exit 1; fi
+
+      - name: Upload player attack review views
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bijatyka-player-attack-views
+          path: build/player_attack_views/*.png
+          if-no-files-found: error
+
+      - name: Upload enemy attack review views
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bijatyka-enemy-attack-views
+          path: build/enemy_attack_views/*.png
+          if-no-files-found: error
+
+      - name: Export Android ARM64 debug APK
+        if: ${{ success() || github.ref_name == 'codex/roof-spawn-cage-30cm-20261029' }}
+        run: |
+          set -o pipefail
+          mkdir -p build
+          preset="Android ARM64"
+          if [ "$GITHUB_REF_NAME" = "codex/fix-mobile-5fps-20261025" ]; then preset="Android ARM64 FPS Test"; fi
+          if [ "$GITHUB_REF_NAME" = "codex/mobile-performance-apk-export-20261026" ]; then preset="Android ARM64 Performance Test"; fi
+          godot --headless --path game --export-debug "$preset" "$GITHUB_WORKSPACE/build/Bijatyka-android-arm64.apk" 2>&1 | tee "$RUNNER_TEMP/android-export.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/android-export.log"; then exit 1; fi
+          test -s "$GITHUB_WORKSPACE/build/Bijatyka-android-arm64.apk"
+
+      - name: Verify architecture and packaged playable content
+        if: ${{ success() || github.ref_name == 'codex/roof-spawn-cage-30cm-20261029' }}
+        run: |
+          set -euo pipefail
+          apk="$GITHUB_WORKSPACE/build/Bijatyka-android-arm64.apk"
+          unzip -tqq "$apk"
+          unzip -Z1 "$apk" > "$RUNNER_TEMP/apk-files.txt"
+          for entry in \
+            lib/arm64-v8a/libgodot_android.so \
+            assets/project.binary \
+            assets/scripts/foundation.gdc \
+            assets/scripts/flashlight_visibility.gdc \
+            assets/scripts/enemy.gdc \
+            assets/scripts/horde_far_visuals.gdc \
+            assets/scripts/player_controller.gdc \
+            assets/scripts/mobile_hud.gdc \
+            assets/scripts/performance_diagnostics.gdc \
+            assets/scripts/combat_fx_pool.gdc \
+            assets/scripts/character_motion.gdc \
+            assets/scripts/universal_base_motion.gdc \
+            assets/scripts/universal_base_combat.gdc \
+            assets/scripts/universal_base_enemy_combat.gdc \
+            assets/scripts/arena_map_upgrade.gdc \
+            assets/scenes/foundation.tscn.remap \
+            assets/scenes/player.tscn.remap \
+            assets/assets/characters/thornbound/Retribution_Player_Thornbound_Warrior_MOBILE.glb.import \
+            assets/assets/characters/universal_base/Universal_Base_Characters_Male.glb.import \
+            assets/assets/characters/universal_base/Universal_Base_Characters_Female.glb.import \
+            assets/assets/environment/nature/DeadTree_1.gltf.import \
+            assets/assets/environment/nature/DeadTree_3.gltf.import \
+            assets/assets/environment/nature/Rock_Medium_1.gltf.import \
+            assets/assets/environment/nature/Bush_Common.gltf.import \
+            assets/shaders/burning_horizon.gdshader \
+            assets/assets/environment/rooftop_burning_city.jpg.import \
+            assets/shaders/radial_ground.gdshader \
+            assets/shaders/flashlight_visibility.gdshader \
+            assets/shaders/flashlight_beam_sections.gdshader \
+            assets/shaders/horde_crowd_animation.gdshader \
+            assets/assets/audio/menu_music.mp3.import; do
+            grep -Fxq "$entry" "$RUNNER_TEMP/apk-files.txt"
+            test "$(unzip -p "$apk" "$entry" | wc -c)" -gt 0
+          done
+          if grep -Eq '^lib/(armeabi-v7a|x86|x86_64)/' "$RUNNER_TEMP/apk-files.txt"; then
+            echo 'Unexpected non-ARM64 native library in APK' >&2
+            exit 1
+          fi
+          aapt_bin="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
+          test -n "$aapt_bin"
+          package_name="org.logicsolutionspoland.bijatyka"
+          if [ "$GITHUB_REF_NAME" = "codex/fix-mobile-5fps-20261025" ]; then package_name="org.logicsolutionspoland.bijatyka.fpstest"; fi
+          if [ "$GITHUB_REF_NAME" = "codex/mobile-performance-apk-export-20261026" ]; then package_name="org.logicsolutionspoland.bijatyka.perftest2"; fi
+          "$aapt_bin" dump badging "$apk" | grep -q "package: name='$package_name'"
+
+      - name: Upload Android ARM64 APK artifact
+        if: ${{ success() || github.ref_name == 'codex/roof-spawn-cage-30cm-20261029' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bijatyka-android-arm64
+          path: build/Bijatyka-android-arm64.apk
+          if-no-files-found: error

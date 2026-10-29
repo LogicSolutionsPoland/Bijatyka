@@ -1,0 +1,39 @@
+name: Import Universal Animation Library Standard
+
+on:
+  push:
+    branches:
+      - codex/universal-animation-library-standard-assets
+    paths:
+      - .github/workflows/import-universal-animation-library.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  import-verified-assets:
+    name: Verify and commit Quaternius Standard sources
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out import branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Download official ZIP and verify every file
+        run: python3 tools/import_universal_animation_library.py
+
+      - name: Commit only verified source assets
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- third_party/universal_animation_library_standard/
+          if git diff --cached --quiet; then
+            echo "The exact source library is already present."
+          else
+            git commit -m "chore(assets): vendor Quaternius Universal Animation Library Standard"
+            git push origin HEAD:codex/universal-animation-library-standard-assets
+          fi

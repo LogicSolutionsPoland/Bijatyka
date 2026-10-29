@@ -1,0 +1,45 @@
+name: Bijatyka zombie tooth reflections validation
+
+on:
+  push:
+    branches:
+      - codex/zombie-teeth-flashlight-plus5m-sides3m-20261027
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  teeth:
+    name: Check reflection geometry and actual Compatibility pixels
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+      - name: Import game
+        run: |
+          set -o pipefail
+          godot --headless --editor --path game --import --quit 2>&1 | tee "$RUNNER_TEMP/import.log"
+          if grep -E 'SCRIPT ERROR:|ERROR: Failed to load' "$RUNNER_TEMP/import.log"; then exit 1; fi
+      - name: Verify flashlight and extended teeth geometry
+        run: |
+          set -o pipefail
+          godot --headless --path game --script res://tests/flashlight_visibility_test.gd 2>&1 | tee "$RUNNER_TEMP/teeth-range.log"
+          grep -q 'PASS: flashlight visibility and camera' "$RUNNER_TEMP/teeth-range.log"
+          if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/teeth-range.log"; then exit 1; fi
+      - name: Verify actual zombie glints and wall occlusion
+        run: |
+          set -o pipefail
+          godot --headless --path game --script res://tests/zombie_teeth_integration_test.gd 2>&1 | tee "$RUNNER_TEMP/teeth-integration.log"
+          grep -q 'PASS: zombie teeth tracked enemy integration' "$RUNNER_TEMP/teeth-integration.log"
+          if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/teeth-integration.log"; then exit 1; fi
+      - name: Verify tooth strokes render above darkness in GL Compatibility
+        run: |
+          set -o pipefail
+          xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/zombie_teeth_glint_render_probe.gd 2>&1 | tee "$RUNNER_TEMP/teeth-pixels.log"
+          grep -q 'PASS: zombie teeth Compatibility glint overlay' "$RUNNER_TEMP/teeth-pixels.log"
+          if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/teeth-pixels.log"; then exit 1; fi

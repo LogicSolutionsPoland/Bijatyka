@@ -1,0 +1,58 @@
+{
+  "name": "Universal Animation Library",
+  "edition": "Standard",
+  "publisher": "Quaternius",
+  "license": "CC0-1.0",
+  "official_source": "https://quaternius.itch.io/universal-animation-library",
+  "itch_upload_id": 17958403,
+  "archive_sha256": "cc73fc4e495b82958207316596317a3f40b9fa38065bde1027937452da537724",
+  "file_count": 9,
+  "total_bytes": 63648179,
+  "files": [
+    {
+      "path": "Godot_Setup.png",
+      "size": 499312,
+      "sha256": "8fde3e49385c3b3dc214bfe2bc61dde6f873a06f57cab9b245c8fc2543bc7496"
+    },
+    {
+      "path": "License.txt",
+      "size": 332,
+      "sha256": "6d01f55c6e4c49a2c9963e147e561945ae2c83958c8ca667d90a6bffdbfac061"
+    },
+    {
+      "path": "README.txt",
+      "size": 702,
+      "sha256": "ccd02718886b5a57f10f0a8911a38cfe10c36880e1d6dfa3445923fba32d2a72"
+    },
+    {
+      "path": "Unity/UAL1_Standard.fbx",
+      "size": 23754684,
+      "sha256": "21b32d912da3cb93426d974fb945e86f5b2e86970acd2ce89905e0fbf9f1dcc2"
+    },
+    {
+      "path": "Unity/UAL1_Standard_RM.fbx",
+      "size": 23767852,
+      "sha256": "5a5f5de6f18e9c91cdbc40eb26319ec85cc45070bc00965bc2737beb4b2984ea"
+    },
+    {
+      "path": "Unity_Setup.png",
+      "size": 237945,
+      "sha256": "1f9ac00f442c4342fae060150a2cfb5a825f7e3b6e8ffd8ce01044e4fe31f7c9"
+    },
+    {
+      "path": "Unreal-Godot/UAL1_Standard.glb",
+      "size": 7618436,
+      "sha256": "69591853d817488edaa8fd9bf8fc1d821eaeaf789f8627b3cd23b41c4ed67997"
+    },
+    {
+      "path": "Unreal-Godot/UAL1_Standard_RM.glb",
+      "size": 7620504,
+      "sha256": "be684571ed655a1b892c2c07e6e2aeca053b606c442d34004adaf1d944090d01"
+    },
+    {
+      "path": "Unreal_Setup.png",
+      "size": 148412,
+      "sha256": "c2c64e659943c634f538329ea0904f7902ab4194d0aaae77ac486d236171d00c"
+    }
+  ]
+}

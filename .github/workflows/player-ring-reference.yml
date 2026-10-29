@@ -1,0 +1,110 @@
+name: Player ring / cinematic combat Android validation
+
+on:
+  push:
+    branches:
+      - codex/ring-player-only-20261027
+      - codex/cinematic-zombie-chain-combat-20261027
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  player-ring-clips:
+    name: Validate rig, attack timing and enemy isolation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Godot 4.7.2
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: true
+      - name: Import source and animations
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --editor --path game --import --quit 2>&1 | tee "$RUNNER_TEMP/import.log"
+          if grep -E 'SCRIPT ERROR:|ERROR: Failed to load' "$RUNNER_TEMP/import.log"; then exit 1; fi
+      - name: Player rig, sixteen clips, timing, controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path game --script res://tests/player_animation_test.gd 2>&1 | tee "$RUNNER_TEMP/player.log"
+          grep -q 'PASS: player martial animation' "$RUNNER_TEMP/player.log"
+          if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/player.log"; then exit 1; fi
+      - name: Ten-second rehearsal on actual player skeleton
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path game --script res://tests/player_choreography_test.gd 2>&1 | tee "$RUNNER_TEMP/choreography.log"
+          grep -q 'PASS: ten-second player choreography' "$RUNNER_TEMP/choreography.log"
+          if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/choreography.log"; then exit 1; fi
+      - name: Preview rehearsal scene load
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path game --scene res://scenes/player_choreography_preview.tscn --quit-after 8 2>&1 | tee "$RUNNER_TEMP/preview.log"
+          if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/preview.log"; then exit 1; fi
+      - name: Existing enemy animation regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path game --script res://tests/enemy_attack_animation_test.gd 2>&1 | tee "$RUNNER_TEMP/enemy.log"
+          grep -q 'PASS:' "$RUNNER_TEMP/enemy.log"
+          if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/enemy.log"; then exit 1; fi
+      - name: Gameplay and gamepad regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path game --script res://tests/test_runner.gd 2>&1 | tee "$RUNNER_TEMP/gameplay.log"
+          grep -q 'PASS:' "$RUNNER_TEMP/gameplay.log"
+          if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/gameplay.log"; then exit 1; fi
+      - name: Cinematic chain real physics and flashlight regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path game --script res://tests/cinematic_chain_physics_test.gd 2>&1 | tee "$RUNNER_TEMP/chain.log"
+          grep -q 'PASS: cinematic zombie chain physics' "$RUNNER_TEMP/chain.log"
+          if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/chain.log"; then exit 1; fi
+      - name: Playable scene smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path game --quit-after 240 2>&1 | tee "$RUNNER_TEMP/smoke.log"
+          if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/smoke.log"; then exit 1; fi
+      - name: Build debug Android ARM64 APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d "$ANDROID_HOME"
+          mkdir -p build
+          godot --headless --path game --export-debug "Android ARM64" "$GITHUB_WORKSPACE/build/Bijatyka-Cinematic-Combat-ARM64.apk" 2>&1 | tee "$RUNNER_TEMP/export.log"
+          if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/export.log"; then exit 1; fi
+          test -s build/Bijatyka-Cinematic-Combat-ARM64.apk
+      - name: Check generated APK content and package
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=build/Bijatyka-Cinematic-Combat-ARM64.apk
+          unzip -tqq "$apk"
+          unzip -Z1 "$apk" > "$RUNNER_TEMP/apk-files.txt"
+          for entry in lib/arm64-v8a/libgodot_android.so assets/project.binary assets/scripts/player_controller.gdc assets/scripts/player_ring_reference.gdc assets/scripts/player_choreography.gdc assets/scripts/player_choreography_preview.gdc assets/scenes/player_choreography_preview.tscn.remap assets/scripts/enemy.gdc assets/scenes/foundation.tscn.remap assets/assets/characters/universal_base/Universal_Base_Characters_Male.glb.import; do
+            grep -Fxq "$entry" "$RUNNER_TEMP/apk-files.txt"
+            test "$(unzip -p "$apk" "$entry" | wc -c)" -gt 0
+          done
+          if grep -Eq '^lib/(armeabi-v7a|x86|x86_64)/' "$RUNNER_TEMP/apk-files.txt"; then exit 1; fi
+          aapt_bin="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
+          "$aapt_bin" dump badging "$apk" | grep -q "package: name='org.logicsolutionspoland.bijatyka'"
+          sha256sum "$apk"
+          ls -lh "$apk"
+      - name: Upload ready APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bijatyka-Cinematic-Combat-ARM64-APK
+          path: build/Bijatyka-Cinematic-Combat-ARM64.apk
+          if-no-files-found: error
+          retention-days: 30

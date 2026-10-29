@@ -1,0 +1,11 @@
+CC0 1.0 Universal (Public Domain Dedication)
+
+To the extent possible under law, Francisco Cidade has waived all copyright and
+related or neighboring rights to the Pencil shader and example project. You can
+copy, modify and distribute it, even for commercial purposes, without asking
+permission and without attribution (attribution is appreciated).
+
+The models in kenney/ are the Graveyard Kit by Kenney (www.kenney.nl), also CC0;
+see kenney/LICENSE.txt.
+
+Full legal text: https://creativecommons.org/publicdomain/zero/1.0/legalcode
