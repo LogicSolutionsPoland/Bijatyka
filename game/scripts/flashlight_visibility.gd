@@ -13,6 +13,7 @@ enum Band {
 }
 
 const VISIBILITY_SHADER := preload("res://shaders/flashlight_visibility.gdshader")
+const BEAM_VOLUME_SHADER := preload("res://shaders/flashlight_beam_volume.gdshader")
 const DISTANT_TEETH_OVERLAY := preload("res://scripts/distant_zombie_teeth.gd")
 const MAX_RADIUS := 30.0
 const BRIGHT_RADIUS := 22.0
@@ -208,10 +209,43 @@ func _build_beam_light() -> void:
 	spotlight.spot_range = MAX_RADIUS
 	spotlight.spot_angle = BEAM_HALF_ANGLE_DEGREES
 	spotlight.spot_attenuation = 1.4
-	# One unshadowed local light is affordable on Compatibility/mobile. The
-	# depth-limited screen pass stops the visible shaft at solid surfaces.
+	# One unshadowed local light lights surfaces; crossed 3D sheets below
+	# make its shaft visible in the air on Compatibility/mobile.
 	spotlight.shadow_enabled = false
 	player.add_child(spotlight)
+	_build_visible_beam_volume()
+
+func _build_visible_beam_volume() -> void:
+	var material := ShaderMaterial.new()
+	material.shader = BEAM_VOLUME_SHADER
+	# Draw after the fullscreen darkness mask. The default depth test stays on,
+	# so opaque walls and buildings still hide the beam behind them.
+	material.render_priority = 127
+	material.set_shader_parameter("beam_range", MAX_RADIUS)
+	material.set_shader_parameter("beam_tangent", BEAM_TANGENT)
+	material.set_shader_parameter("beam_color", Color(0.72, 0.84, 1.0))
+	material.set_shader_parameter("beam_opacity", 0.22)
+	material.set_shader_parameter("core_opacity", 0.18)
+
+	var maximum_width := maxf(0.32, MAX_RADIUS * BEAM_TANGENT)
+	for index in range(3):
+		var sheet := MeshInstance3D.new()
+		sheet.name = "PlayerFlashlightBeamSheet%d" % index
+		var quad := QuadMesh.new()
+		quad.size = Vector2(2.0, MAX_RADIUS)
+		sheet.mesh = quad
+		sheet.material_override = material
+		sheet.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		# The vertex shader widens the quad to the full cone radius. Tell CPU
+		# culling about that expanded bound instead of the original 2 m quad.
+		sheet.custom_aabb = AABB(
+			Vector3(-maximum_width, -MAX_RADIUS * 0.5, -0.05),
+			Vector3(maximum_width * 2.0, MAX_RADIUS, 0.1)
+		)
+		var azimuth := TAU * float(index) / 3.0
+		var sheet_basis := Basis(Vector3.BACK, azimuth) * Basis(Vector3.RIGHT, PI * 0.5)
+		sheet.transform = Transform3D(sheet_basis, Vector3(0.0, 0.0, -MAX_RADIUS * 0.5))
+		spotlight.add_child(sheet)
 
 func _upload_shader_parameters() -> void:
 	if not is_instance_valid(player):
