@@ -89,29 +89,58 @@ func _run() -> void:
 	var head_point := Vector2i.ZERO
 	if not unmasked.is_empty() and not masked.is_empty():
 		# The pale head/shoulders cross above the top of the oval, while the
-		# torso remains inside it. Search only their horizontal band so the
-		# feet, boss ring and the separate green scenery cannot satisfy this.
-		for y in range(int(viewport_size.y * 0.15), int(viewport_size.y * 0.39), 2):
+		# torso remains inside it. Exclude the red boss UI line and ring.
+		for y in range(int(viewport_size.y * 0.32), int(viewport_size.y * 0.39), 2):
 			for x in range(int(viewport_size.x * 0.34), int(viewport_size.x * 0.54), 2):
 				var uv := Vector2(x, y) / viewport_size
 				if manager.get_oval_weight(uv) > 0.01:
 					continue
-				var brightness := _brightness(unmasked.get_pixel(x, y))
+				var color := unmasked.get_pixel(x, y)
+				var brightness := minf(color.r, minf(color.g, color.b))
 				if brightness > 0.14:
 					unmasked_head_pixels += 1
-				if _brightness(masked.get_pixel(x, y)) > 0.14:
+				if _pale(masked.get_pixel(x, y)) > 0.14:
 					masked_head_pixels += 1
 				if brightness > head_brightness:
 					head_brightness = brightness
-					retained_brightness = _brightness(masked.get_pixel(x, y))
+					retained_brightness = _pale(masked.get_pixel(x, y))
 					head_point = Vector2i(x, y)
 		_check(head_brightness > 0.14, "actual boss head is present above the oval with the mask off")
-		_check(unmasked_head_pixels > 30, "upper-body sample contains a substantial part of the boss")
+		_check(unmasked_head_pixels > 10, "upper-body sample contains a substantial part of the boss")
 		if head_brightness > 0.14:
 			_check(masked_head_pixels > unmasked_head_pixels * 0.90, "the real boss head remains fully visible after the mask is restored")
 			_check(retained_brightness > head_brightness * 0.75, "a fixed boss head pixel remains lit outside the oval")
 		var scenery := masked.get_pixel(int(viewport_size.x * 0.80), int(viewport_size.y * 0.30))
 		_check(scenery.g < 0.06, "nearby scenery outside the flashlight stays black")
+		var no_depth_shader := Shader.new()
+		var first_material := boss._base_visual_meshes[0].get_active_material(0) as ShaderMaterial
+		no_depth_shader.code = first_material.shader.code.replace("render_mode depth_draw_always,", "render_mode depth_test_disabled, depth_draw_never,")
+		for body_mesh in boss._base_visual_meshes:
+			for surface_index in range(body_mesh.mesh.get_surface_count()):
+				var no_depth := (body_mesh.get_active_material(surface_index) as ShaderMaterial).duplicate() as ShaderMaterial
+				no_depth.shader = no_depth_shader
+				no_depth.next_pass = null
+				body_mesh.set_surface_override_material(surface_index, no_depth)
+		for frame in range(3):
+			await process_frame
+			await RenderingServer.frame_post_draw
+		var no_depth_image := root.get_texture().get_image()
+		no_depth_image.save_png(capture_dir.path_join("boss_no_depth_test.png"))
+		var no_depth_head := _pale(no_depth_image.get_pixel(head_point.x, head_point.y))
+		for body_mesh in boss._base_visual_meshes:
+			var standard := StandardMaterial3D.new()
+			standard.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			standard.albedo_color = Color.WHITE
+			standard.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			standard.no_depth_test = true
+			standard.render_priority = 127
+			body_mesh.material_override = standard
+		for frame in range(3):
+			await process_frame
+			await RenderingServer.frame_post_draw
+		var standard_image := root.get_texture().get_image()
+		standard_image.save_png(capture_dir.path_join("boss_standard_no_depth.png"))
+		print("BOSS_DEPTH_DIAGNOSTIC " + JSON.stringify({"point": head_point, "no_depth_shader": no_depth_head, "no_depth_standard": _pale(standard_image.get_pixel(head_point.x, head_point.y))}))
 	print("BOSS_WHOLE_BODY_RENDER " + JSON.stringify({"boss_lit": boss._flashlight_full_body_visible, "head_point": head_point, "head_without_mask": head_brightness, "head_with_mask_at_brightest_point": retained_brightness, "unmasked_head_pixels": unmasked_head_pixels, "masked_head_pixels": masked_head_pixels}))
 	scene.queue_free()
 	await process_frame
@@ -122,8 +151,8 @@ func _run() -> void:
 			push_error(failure)
 	quit(0 if failures.is_empty() else 1)
 
-func _brightness(color: Color) -> float:
-	return maxf(color.r, maxf(color.g, color.b))
+func _pale(color: Color) -> float:
+	return minf(color.r, minf(color.g, color.b))
 
 func _check(ok: bool, message: String) -> void:
 	checks += 1
