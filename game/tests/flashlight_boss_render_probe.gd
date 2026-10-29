@@ -59,6 +59,10 @@ func _run() -> void:
 	scene.add_child(probe)
 	await physics_frame
 	manager._classify_enemies()
+	# Hold the same skinned pose for both captures. A moving head made an
+	# otherwise identical single-pixel comparison land outside the silhouette.
+	if boss._animation_player != null:
+		boss._animation_player.pause()
 	_check(boss._flashlight_full_body_visible, "actual boss is selected when its projected body touches the beam")
 	_check(not boss._base_visual_meshes.is_empty(), "actual skinned GLB is loaded")
 	if not boss._base_visual_meshes.is_empty():
@@ -98,7 +102,8 @@ func _run() -> void:
 		_check(head_brightness > 0.14, "actual boss head is present above the oval with the mask off")
 		_check(unmasked_head_pixels > 30, "upper-body sample contains a substantial part of the boss")
 		if head_brightness > 0.14:
-			_check(masked_head_pixels > unmasked_head_pixels * 0.35, "the real boss head remains visible after the mask is restored")
+			_check(masked_head_pixels > unmasked_head_pixels * 0.90, "the real boss head remains fully visible after the mask is restored")
+			_check(retained_brightness > head_brightness * 0.75, "a fixed boss head pixel remains lit outside the oval")
 		var scenery := masked.get_pixel(int(viewport_size.x * 0.80), int(viewport_size.y * 0.30))
 		_check(scenery.g < 0.06, "nearby scenery outside the flashlight stays black")
 	print("BOSS_WHOLE_BODY_RENDER " + JSON.stringify({"boss_lit": boss._flashlight_full_body_visible, "head_without_mask": head_brightness, "head_with_mask_at_brightest_point": retained_brightness, "unmasked_head_pixels": unmasked_head_pixels, "masked_head_pixels": masked_head_pixels}))
