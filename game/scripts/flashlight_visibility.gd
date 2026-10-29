@@ -265,7 +265,7 @@ func _build_visible_beam_sections() -> void:
 	var uvs := PackedVector2Array()
 	var indices := PackedInt32Array()
 	for distance in [4.0, 7.0, 10.0, 13.0, 16.0, 19.0, 22.0, 25.0, 28.0]:
-		var radius := distance * BEAM_TANGENT
+		var radius: float = float(distance) * BEAM_TANGENT
 		var base := vertices.size()
 		vertices.append_array(PackedVector3Array([
 			Vector3(-radius, -radius, -distance),
