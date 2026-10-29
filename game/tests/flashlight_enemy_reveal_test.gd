@@ -62,12 +62,12 @@ func _run() -> void:
 	scene.add_child(wall)
 	await physics_frame
 	manager._classify_enemies()
-	_check(not manager.is_visible_to_flashlight(enemy), "opaque cover cannot trigger a body reveal through walls")
+	_check(manager.is_visible_to_flashlight(enemy) and enemy._flashlight_full_body_visible, "cover does not suppress a body whose projection touches the beam")
 	wall.queue_free()
 	await physics_frame
 	await process_frame
 	manager._classify_enemies()
-	_check(enemy._flashlight_full_body_visible, "removing cover restores the whole-body reveal")
+	_check(enemy._flashlight_full_body_visible, "removing cover keeps the whole-body reveal")
 	enemy.position = Vector3(0.0, 0.0, 8.0)
 	manager._classify_enemies()
 	_check(not enemy._flashlight_full_body_visible, "enemies behind the player stay dark")

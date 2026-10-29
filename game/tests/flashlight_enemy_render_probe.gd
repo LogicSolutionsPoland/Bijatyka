@@ -83,6 +83,25 @@ func _run() -> void:
 	await RenderingServer.frame_post_draw
 	var covered := _sample(root.get_texture().get_image(), camera.unproject_position(enemy.meshes[3].global_position))
 	_check(covered.r < 0.03 and covered.b < 0.03, "a wall occludes the revealed limb and stays dark itself")
+	cover.queue_free()
+	var full_cover := StaticBody3D.new()
+	full_cover.collision_layer = 1
+	full_cover.position = camera.position.lerp(enemy.meshes[0].global_position, 0.5)
+	scene.add_child(full_cover)
+	_box(full_cover, Vector3.ZERO, Vector3(5.0, 5.0, 0.4), Color.BLUE)
+	var full_shape := CollisionShape3D.new()
+	var full_box := BoxShape3D.new()
+	full_box.size = Vector3(5.0, 5.0, 0.4)
+	full_shape.shape = full_box
+	full_cover.add_child(full_shape)
+	await physics_frame
+	manager._classify_enemies()
+	_check(manager.is_visible_to_flashlight(enemy), "solid cover does not change beam entry classification")
+	for frame in range(4):
+		await process_frame
+	await RenderingServer.frame_post_draw
+	var fully_covered := _sample(root.get_texture().get_image(), camera.unproject_position(enemy.meshes[3].global_position))
+	_check(fully_covered.r < 0.03 and fully_covered.b < 0.03, "the revealed enemy cannot draw through a solid wall")
 	enemy.position.x += 8.0
 	manager._classify_enemies()
 	_check(not manager.is_visible_to_flashlight(enemy), "leaving the light disables the whole-body reveal")

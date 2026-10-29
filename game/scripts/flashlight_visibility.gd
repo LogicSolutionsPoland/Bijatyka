@@ -240,21 +240,17 @@ func _body_intersects_beam(enemy: Node3D) -> bool:
 	var height := 2.85 if boss else 2.1
 	var half_width := 0.80 if boss else 0.55
 	var side := camera.global_basis.x * half_width
+	# A wall or railing may block rays to these approximate points even when
+	# actual triangles are visibly lit. The enemy's depth-tested material keeps
+	# every covered fragment behind the wall after the blackout pass.
 	# Head, torso, feet and both sides allow a partially lit body to qualify.
-	# Only an unobstructed sample inside the actual oval can start the reveal.
 	for level in [0.52, 0.92, 0.08]:
 		for lateral in [0.0, -1.0, 1.0]:
 			var point: Vector3 = enemy.global_position + Vector3.UP * height * level + side * lateral
 			if camera.is_position_behind(point):
 				continue
 			var uv := camera.unproject_position(point) / viewport_size
-			if get_oval_weight(uv) <= 0.01:
-				continue
-			var ray := PhysicsRayQueryParameters3D.create(camera.global_position, point)
-			ray.collision_mask = 1 | 4
-			if player is CollisionObject3D:
-				ray.exclude = [(player as CollisionObject3D).get_rid()]
-			if camera.get_world_3d().direct_space_state.intersect_ray(ray).is_empty():
+			if get_oval_weight(uv) > 0.01:
 				return true
 	return false
 
