@@ -5,6 +5,11 @@ signal spawn_requested(at: Vector3)
 
 const MAX_CANDIDATES_PER_TICK := 8
 const MAX_SPAWNS_PER_TICK := 2
+# Phones spread collision queries and enemy setup across frames instead of
+# doing two synchronous births plus a large placement-search burst at once.
+const MOBILE_MAX_CANDIDATES_PER_TICK := 2
+const MOBILE_MAX_SPAWNS_PER_TICK := 1
+const MOBILE_SPAWN_INTERVAL := 0.12
 const RETRY_SECONDS := 0.25
 const REPLACEMENT_SECONDS := 1.0
 const FORWARD_HALF_ANGLE := deg_to_rad(80.0)
@@ -38,6 +43,7 @@ var _clock := 0.0
 var _retry_time := 0.0
 var _sample_index := 0
 var _capsule := CapsuleShape3D.new()
+var _mobile_spawn_cooldown := 0.0
 
 func _init() -> void:
 	_capsule.radius = 0.55
@@ -72,14 +78,21 @@ func _physics_process(delta: float) -> void:
 	_retry_time = maxf(0.0, _retry_time - delta)
 	last_candidate_count = 0
 	last_spawn_count = 0
+	var mobile_budget_enabled := OS.has_feature("mobile")
+	if mobile_budget_enabled:
+		_mobile_spawn_cooldown = maxf(0.0, _mobile_spawn_cooldown - delta)
 	if not is_instance_valid(player) or not is_instance_valid(camera):
 		return
 	if _retry_time > 0.0 or (_pending.is_empty() and _initial_population_pending <= 0) or _live.size() >= population_limit:
 		return
+	if mobile_budget_enabled and _mobile_spawn_cooldown > 0.0:
+		return
 	while not _recent.is_empty() and float(_recent.front().time) < _clock - RECENT_SECONDS:
 		_recent.pop_front()
 	# One shared budget, even when many enemies die in the same frame.
-	while last_candidate_count < MAX_CANDIDATES_PER_TICK and last_spawn_count < MAX_SPAWNS_PER_TICK:
+	var candidate_budget: int = MOBILE_MAX_CANDIDATES_PER_TICK if mobile_budget_enabled else MAX_CANDIDATES_PER_TICK
+	var spawn_budget: int = MOBILE_MAX_SPAWNS_PER_TICK if mobile_budget_enabled else MAX_SPAWNS_PER_TICK
+	while last_candidate_count < candidate_budget and last_spawn_count < spawn_budget:
 		var initial_spawn := _initial_population_pending > 0
 		if not initial_spawn and (_pending.is_empty() or _pending.front() > _clock):
 			break
@@ -100,6 +113,8 @@ func _physics_process(delta: float) -> void:
 		last_spawn_count += 1
 		# Synchronous: the receiver registers and activates the zombie before rendering.
 		spawn_requested.emit(at)
+	if mobile_budget_enabled and last_spawn_count > 0:
+		_mobile_spawn_cooldown = MOBILE_SPAWN_INTERVAL
 	if last_spawn_count == 0 and last_candidate_count > 0:
 		_retry_time = RETRY_SECONDS
 

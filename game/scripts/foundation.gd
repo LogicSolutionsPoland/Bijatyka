@@ -289,6 +289,10 @@ func _build_environment() -> void:
 	add_child(sun)
 
 func _update_rooftop_sky() -> void:
+	# Hold the current camera and render profile for the full elevator ride.
+	# Apply the floor change once the arrival signal confirms the car has stopped.
+	if _is_player_in_elevator():
+		return
 	var on_roof := player.global_position.y >= ROOFTOP_SKY_MIN_HEIGHT
 	_rooftop_camera_target = 1.0 if on_roof else 0.0
 	if on_roof == _rooftop_sky_active:
@@ -298,6 +302,15 @@ func _update_rooftop_sky() -> void:
 	# Keep the original four-panel Burning Horizon for ground-level play.
 	burning_horizon.visible = not on_roof
 	flashlight_visibility_manager.set_rooftop_sky_visible(on_roof)
+
+
+func _is_player_in_elevator() -> bool:
+	return (
+		is_instance_valid(player)
+		and is_instance_valid(starting_tower)
+		and is_instance_valid(starting_tower.elevator)
+		and starting_tower.elevator.is_player_riding(player)
+	)
 
 func _build_arena() -> void:
 	var ground := StaticBody3D.new()
@@ -698,6 +711,8 @@ func _on_elevator_requested() -> void:
 	_interact_with_starting_elevator()
 
 func _on_elevator_rider_arrived(floor: StringName) -> void:
+	# Arrival is the single transition point for the roof/ground render profile.
+	_update_rooftop_sky()
 	if floor != &"ground" or _ground_wave_started or not is_instance_valid(spawn_director):
 		return
 	_ground_wave_started = true
