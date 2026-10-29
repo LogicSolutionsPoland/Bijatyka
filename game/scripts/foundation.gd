@@ -722,6 +722,11 @@ func _on_player_respawned() -> void:
 		camera_arm.spring_length = _camera_follow_distance()
 		camera_arm.rotation.x = _effective_camera_pitch()
 	_update_camera_framing()
+	# A new rooftop life starts with five ordinary zombies, even if the last
+	# life had activated the thirteen-zombie ground encounter.
+	_ground_wave_started = false
+	_performance_scenario = ""
+	_reset_ordinary_population()
 
 func _interact_with_starting_elevator() -> bool:
 	if get_tree().paused or not is_instance_valid(player) or not is_instance_valid(starting_tower) or not is_instance_valid(starting_tower.elevator):
@@ -935,20 +940,26 @@ func start_performance_scenario(population: int, mode: String) -> bool:
 	return true
 
 func stop_performance_scenario() -> void:
+	_performance_scenario = ""
+	_reset_ordinary_population()
+
+func _reset_ordinary_population() -> void:
 	if not is_instance_valid(spawn_director):
 		return
+	var was_processing := spawn_director.is_physics_processing()
 	spawn_director.set_physics_process(false)
 	spawn_director._live.clear()
 	spawn_director._pending.clear()
 	spawn_director._initial_population_pending = 0
+	spawn_director._recent.clear()
+	spawn_director._retry_time = 0.0
 	for enemy in get_tree().get_nodes_in_group("enemies"):
 		if enemy is FoundationEnemy and not enemy.is_boss:
 			enemy.queue_free()
 	spawn_director.population_limit = GROUND_ZOMBIE_HORDE_SIZE if _ground_wave_started else ZOMBIE_HORDE_SIZE
 	spawn_director.initial_spawn_min_distance = 34.0 if _ground_wave_started else CONCEALED_SPAWN.INITIAL_SPAWN_MIN_DISTANCE
 	spawn_director.initial_spawn_max_distance = 45.0 if _ground_wave_started else CONCEALED_SPAWN.INITIAL_SPAWN_MAX_DISTANCE
-	_performance_scenario = ""
 	# Restore the active floor's ordinary population with a concealed map spread.
 	seed(int(Time.get_ticks_usec() & 0x7fffffff))
 	spawn_director.request_initial_population()
-	spawn_director.set_physics_process(true)
+	spawn_director.set_physics_process(was_processing)

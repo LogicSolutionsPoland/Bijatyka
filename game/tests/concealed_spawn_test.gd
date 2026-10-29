@@ -385,6 +385,17 @@ func _test_elevator_ground_wave() -> void:
 		and arena.camera_rig.global_position.is_equal_approx(
 			player.global_position + Vector3.UP * (Foundation.CAMERA_PIVOT_HEIGHT + Foundation.ROOFTOP_CAMERA_PIVOT_LIFT)),
 		"respawn returns player and camera to the roof together")
+	check(not arena._ground_wave_started and director.population_limit == 5
+		and director._live.is_empty() and director._pending.is_empty()
+		and director._initial_population_pending == 5,
+		"rooftop respawn clears the ground wave and queues exactly five fresh zombies")
+	for frame in range(120):
+		await physics_frame
+		director._physics_process(1.0 / 60.0)
+		if director._live.size() == 5:
+			break
+	check(director._live.size() == 5 and director._initial_population_pending == 0,
+		"rooftop respawn restores five concealed ordinary zombies")
 	arena.queue_free()
 	await process_frame
 

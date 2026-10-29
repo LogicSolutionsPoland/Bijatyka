@@ -59,24 +59,24 @@ jobs:
           grep -q "PASS: player martial animation" "$RUNNER_TEMP/player-animation-tests.log"
           if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/player-animation-tests.log"; then exit 1; fi
 
-      - name: Check playable Thornbound character rig, detail, and action clips
+      - name: Check current Universal Base player rig and material budget
         run: |
           set -o pipefail
           godot --headless --path game --script res://tests/player_character_quality_test.gd 2>&1 | tee "$RUNNER_TEMP/player-character-quality.log"
-          grep -q "PASS: playable Thornbound character quality" "$RUNNER_TEMP/player-character-quality.log"
+          grep -q "PASS: current Universal Base player quality" "$RUNNER_TEMP/player-character-quality.log"
           if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/player-character-quality.log"; then exit 1; fi
 
-      - name: Capture playable Thornbound in-game views
+      - name: Capture current player in-game views
         run: |
           set -o pipefail
           xvfb-run -a -s "-screen 0 1600x1000x24" env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/player_character_capture.gd 2>&1 | tee "$RUNNER_TEMP/player-character-captures.log"
           grep -q "CAPTURED_PLAYER_VIEWS=" "$RUNNER_TEMP/player-character-captures.log"
           for view in front rear movement punch kick; do test -s "build/character_views/$view.png"; done
           if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/player-character-captures.log"; then exit 1; fi
-      - name: Upload playable character screenshots
+      - name: Upload current player screenshots
         uses: actions/upload-artifact@v4
         with:
-          name: Bijatyka-Thornbound-character-views
+          name: Bijatyka-Universal-Base-player-views
           path: build/character_views/*.png
           if-no-files-found: error
 
@@ -94,12 +94,12 @@ jobs:
           grep -q "PASS: zombie animation" "$RUNNER_TEMP/zombie-animation-tests.log"
           if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/zombie-animation-tests.log"; then exit 1; fi
 
-      - name: Check high-detail zombie rig, detail bands, and shadow comparison
+      - name: Check current enemy attack animations and boss rig
         run: |
           set -o pipefail
-          godot --headless --path game --script res://tests/high_detail_zombie_test.gd 2>&1 | tee "$RUNNER_TEMP/high-detail-zombie-tests.log"
-          grep -q "PASS: high-detail zombie visual rig" "$RUNNER_TEMP/high-detail-zombie-tests.log"
-          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/high-detail-zombie-tests.log"; then exit 1; fi
+          godot --headless --path game --script res://tests/enemy_attack_animation_test.gd 2>&1 | tee "$RUNNER_TEMP/enemy-attack-animation-tests.log"
+          grep -q "PASS: enemy attack animation" "$RUNNER_TEMP/enemy-attack-animation-tests.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/enemy-attack-animation-tests.log"; then exit 1; fi
 
       - name: Check runtime effect pools and zombie replacement safety
         run: |
