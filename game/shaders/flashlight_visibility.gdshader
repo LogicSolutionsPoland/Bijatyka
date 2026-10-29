@@ -43,12 +43,10 @@ void fragment() {
 	// Compatibility may expose its clear sky depth as zero. Neither extreme
 	// represents a foreground surface after the pencil pass stops writing depth.
 	bool sky_depth = depth <= 0.000001 || depth >= 0.999999;
-	if (rooftop_sky_visible && sky_depth) {
-		// The environment sky already displays the correctly projected city
-		// below the horizon and the original procedural sky overhead.
-		// Do not replace it with a second full-sphere texture lookup here.
-		discard;
-	}
+	// Keep the rooftop city sky everywhere except where the 3D beam
+	// intersects the camera ray. Previously this early discard also removed
+	// the flashlight shaft against the sky at the player's rooftop spawn.
+	bool preserve_rooftop_sky = rooftop_sky_visible && sky_depth;
 	// Integrate a few samples along the view ray, stopping at the first solid
 	// surface in the depth buffer. Thus light is visible in the air ahead of
 	// the player, while a wall hides the part of the shaft behind it. This is
@@ -94,6 +92,19 @@ void fragment() {
 		integrated_density += beam_density(camera_world + ray_direction * travel);
 	}
 	float air_glow = min(integrated_density * ray_end * 0.012 / 8.0, 0.22);
-	ALPHA = 1.0 - illuminated_weight * (1.0 - air_glow);
-	ALBEDO = vec3(0.72, 0.80, 0.92) * air_glow / max(ALPHA, 0.001);
+	if (preserve_rooftop_sky) {
+		// Blend a clear, visible shaft over the existing sky but leave every
+		// pixel outside the cone untouched.
+		if (air_glow <= 0.002) {
+			discard;
+		}
+		ALBEDO = vec3(0.68, 0.80, 1.0);
+		ALPHA = clamp(air_glow * 3.0, 0.0, 0.68);
+		return;
+	}
+	// Increase the shaft's contrast in the blackout while preserving the
+	// screen-mask falloff on lit surfaces.
+	float shaft_strength = clamp(air_glow * 2.0, 0.0, 0.50);
+	ALPHA = 1.0 - illuminated_weight * (1.0 - shaft_strength);
+	ALBEDO = vec3(0.72, 0.80, 0.92) * shaft_strength / max(ALPHA, 0.001);
 }
