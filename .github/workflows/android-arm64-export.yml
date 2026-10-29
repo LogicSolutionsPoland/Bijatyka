@@ -18,6 +18,7 @@ on:
       - codex/flashlight-reference-oval-20261027
       - codex/rooftop-burning-city-20261028
       - codex/roof-spawn-cage-30cm-20261029
+      - codex/fix-spawn-system-20261029
 
 permissions:
   contents: read
@@ -72,6 +73,9 @@ jobs:
           xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/flashlight_render_probe.gd 2>&1 | tee "$RUNNER_TEMP/flashlight-render.log"
           grep -q 'PASS: flashlight Compatibility render mask' "$RUNNER_TEMP/flashlight-render.log"
           if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/flashlight-render.log"; then exit 1; fi
+          xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/flashlight_beam_volume_test.gd 2>&1 | tee "$RUNNER_TEMP/flashlight-beam-volume.log"
+          grep -q 'PASS: visible flashlight air beam' "$RUNNER_TEMP/flashlight-beam-volume.log"
+          if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/flashlight-beam-volume.log"; then exit 1; fi
 
       - name: Render player attack poses
         run: |
@@ -149,6 +153,7 @@ jobs:
             assets/assets/environment/rooftop_burning_city.jpg.import \
             assets/shaders/radial_ground.gdshader \
             assets/shaders/flashlight_visibility.gdshader \
+            assets/shaders/flashlight_beam_sections.gdshader \
             assets/shaders/horde_crowd_animation.gdshader \
             assets/assets/audio/menu_music.mp3.import; do
             grep -Fxq "$entry" "$RUNNER_TEMP/apk-files.txt"
