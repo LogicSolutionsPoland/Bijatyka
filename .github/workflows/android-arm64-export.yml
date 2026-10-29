@@ -3,6 +3,13 @@ run-name: Android ARM64 APK export — ${{ github.ref_name }}
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - game/**
+      - project.godot
+      - .github/workflows/android-arm64-export.yml
   push:
     branches:
       - codex/arena-map-apk-export-20261025
@@ -18,7 +25,6 @@ on:
       - codex/flashlight-reference-oval-20261027
       - codex/rooftop-burning-city-20261028
       - codex/roof-spawn-cage-30cm-20261029
-      - codex/fix-spawn-system-20261029
 
 permissions:
   contents: read
