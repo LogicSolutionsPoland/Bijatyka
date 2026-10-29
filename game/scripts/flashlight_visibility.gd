@@ -28,12 +28,18 @@ const TEETH_FRONT_FACING_DOT := 0.24
 const OVAL_CENTER_UV := Vector2(0.44, 0.60)
 const OVAL_RADIUS_UV := Vector2(0.29, 0.22)
 const OVAL_FEATHER := 0.055
+const BEAM_HEIGHT := 1.55
+const BEAM_HALF_ANGLE_DEGREES := 25.0
+const BEAM_TANGENT := 0.46630766 # tan(25 degrees), shared with the screen shader.
 
 var player: Node3D
 var camera: Camera3D
 var enabled := true
 var rooftop_sky_visible := false
 var aim_direction := Vector3.FORWARD
+var beam_origin := Vector3.ZERO
+var beam_direction := Vector3.FORWARD
+var spotlight: SpotLight3D
 var _tracked: Dictionary = {}
 var _bands: Dictionary = {}
 var _sector_visible: Dictionary = {}
@@ -50,6 +56,7 @@ func configure(player_node: Node3D, camera_node: Camera3D, is_enabled: bool) -> 
 	camera = camera_node
 	enabled = is_enabled
 	_build_composite()
+	_build_beam_light()
 	_upload_shader_parameters()
 	_classify_enemies()
 
@@ -58,6 +65,18 @@ func set_aim_yaw(yaw: float) -> void:
 	# camera's actual forward vector so the lit half always fills the view.
 	aim_direction = Vector3(-sin(yaw), 0.0, -cos(yaw)).normalized()
 	_upload_shader_parameters()
+
+func get_beam_density(world_position: Vector3) -> float:
+	# A true 3D cone, including height. The air pass and the SpotLight use
+	# this same origin, direction, angle, and range.
+	var offset := world_position - beam_origin
+	var axial := offset.dot(beam_direction)
+	if axial <= 0.0 or axial >= MAX_RADIUS:
+		return 0.0
+	var radius := maxf(0.4, axial * BEAM_TANGENT)
+	var lateral := (offset - beam_direction * axial).length()
+	return (1.0 - smoothstep(0.45, 1.0, lateral / radius)) \
+		* smoothstep(0.0, 2.0, axial) * (1.0 - smoothstep(BRIGHT_RADIUS, MAX_RADIUS, axial))
 
 func set_rooftop_sky_visible(is_visible: bool) -> void:
 	rooftop_sky_visible = is_visible
@@ -178,11 +197,41 @@ func _build_composite() -> void:
 	_teeth_overlay.name = "DistantTeethGlints"
 	_teeth_canvas.add_child(_teeth_overlay)
 
+func _build_beam_light() -> void:
+	if not enabled or not is_instance_valid(player):
+		return
+	spotlight = SpotLight3D.new()
+	spotlight.name = "PlayerFlashlightSpot"
+	spotlight.add_to_group("flashlight_beam")
+	spotlight.light_color = Color(0.84, 0.90, 1.0)
+	spotlight.light_energy = 1.6
+	spotlight.spot_range = MAX_RADIUS
+	spotlight.spot_angle = BEAM_HALF_ANGLE_DEGREES
+	spotlight.spot_attenuation = 1.4
+	# One unshadowed local light is affordable on Compatibility/mobile. The
+	# depth-limited screen pass stops the visible shaft at solid surfaces.
+	spotlight.shadow_enabled = false
+	player.add_child(spotlight)
+
 func _upload_shader_parameters() -> void:
-	if _material == null or not is_instance_valid(player):
+	if not is_instance_valid(player):
+		return
+	beam_origin = player.global_position + Vector3.UP * BEAM_HEIGHT
+	# The camera supplies pitch while yaw follows the exact same direction as
+	# combat and the ground mask, including touch and gamepad turning.
+	var camera_forward := -camera.global_basis.z if is_instance_valid(camera) else aim_direction
+	var horizontal_length := maxf(Vector2(camera_forward.x, camera_forward.z).length(), 0.001)
+	beam_direction = (aim_direction + Vector3.UP * camera_forward.y / horizontal_length).normalized()
+	if is_instance_valid(spotlight):
+		spotlight.global_position = beam_origin
+		spotlight.global_basis = Basis.looking_at(beam_direction, Vector3.UP)
+		spotlight.visible = enabled
+	if _material == null:
 		return
 	_material.set_shader_parameter("flashlight_origin", player.global_position)
 	_material.set_shader_parameter("flashlight_forward", aim_direction)
+	_material.set_shader_parameter("beam_origin", beam_origin)
+	_material.set_shader_parameter("beam_forward", beam_direction)
 	_material.set_shader_parameter("flashlight_enabled", enabled)
 	_material.set_shader_parameter("rooftop_sky_visible", rooftop_sky_visible)
 

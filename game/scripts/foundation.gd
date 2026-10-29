@@ -799,7 +799,7 @@ func _update_distance_visibility() -> void:
 func _apply_distance_visibility(node: Node) -> void:
 	# Enemy rigs own their 18/30 m bands; walking every bone and mesh every
 	# 120 ms scales with the full 200-zombie population.
-	if node is FoundationEnemy or node == horde_far_visuals or node.is_in_group("distant_backdrop") or node.is_in_group("static_map_batch") or node.is_in_group("nature_scenery_batch"):
+	if node is FoundationEnemy or node == horde_far_visuals or node.is_in_group("distant_backdrop") or node.is_in_group("static_map_batch") or node.is_in_group("nature_scenery_batch") or node.is_in_group("flashlight_beam"):
 		return
 	if node.is_in_group("radial_floor"):
 		node.visible = true

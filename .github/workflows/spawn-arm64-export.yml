@@ -39,6 +39,13 @@ jobs:
           godot --headless --fixed-fps 60 --path game --quit-after 240 2>&1 | tee "$RUNNER_TEMP/scene-smoke.log"
           if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/scene-smoke.log"; then exit 1; fi
 
+      - name: Verify the 3D flashlight beam and wall cutoff
+        run: |
+          set -euo pipefail
+          xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/flashlight_volume_test.gd 2>&1 | tee "$RUNNER_TEMP/flashlight-volume.log"
+          grep -q 'PASS: 3D flashlight volume' "$RUNNER_TEMP/flashlight-volume.log"
+          if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/flashlight-volume.log"; then exit 1; fi
+
       - name: Export one Android ARM64 debug APK
         run: |
           set -euo pipefail
