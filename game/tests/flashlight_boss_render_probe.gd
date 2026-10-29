@@ -63,10 +63,6 @@ func _run() -> void:
 	_check(not boss._base_visual_meshes.is_empty(), "actual skinned GLB is loaded")
 	if not boss._base_visual_meshes.is_empty():
 		_check(boss._base_visual_meshes[0].get_active_material(0).render_priority > manager._material.render_priority, "boss material is ordered above the darkness pass")
-		for body_mesh in boss._base_visual_meshes:
-			for surface_index in range(body_mesh.mesh.get_surface_count()):
-				var surface_material := body_mesh.get_active_material(surface_index)
-				print("BOSS_REVEAL_SURFACE " + JSON.stringify({"mesh": body_mesh.name, "surface": surface_index, "material": surface_material.get_class(), "priority": surface_material.render_priority, "variant": surface_material.has_meta(&"_flashlight_reveal_source"), "shader_head": (surface_material as ShaderMaterial).shader.code.substr(0, 150) if surface_material is ShaderMaterial else "standard"}))
 	manager.set_composite_visible_for_comparison(false)
 	for frame in range(5):
 		await process_frame
@@ -82,7 +78,6 @@ func _run() -> void:
 	var retained_brightness := 0.0
 	var unmasked_head_pixels := 0
 	var masked_head_pixels := 0
-	var head_point := Vector2.ZERO
 	if not unmasked.is_empty() and not masked.is_empty():
 		# The pale head/shoulders cross above the top of the oval, while the
 		# torso remains inside it. Search only their horizontal band so the
@@ -100,35 +95,13 @@ func _run() -> void:
 				if brightness > head_brightness:
 					head_brightness = brightness
 					retained_brightness = _brightness(masked.get_pixel(x, y))
-					head_point = Vector2(x, y)
 		_check(head_brightness > 0.14, "actual boss head is present above the oval with the mask off")
 		_check(unmasked_head_pixels > 30, "upper-body sample contains a substantial part of the boss")
 		if head_brightness > 0.14:
 			_check(masked_head_pixels > unmasked_head_pixels * 0.35, "the real boss head remains visible after the mask is restored")
 		var scenery := masked.get_pixel(int(viewport_size.x * 0.80), int(viewport_size.y * 0.30))
 		_check(scenery.g < 0.06, "nearby scenery outside the flashlight stays black")
-		manager._material.render_priority = -128
-		for frame in range(3):
-			await process_frame
-			await RenderingServer.frame_post_draw
-		var early_mask := _head_coverage(root.get_texture().get_image(), viewport_size, manager)
-		manager._material.render_priority = 126
-		for body_mesh in boss._base_visual_meshes:
-			for surface_index in range(body_mesh.mesh.get_surface_count()):
-				var pencil := body_mesh.get_active_material(surface_index) as ShaderMaterial
-				var standard := StandardMaterial3D.new()
-				standard.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-				standard.albedo_color = pencil.get_shader_parameter(&"albedo") as Color
-				standard.albedo_texture = pencil.get_shader_parameter(&"albedo_texture") as Texture2D
-				standard.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_DEPTH_PRE_PASS
-				standard.render_priority = 127
-				body_mesh.set_surface_override_material(surface_index, standard)
-		for frame in range(3):
-			await process_frame
-			await RenderingServer.frame_post_draw
-		var standard_masked := _head_coverage(root.get_texture().get_image(), viewport_size, manager)
-		print("BOSS_REVEAL_DIAGNOSTIC " + JSON.stringify({"early_mask_head": early_mask, "standard_head": standard_masked}))
-	print("BOSS_WHOLE_BODY_RENDER " + JSON.stringify({"boss_lit": boss._flashlight_full_body_visible, "head_pixel": head_point, "head_without_mask": head_brightness, "head_with_mask": retained_brightness, "unmasked_head_pixels": unmasked_head_pixels, "masked_head_pixels": masked_head_pixels}))
+	print("BOSS_WHOLE_BODY_RENDER " + JSON.stringify({"boss_lit": boss._flashlight_full_body_visible, "head_without_mask": head_brightness, "head_with_mask_at_brightest_point": retained_brightness, "unmasked_head_pixels": unmasked_head_pixels, "masked_head_pixels": masked_head_pixels}))
 	scene.queue_free()
 	await process_frame
 	if failures.is_empty():
@@ -140,19 +113,6 @@ func _run() -> void:
 
 func _brightness(color: Color) -> float:
 	return maxf(color.r, maxf(color.g, color.b))
-
-func _head_coverage(image: Image, viewport_size: Vector2, manager: Node) -> Dictionary:
-	var pixels := 0
-	var brightest := 0.0
-	for y in range(int(viewport_size.y * 0.15), int(viewport_size.y * 0.39), 2):
-		for x in range(int(viewport_size.x * 0.34), int(viewport_size.x * 0.54), 2):
-			if manager.get_oval_weight(Vector2(x, y) / viewport_size) > 0.01:
-				continue
-			var brightness := _brightness(image.get_pixel(x, y))
-			brightest = maxf(brightest, brightness)
-			if brightness > 0.14:
-				pixels += 1
-	return {"pixels": pixels, "brightest": brightest}
 
 func _check(ok: bool, message: String) -> void:
 	checks += 1
