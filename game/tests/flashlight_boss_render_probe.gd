@@ -42,7 +42,8 @@ func _run() -> void:
 	var viewport_size := camera.get_viewport().get_visible_rect().size
 	var boss := FoundationEnemy.new()
 	boss.configure("boss", true)
-	boss.position = camera.project_position(viewport_size * Vector2(0.44, 0.64), 8.0) - Vector3.UP * 1.55
+	# Put the torso in the oval and the head above its top edge.
+	boss.position = camera.project_position(viewport_size * Vector2(0.44, 0.45), 8.0) - Vector3.UP * 1.40
 	scene.add_child(boss)
 	boss.set_physics_process(false)
 	manager.track_enemy(boss)
