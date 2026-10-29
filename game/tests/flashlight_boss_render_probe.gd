@@ -100,6 +100,27 @@ func _run() -> void:
 			_check(retained_brightness > head_brightness * 0.60, "the real boss head remains visible after the mask is restored")
 		var scenery := masked.get_pixel(int(viewport_size.x * 0.80), int(viewport_size.y * 0.30))
 		_check(scenery.g < 0.06, "nearby scenery outside the flashlight stays black")
+		manager._material.render_priority = -128
+		for frame in range(3):
+			await process_frame
+			await RenderingServer.frame_post_draw
+		var early_mask := _brightness(root.get_texture().get_image().get_pixelv(Vector2i(head_point)))
+		manager._material.render_priority = 126
+		for body_mesh in boss._base_visual_meshes:
+			for surface_index in range(body_mesh.mesh.get_surface_count()):
+				var pencil := body_mesh.get_active_material(surface_index) as ShaderMaterial
+				var standard := StandardMaterial3D.new()
+				standard.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+				standard.albedo_color = pencil.get_shader_parameter(&"albedo") as Color
+				standard.albedo_texture = pencil.get_shader_parameter(&"albedo_texture") as Texture2D
+				standard.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_DEPTH_PRE_PASS
+				standard.render_priority = 127
+				body_mesh.set_surface_override_material(surface_index, standard)
+		for frame in range(3):
+			await process_frame
+			await RenderingServer.frame_post_draw
+		var standard_masked := _brightness(root.get_texture().get_image().get_pixelv(Vector2i(head_point)))
+		print("BOSS_REVEAL_DIAGNOSTIC " + JSON.stringify({"early_mask_head": early_mask, "standard_head": standard_masked}))
 	print("BOSS_WHOLE_BODY_RENDER " + JSON.stringify({"boss_lit": boss._flashlight_full_body_visible, "head_pixel": head_point, "head_without_mask": head_brightness, "head_with_mask": retained_brightness}))
 	scene.queue_free()
 	await process_frame
