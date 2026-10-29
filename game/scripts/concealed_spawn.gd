@@ -223,7 +223,16 @@ func _opaque_box(body: StaticBody3D, shape_index: int) -> bool:
 		if child is MeshInstance3D and child.mesh is BoxMesh and child.is_visible_in_tree() and child.global_position.distance_to(player.global_position) <= visibility_radius:
 			if not child.transform.is_equal_approx(collision.transform) or not child.mesh.size.is_equal_approx(collision.shape.size):
 				continue
-			var material := child.get_active_material(0) as BaseMaterial3D
-			if material != null and material.transparency == BaseMaterial3D.TRANSPARENCY_DISABLED:
+			var material: Material = child.get_active_material(0)
+			if material is BaseMaterial3D and material.transparency == BaseMaterial3D.TRANSPARENCY_DISABLED:
+				return true
+			# The global Pencil style converts opaque standard materials to shader
+			# materials before the first physics tick. Tower ruins use an opaque
+			# shader as well. Do not accept arbitrary shaders as visual cover.
+			if material is ShaderMaterial and material.shader != null and (
+					material.get_meta(&"_pencil_sketch_opaque_material", false)
+					or Pencil.is_pencil(material)
+					or material.shader.resource_path == "res://shaders/ruined_surface.gdshader"
+			):
 				return true
 	return false

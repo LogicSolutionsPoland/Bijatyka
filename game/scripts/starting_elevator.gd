@@ -1,6 +1,8 @@
 extends Node3D
 class_name StartingElevator
 
+signal rider_arrived(floor: StringName)
+
 ## Compact two-stop lift for the starting tower. The car is a moving platform;
 ## a safety hatch closes the roof opening whenever the car is below the roof.
 const HEIGHT := 20.0
@@ -53,11 +55,14 @@ func _physics_process(delta: float) -> void:
 	_car_root.position.y = _target_y
 	_travelling = false
 	_update_roof_hatch()
+	var arrived_rider := _rider
 	if _rider != null and is_instance_valid(_rider):
 		_position_rider()
 		_rider.velocity = Vector3.ZERO
 		_rider.set_physics_process(true)
 	_rider = null
+	if is_instance_valid(arrived_rider):
+		rider_arrived.emit(&"roof" if _target_y == TOP_CAR_Y else &"ground")
 
 
 func get_prompt_for_player(player: CharacterBody3D) -> String:
@@ -89,6 +94,18 @@ func interact(player: CharacterBody3D) -> bool:
 
 func is_player_riding(player: CharacterBody3D) -> bool:
 	return _rider != null and is_instance_valid(_rider) and _rider == player
+
+
+func reset_to_roof() -> void:
+	# A respawn can happen while a rider is in transit. Release the character
+	# before restoring the car so the next physics tick cannot drag them down.
+	if is_instance_valid(_rider):
+		_rider.set_physics_process(true)
+	_rider = null
+	_travelling = false
+	_target_y = TOP_CAR_Y
+	_car_root.position.y = TOP_CAR_Y
+	_set_roof_hatch_open(true)
 
 
 func contains_local_shaft(local_position: Vector3) -> bool:

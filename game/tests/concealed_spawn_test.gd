@@ -69,6 +69,7 @@ func run() -> void:
 	await _test_assault()
 	await _test_wall_collision()
 	await _test_player_base_boundary()
+	await _test_elevator_ground_wave()
 	await _test_population_and_replacements()
 	if failures.is_empty():
 		print("PASS: concealed spawn — %d checks" % checks)
@@ -118,6 +119,18 @@ func _test_placement_and_visibility() -> void:
 	await physics_frame
 	check(director.is_concealed(Vector3(0, 0.05, -20)), "opaque cover blocks every corner of the spawn envelope")
 	var cover_mesh := wall.get_child(1) as MeshInstance3D
+	var pencil_cover := Pencil.from_material(StandardMaterial3D.new())
+	cover_mesh.material_override = pencil_cover
+	check(director.is_concealed(Vector3(0, 0.05, -20)), "opaque Pencil cover blocks a concealed spawn")
+	var ruin_cover := ShaderMaterial.new()
+	ruin_cover.shader = load("res://shaders/ruined_surface.gdshader")
+	cover_mesh.material_override = ruin_cover
+	check(director.is_concealed(Vector3(0, 0.05, -20)), "opaque ruin shader blocks a concealed spawn")
+	var transparent_cover := StandardMaterial3D.new()
+	transparent_cover.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	cover_mesh.material_override = transparent_cover
+	check(not director.is_concealed(Vector3(0, 0.05, -20)), "transparent cover cannot conceal a spawn")
+	cover_mesh.material_override = pencil_cover
 	cover_mesh.visible = false
 	check(not director.is_concealed(Vector3(0, 0.05, -20)), "invisible collider cannot serve as visual cover")
 	cover_mesh.visible = true
@@ -297,6 +310,77 @@ func _test_initial_population_distribution() -> void:
 	for count in sectors:
 		check(count > 0, "opening horde covers all four directions around the player")
 	fixture.queue_free()
+	await process_frame
+
+func _test_elevator_ground_wave() -> void:
+	var arena := Foundation.new()
+	root.add_child(arena)
+	var director = arena.spawn_director
+	var player := arena.player
+	var elevator := arena.starting_tower.elevator
+	director.set_physics_process(false)
+	check(director.population_limit == 5 and director._initial_population_pending == 5,
+		"roof starts with the five-zombie budget before the lift arrives")
+	var positions: Array[Vector3] = []
+	director.spawn_requested.connect(func(at: Vector3) -> void:
+		positions.append(at)
+		var enemy: FoundationEnemy = director._live.values().back()
+		enemy.set_physics_process(false)
+	)
+	for frame in range(120):
+		await physics_frame
+		director._physics_process(1.0 / 60.0)
+		if director._live.size() == 5:
+			break
+	check(director._live.size() == 5 and director._initial_population_pending == 0,
+		"the rooftop already has its five ordinary zombies")
+	check(not arena._ground_wave_started and elevator.interact(player),
+		"the roof lift starts with the player aboard")
+	for frame in range(360):
+		await physics_frame
+		if not elevator._travelling:
+			break
+	check(player.global_position.y < 1.0 and arena._ground_wave_started,
+		"player arrival at ground level activates the encounter")
+	check(director.population_limit == 13 and director._initial_population_pending == 8,
+		"ground arrival queues eight new zombies alongside the existing five")
+	for frame in range(180):
+		await physics_frame
+		director._physics_process(1.0 / 60.0)
+		if director._live.size() == 13:
+			break
+	check(director._live.size() == 13 and director._initial_population_pending == 0,
+		"the budgeted ground wave fills all thirteen slots without a visible birth")
+	for at in positions:
+		check(director.is_concealed(at), "every ground wave member starts concealed")
+	elevator.rider_arrived.emit(&"ground")
+	check(director._live.size() == 13 and director._pending.is_empty() and director._initial_population_pending == 0,
+		"repeat arrival never schedules a fourteenth zombie")
+	if director._live.size() >= 2:
+		var victims: Array = director._live.values().slice(0, 2)
+		for victim: FoundationEnemy in victims:
+			victim.receive_hit(10000)
+			victim._complete_death()
+		check(director._live.size() == 11 and director._pending.size() == 2,
+			"two deaths queue exactly two replacements")
+		for frame in range(120):
+			await physics_frame
+			director._physics_process(0.1)
+			if director._live.size() == 13:
+				break
+		check(director._live.size() == 13 and director._pending.is_empty(),
+			"the capped encounter replenishes after simultaneous kills")
+	check(elevator.interact(player) and elevator.is_player_riding(player),
+		"ground-floor lift can start its return trip")
+	player._reset_at_safe_base()
+	check(not elevator._travelling and not elevator.is_player_riding(player)
+		and is_equal_approx(elevator._car_root.position.y, elevator.TOP_CAR_Y),
+		"respawn releases a travelling rider and restores the rooftop lift")
+	check(player.global_position.is_equal_approx(Foundation.PLAYER_BASE_POSITION)
+		and arena.camera_rig.global_position.is_equal_approx(
+			player.global_position + Vector3.UP * (Foundation.CAMERA_PIVOT_HEIGHT + Foundation.ROOFTOP_CAMERA_PIVOT_LIFT)),
+		"respawn returns player and camera to the roof together")
+	arena.queue_free()
 	await process_frame
 
 func _test_player_base_boundary() -> void:

@@ -376,9 +376,12 @@ func _test_ten_button_controls() -> void:
 			"solid roof top reaches twenty metres")
 		_check(tower.get_node_or_null("DoorLeft") is StaticBody3D and tower.get_node_or_null("DoorRight") is StaticBody3D and tower.get_node_or_null("DoorHeader") is StaticBody3D,
 			"tower has separate doorway jambs and header instead of a solid wall")
-		for guard_name in ["RoofGuardWest", "RoofGuardEast", "RoofGuardNorth", "RoofGuardSouth"]:
+		for guard_name in ["RooftopCageWest", "RooftopCageEast", "RooftopCageNorth", "RooftopCageSouth"]:
 			_check(tower.get_node_or_null(guard_name) is StaticBody3D,
-				"roof has a solid guard wall: %s" % guard_name)
+				"roof has a collidable cage panel: %s" % guard_name)
+		var cage_grid := tower.get_node_or_null("RooftopSpawnCageGrid") as MultiMeshInstance3D
+		_check(cage_grid != null and cage_grid.multimesh.instance_count > 100,
+			"roof cage has a visible grid")
 		await physics_frame
 		var space := arena.get_world_3d().direct_space_state
 		var exit_ray := PhysicsRayQueryParameters3D.create(tower.to_global(Vector3(0.0, 1.25, -1.0)),
@@ -392,8 +395,8 @@ func _test_ten_button_controls() -> void:
 			tower.to_global(Vector3(StartingTower.WIDTH, StartingTower.HEIGHT + 1.0, 0.0)), 1)
 		guard_ray.exclude = [player.get_rid()]
 		var guard_hit := space.intersect_ray(guard_ray)
-		_check(not guard_hit.is_empty() and guard_hit.collider.name == "RoofGuardEast",
-			"roof guard physically blocks the edge at player height")
+		_check(not guard_hit.is_empty() and guard_hit.collider.name == "RooftopCageEast",
+			"roof cage bar physically blocks the edge at player height")
 	var shoulder_arm := arena.camera.get_parent() as SpringArm3D
 	_check(shoulder_arm != null, "close third-person camera uses a collision-aware shoulder spring arm")
 	if shoulder_arm != null:

@@ -20,6 +20,7 @@ const RUIN_SURFACE_SHADER := preload("res://shaders/ruined_surface.gdshader")
 const ARENA_MAP_SCRIPT := preload("res://scripts/arena_map_upgrade.gd")
 const STARTING_TOWER := preload("res://scripts/starting_tower.gd")
 const ZOMBIE_HORDE_SIZE := 5
+const GROUND_ZOMBIE_HORDE_SIZE := 13
 const ZOMBIE_PERFORMANCE_CAPACITY := 200
 const ZOMBIE_SPAWN_DISTANCE := 50.0
 const VISIBILITY_RADIUS := 30.0
@@ -39,7 +40,7 @@ const ROOFTOP_SKY_MIN_HEIGHT := StartingTower.HEIGHT - 1.0
 # Height is measured above the player's ground origin, not added to an existing camera offset.
 const CAMERA_PIVOT_HEIGHT := 1.20
 const CAMERA_FOLLOW_DISTANCE := 2.5
-const ROOFTOP_CAMERA_PIVOT_LIFT := 3.2
+const ROOFTOP_CAMERA_PIVOT_LIFT := 1.0
 const ROOFTOP_CAMERA_FOLLOW_DISTANCE := 5.0
 const ROOFTOP_CAMERA_PITCH_BIAS_DEGREES := 10.0
 const ROOFTOP_CAMERA_BLEND_SPEED := 3.0
@@ -79,6 +80,7 @@ var _emissive_materials: Dictionary = {}
 var _boss_enemy: FoundationEnemy
 var _key_light: DirectionalLight3D
 var _high_detail_zombie_sample_assigned := false
+var _ground_wave_started := false
 var burning_horizon: Node3D
 var _environment: Environment
 var _ground_sky: Sky
@@ -112,6 +114,7 @@ func _ready() -> void:
 	player.position = PLAYER_BASE_POSITION
 	player.safe_base_position = PLAYER_BASE_POSITION
 	add_child(player)
+	player.respawned.connect(_on_player_respawned)
 	combat_fx_pool = COMBAT_FX_POOL.new() as FoundationCombatFxPool
 	combat_fx_pool.name = "CombatEffectPool"
 	combat_fx_pool.visibility_origin = player
@@ -389,6 +392,7 @@ func _build_starting_tower() -> void:
 	starting_tower.configure(_material(Color(0.16, 0.18, 0.19), 0.94),
 		_material(Color(0.32, 0.19, 0.13), 0.84))
 	add_child(starting_tower)
+	starting_tower.elevator.rider_arrived.connect(_on_elevator_rider_arrived)
 	# Exclude the tower volume from concealed enemy placement, even in
 	# performance scenarios; the existing enemy-safe base remains intact.
 	var half_width := StartingTower.WIDTH * 0.5
@@ -691,6 +695,30 @@ func _spawn_enemy(kind: String, at: Vector3, boss_target: bool = false, high_det
 func _on_elevator_requested() -> void:
 	_interact_with_starting_elevator()
 
+func _on_elevator_rider_arrived(floor: StringName) -> void:
+	if floor != &"ground" or _ground_wave_started or not is_instance_valid(spawn_director):
+		return
+	_ground_wave_started = true
+	if not _performance_scenario.is_empty():
+		return
+	spawn_director.population_limit = GROUND_ZOMBIE_HORDE_SIZE
+	# Existing rooftop zombies count toward the wave. The remaining slots use
+	# the concealed all-around opening sampler, capped at two births per tick.
+	spawn_director.request_initial_population()
+
+func _on_player_respawned() -> void:
+	if is_instance_valid(starting_tower) and is_instance_valid(starting_tower.elevator):
+		starting_tower.elevator.reset_to_roof()
+	_update_rooftop_sky()
+	_rooftop_camera_blend = 1.0
+	_rooftop_camera_target = 1.0
+	if is_instance_valid(camera_rig):
+		camera_rig.global_position = player.global_position + Vector3.UP * _camera_pivot_height()
+	if is_instance_valid(camera_arm):
+		camera_arm.spring_length = _camera_follow_distance()
+		camera_arm.rotation.x = _effective_camera_pitch()
+	_update_camera_framing()
+
 func _interact_with_starting_elevator() -> bool:
 	if get_tree().paused or not is_instance_valid(player) or not is_instance_valid(starting_tower) or not is_instance_valid(starting_tower.elevator):
 		return false
@@ -912,9 +940,9 @@ func stop_performance_scenario() -> void:
 	for enemy in get_tree().get_nodes_in_group("enemies"):
 		if enemy is FoundationEnemy and not enemy.is_boss:
 			enemy.queue_free()
-	spawn_director.population_limit = ZOMBIE_HORDE_SIZE
+	spawn_director.population_limit = GROUND_ZOMBIE_HORDE_SIZE if _ground_wave_started else ZOMBIE_HORDE_SIZE
 	_performance_scenario = ""
-	# Restore the ordinary endless 5-zombie population with a concealed map spread.
+	# Restore the active floor's ordinary population with a concealed map spread.
 	seed(int(Time.get_ticks_usec() & 0x7fffffff))
 	spawn_director.request_initial_population()
 	spawn_director.set_physics_process(true)

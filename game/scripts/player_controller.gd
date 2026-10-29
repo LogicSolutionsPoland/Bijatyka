@@ -8,6 +8,7 @@ signal health_changed(current: int, maximum: int)
 signal magic_changed(current: float, maximum: float, school: String)
 signal interrupted(duration: float)
 signal jump_impact(target: Node)
+signal respawned
 
 const RAGE_SCRIPT := preload("res://scripts/rage_progression.gd")
 const FIGHT_ANIMATION_BUILDER := preload("res://scripts/universal_base_combat.gd")
@@ -906,3 +907,4 @@ func _reset_at_safe_base() -> void:
 	_burns.clear()
 	rage.reset_soul()
 	health_changed.emit(health, MAX_HEALTH)
+	respawned.emit()
