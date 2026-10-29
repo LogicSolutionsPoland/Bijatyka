@@ -174,6 +174,9 @@ jobs:
           xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/flashlight_render_probe.gd 2>&1 | tee "$RUNNER_TEMP/flashlight-render-probe.log"
           grep -q "PASS: flashlight Compatibility render mask" "$RUNNER_TEMP/flashlight-render-probe.log"
           if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/flashlight-render-probe.log"; then exit 1; fi
+          xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/flashlight_beam_volume_test.gd 2>&1 | tee "$RUNNER_TEMP/flashlight-beam-volume.log"
+          grep -q "PASS: visible flashlight air beam" "$RUNNER_TEMP/flashlight-beam-volume.log"
+          if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/flashlight-beam-volume.log"; then exit 1; fi
 
       - name: Smoke-run playable scene for 600 frames
         run: |
