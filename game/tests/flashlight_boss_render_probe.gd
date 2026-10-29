@@ -77,11 +77,16 @@ func _run() -> void:
 		await process_frame
 	await RenderingServer.frame_post_draw
 	var masked := root.get_texture().get_image()
+	var capture_dir := "res://build/flashlight_probe"
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(capture_dir))
+	unmasked.save_png(capture_dir.path_join("boss_unmasked.png"))
+	masked.save_png(capture_dir.path_join("boss_masked.png"))
 	_check(not unmasked.is_empty() and not masked.is_empty(), "Compatibility frame readback is available")
 	var head_brightness := 0.0
 	var retained_brightness := 0.0
 	var unmasked_head_pixels := 0
 	var masked_head_pixels := 0
+	var head_point := Vector2i.ZERO
 	if not unmasked.is_empty() and not masked.is_empty():
 		# The pale head/shoulders cross above the top of the oval, while the
 		# torso remains inside it. Search only their horizontal band so the
@@ -99,6 +104,7 @@ func _run() -> void:
 				if brightness > head_brightness:
 					head_brightness = brightness
 					retained_brightness = _brightness(masked.get_pixel(x, y))
+					head_point = Vector2i(x, y)
 		_check(head_brightness > 0.14, "actual boss head is present above the oval with the mask off")
 		_check(unmasked_head_pixels > 30, "upper-body sample contains a substantial part of the boss")
 		if head_brightness > 0.14:
@@ -106,7 +112,7 @@ func _run() -> void:
 			_check(retained_brightness > head_brightness * 0.75, "a fixed boss head pixel remains lit outside the oval")
 		var scenery := masked.get_pixel(int(viewport_size.x * 0.80), int(viewport_size.y * 0.30))
 		_check(scenery.g < 0.06, "nearby scenery outside the flashlight stays black")
-	print("BOSS_WHOLE_BODY_RENDER " + JSON.stringify({"boss_lit": boss._flashlight_full_body_visible, "head_without_mask": head_brightness, "head_with_mask_at_brightest_point": retained_brightness, "unmasked_head_pixels": unmasked_head_pixels, "masked_head_pixels": masked_head_pixels}))
+	print("BOSS_WHOLE_BODY_RENDER " + JSON.stringify({"boss_lit": boss._flashlight_full_body_visible, "head_point": head_point, "head_without_mask": head_brightness, "head_with_mask_at_brightest_point": retained_brightness, "unmasked_head_pixels": unmasked_head_pixels, "masked_head_pixels": masked_head_pixels}))
 	scene.queue_free()
 	await process_frame
 	if failures.is_empty():
