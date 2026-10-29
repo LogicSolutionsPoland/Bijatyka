@@ -1,4 +1,5 @@
 name: Android ARM64 APK export (manual)
+run-name: Android ARM64 APK export — ${{ github.ref_name }}
 
 on:
   workflow_dispatch:
