@@ -98,14 +98,6 @@ jobs:
           grep -q "PASS: skinned boss flashlight silhouette" "$RUNNER_TEMP/flashlight-boss-pixels.log"
           if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/flashlight-enemy-reveal.log" "$RUNNER_TEMP/flashlight-enemy-pixels.log" "$RUNNER_TEMP/flashlight-boss-pixels.log"; then exit 1; fi
 
-      - name: Upload boss mask comparison frames
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: Bijatyka-boss-flashlight-mask-frames
-          path: game/build/flashlight_probe/*.png
-          if-no-files-found: ignore
-
       - name: Check zombie animation import and state connections
         run: |
           set -o pipefail
