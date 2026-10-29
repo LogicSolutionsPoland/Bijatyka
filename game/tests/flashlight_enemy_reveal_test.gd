@@ -37,7 +37,7 @@ func _run() -> void:
 			var material := mesh.get_active_material(surface)
 			_check(material.render_priority > manager._material.render_priority, "enemy surface draws after the black mask")
 			_check(material.has_meta(Reveal.SOURCE_META), "revealed surface retains its original textured material")
-			_check((material as ShaderMaterial).shader.code.contains("depth_prepass_alpha"), "revealed skin still writes depth for occlusion")
+			_check((material as ShaderMaterial).shader.code.contains("depth_draw_always"), "revealed skin writes depth while drawing after the mask")
 	var reused_material := enemy._base_visual_meshes[0].get_active_material(0)
 	# Torso lies just outside the oval; one side still touches the light.
 	_place(camera, enemy, Vector2(0.735, 0.60), 14.0)
@@ -94,7 +94,7 @@ func _run() -> void:
 	crowd.configure(5)
 	scene.add_child(crowd)
 	var crowd_material := crowd.multimesh.mesh.surface_get_material(0) as ShaderMaterial
-	_check(crowd_material.render_priority > manager._material.render_priority and crowd_material.shader.code.contains("depth_prepass_alpha"), "distant MultiMesh bodies also cross the mask edge with depth testing")
+	_check(crowd_material.render_priority > manager._material.render_priority and crowd_material.shader.code.contains("depth_draw_always"), "distant MultiMesh bodies also cross the mask edge with depth testing")
 	manager.enabled = false
 	manager._classify_enemies()
 	_check(not enemy._flashlight_full_body_visible and manager.is_visible_to_flashlight(enemy), "disabling the flashlight returns normal unmasked rendering")

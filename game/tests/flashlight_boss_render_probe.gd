@@ -63,6 +63,10 @@ func _run() -> void:
 	_check(not boss._base_visual_meshes.is_empty(), "actual skinned GLB is loaded")
 	if not boss._base_visual_meshes.is_empty():
 		_check(boss._base_visual_meshes[0].get_active_material(0).render_priority > manager._material.render_priority, "boss material is ordered above the darkness pass")
+		for body_mesh in boss._base_visual_meshes:
+			for surface_index in range(body_mesh.mesh.get_surface_count()):
+				var surface_material := body_mesh.get_active_material(surface_index)
+				print("BOSS_REVEAL_SURFACE " + JSON.stringify({"mesh": body_mesh.name, "surface": surface_index, "material": surface_material.get_class(), "priority": surface_material.render_priority, "variant": surface_material.has_meta(&"_flashlight_reveal_source"), "shader_head": (surface_material as ShaderMaterial).shader.code.substr(0, 150) if surface_material is ShaderMaterial else "standard"}))
 	manager.set_composite_visible_for_comparison(false)
 	for frame in range(5):
 		await process_frame

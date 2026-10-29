@@ -1,7 +1,6 @@
 extends RefCounted
-## Draw only a lit enemy's own surfaces after the blackout. A depth prepass
-## keeps walls, the player, and nearer enemies in front of it. No extra camera,
-## screen-space hole, or duplicate character rig is needed.
+## Draw only a lit enemy's own surfaces after the blackout. Keep depth testing
+## so walls, the player, and nearer enemies remain in front of it.
 
 const RENDER_PRIORITY := 127
 const SOURCE_META := &"_flashlight_reveal_source"
@@ -27,7 +26,10 @@ static func material_for(source: Material) -> Material:
 			var variant := Shader.new()
 			# Preserve the pencil shading, textures, skinning, and crowd motion.
 			# Writing ALPHA selects the ordered transparent queue at full opacity.
-			variant.code = shader.code.replace("render_mode ", "render_mode depth_prepass_alpha, ").replace(
+			# The Compatibility depth prepass can consume the skinned mesh's
+			# transparent draw before the fullscreen mask. Draw its color and depth
+			# together at the final priority, still testing against opaque walls.
+			variant.code = shader.code.replace("render_mode ", "render_mode depth_draw_always, ").replace(
 				"void fragment() {", "void fragment() {\n\tALPHA = 1.0;")
 			_shaders[shader_id] = variant
 		(revealed as ShaderMaterial).shader = _shaders[shader_id] as Shader
