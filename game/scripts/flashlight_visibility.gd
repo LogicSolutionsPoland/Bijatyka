@@ -68,7 +68,8 @@ func set_aim_yaw(yaw: float) -> void:
 	# Godot's positive Y rotation turns local -Z toward -X. Match the
 	# camera's actual forward vector so the lit half always fills the view.
 	aim_direction = Vector3(-sin(yaw), 0.0, -cos(yaw)).normalized()
-	_upload_shader_parameters()
+	if not _rooftop_mode:
+		_upload_shader_parameters()
 
 func get_beam_density(world_position: Vector3) -> float:
 	# A true 3D cone, including height. The air pass and the SpotLight use
@@ -89,6 +90,8 @@ func set_rooftop_sky_visible(is_visible: bool) -> void:
 	if _material != null:
 		_material.set_shader_parameter("rooftop_sky_visible", is_visible)
 	_sync_rooftop_render_visibility()
+	if not is_visible:
+		_upload_shader_parameters()
 
 
 func _sync_rooftop_render_visibility() -> void:
