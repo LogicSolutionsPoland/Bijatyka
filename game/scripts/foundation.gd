@@ -24,10 +24,13 @@ const GROUND_ZOMBIE_HORDE_SIZE := 13
 const ZOMBIE_PERFORMANCE_CAPACITY := 200
 const ZOMBIE_SPAWN_DISTANCE := 50.0
 const VISIBILITY_RADIUS := 30.0
-# Bilinear 3D scaling keeps the touch HUD at native resolution. The fullscreen
-# depth-based flashlight and the arena are rendered at this scale on phones.
-const MOBILE_3D_RENDER_SCALE := 0.50
+# Target the project's HD 1280x720 viewport without 3D downscaling on Android.
+# The touch HUD remains at native UI resolution; the debug profiler can switch
+# to lower-cost scales for battery/thermal comparisons.
+const MOBILE_3D_RENDER_SCALE := 1.0
 const MOBILE_BALANCED_RENDER_SCALE := 0.67
+const MOBILE_LOW_RENDER_SCALE := 0.50
+const MOBILE_FPS_LIMIT := 60
 const PLAYER_BASE_CENTER := Vector3(0.0, 0.0, -5.2)
 const PLAYER_BASE_POSITION := PLAYER_BASE_CENTER + Vector3(0.0, StartingTower.HEIGHT + 0.05, 0.0)
 const PLAYER_BASE_SAFE_RADIUS := 6.35
@@ -98,6 +101,7 @@ var _spawn_blockers: Array[AABB] = []
 
 func _ready() -> void:
 	if OS.has_feature("mobile"):
+		Engine.max_fps = MOBILE_FPS_LIMIT
 		get_viewport().scaling_3d_scale = MOBILE_3D_RENDER_SCALE
 		_floor_fast_detail_enabled = true
 		_local_lights_enabled = false
@@ -874,7 +878,7 @@ func _setup_performance_diagnostics() -> void:
 	add_child(performance_diagnostics)
 
 func _set_debug_render_scale(scale: float) -> void:
-	if OS.is_debug_build() and [MOBILE_3D_RENDER_SCALE, MOBILE_BALANCED_RENDER_SCALE, 1.0].has(scale):
+	if OS.is_debug_build() and [MOBILE_LOW_RENDER_SCALE, MOBILE_BALANCED_RENDER_SCALE, MOBILE_3D_RENDER_SCALE].has(scale):
 		get_viewport().scaling_3d_scale = scale
 
 func _set_debug_mask_visible(is_visible: bool) -> void:
