@@ -25,6 +25,7 @@ on:
       - codex/flashlight-reference-oval-20261027
       - codex/rooftop-burning-city-20261028
       - codex/roof-spawn-cage-30cm-20261029
+      - codex/android-hd-80fps-20261030
 
 permissions:
   contents: read
