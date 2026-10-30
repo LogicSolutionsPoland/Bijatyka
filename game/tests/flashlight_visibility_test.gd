@@ -215,8 +215,8 @@ func _run() -> void:
 		game._set_debug_mask_visible(true)
 		_check(bool(game._floor_material.get_shader_parameter("floor_skip_enabled")), "mask ON restores the ground skip")
 		var original_scale := root.scaling_3d_scale
-		game.performance_diagnostics.render_scale_requested.emit(0.5)
-		_check(is_equal_approx(root.scaling_3d_scale, 0.5), "debug profiler can compare half-resolution 3D rendering")
+		game.performance_diagnostics.render_scale_requested.emit(0.40)
+		_check(is_equal_approx(root.scaling_3d_scale, 0.40), "debug profiler can compare 40 percent 3D rendering")
 		game.performance_diagnostics.render_scale_requested.emit(0.67)
 		_check(is_equal_approx(root.scaling_3d_scale, 0.67), "debug profiler can compare the previous 0.67x rendering")
 		game.performance_diagnostics.render_scale_requested.emit(1.0)
