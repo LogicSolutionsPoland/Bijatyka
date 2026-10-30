@@ -8,7 +8,7 @@ var _material_cache: Dictionary = {}
 var _pending_mesh_ids: Dictionary = {}
 var _pending_mesh_queue: Array[int] = []
 var _original_mesh_materials: Dictionary = {}
-var _gameplay_pencil_enabled := false
+var _gameplay_pencil_enabled := true
 const MAX_MESHES_PER_FRAME := 6
 var _styled_surface_count := 0
 var _styled_mesh_count := 0
@@ -18,6 +18,7 @@ func _ready() -> void:
 	# The rooftop is intentionally drawn without graphite. Ground materials
 	# are converted in small per-frame batches while the lift is enclosed.
 	set_process(false)
+	_scan_tree(get_tree().root)
 
 
 func set_gameplay_pencil_enabled(is_enabled: bool) -> void:
