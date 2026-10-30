@@ -95,6 +95,7 @@ var _environment: Environment
 var _ground_sky: Sky
 var _rooftop_city_sky: Sky
 var _rooftop_sky_active := false
+var _pencil_screen_pass: MeshInstance3D
 var arena_map: Node3D
 var starting_tower: StartingTower
 var game_music_player: AudioStreamPlayer
@@ -154,8 +155,7 @@ func _ready() -> void:
 	_update_distance_visibility()
 	# Convert lit mesh materials, then draw the graphite pass before the
 	# flashlight's priority-126 black mask.
-	PENCIL.convert(self)
-	PENCIL.set_param(self, &"wash", 0.16)
+	# Leave rooftop materials unstyled. Pencil conversion starts during descent.
 	var pencil_screen := PENCIL.add_screen_pass(camera)
 	pencil_screen.set_shader_parameter(&"line_color", Color(0.075, 0.075, 0.10))
 	pencil_screen.set_shader_parameter(&"line_width", 1.7)
@@ -171,6 +171,9 @@ func _ready() -> void:
 	pencil_screen.set_shader_parameter(&"paper_color", Color(0.91, 0.90, 0.86))
 	pencil_screen.set_shader_parameter(&"paper_amount", 0.36)
 	pencil_screen.set_shader_parameter(&"edge_fade", 0.0)
+	_pencil_screen_pass = camera.get_node_or_null("PencilScreenPass") as MeshInstance3D
+	if is_instance_valid(_pencil_screen_pass):
+		_pencil_screen_pass.visible = not _rooftop_sky_active
 	_floor_material.set_shader_parameter("player_position", player.global_position)
 	_floor_material.set_shader_parameter("flashlight_forward", flashlight_visibility_manager.aim_direction)
 	SHADOW_POLICY.disable_in_tree(self)
@@ -325,6 +328,11 @@ func _set_rooftop_render_profile(on_roof: bool) -> void:
 	# Keep the original four-panel Burning Horizon for ground-level play.
 	burning_horizon.visible = not on_roof
 	flashlight_visibility_manager.set_rooftop_sky_visible(on_roof)
+	if is_instance_valid(_pencil_screen_pass):
+		_pencil_screen_pass.visible = not on_roof
+	var style_manager := get_tree().root.get_node_or_null("PencilSketchStyle")
+	if style_manager != null:
+		style_manager.set_gameplay_pencil_enabled(not on_roof)
 
 
 func _advance_ground_map_preparation() -> void:
@@ -341,10 +349,12 @@ func _advance_ground_map_preparation() -> void:
 	elif _ground_map_profile_step == 1:
 		burning_horizon.visible = true
 	elif _ground_map_profile_step == 2:
-		flashlight_visibility_manager.set_rooftop_sky_visible(false)
-		_rooftop_sky_active = false
-		_rooftop_camera_target = 0.0
+		# Switch both pipelines inside the closed lift, not on arrival.
+		_set_rooftop_render_profile(false)
 	else:
+		var style_manager := get_tree().root.get_node_or_null("PencilSketchStyle")
+		if style_manager != null and not style_manager.is_gameplay_style_ready():
+			return
 		_ground_map_preparing = false
 		_ground_map_ready = true
 		starting_tower.elevator.set_ground_floor_ready(true)
@@ -905,7 +915,7 @@ func _update_distance_visibility() -> void:
 func _apply_distance_visibility(node: Node) -> void:
 	# Enemy rigs own their 18/30 m bands; walking every bone and mesh every
 	# 120 ms scales with the full 200-zombie population.
-	if node is FoundationEnemy or node == horde_far_visuals or node.is_in_group("distant_backdrop") or node.is_in_group("static_map_batch") or node.is_in_group("nature_scenery_batch") or node.is_in_group("flashlight_beam"):
+	if node is FoundationEnemy or node == horde_far_visuals or node.is_in_group("distant_backdrop") or node.is_in_group("static_map_batch") or node.is_in_group("nature_scenery_batch") or node.is_in_group("flashlight_beam") or node.is_in_group("pencil_screen_pass") or node.is_in_group("flashlight_visibility_composite"):
 		return
 	if node.is_in_group("radial_floor"):
 		node.visible = true
