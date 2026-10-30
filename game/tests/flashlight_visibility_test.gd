@@ -186,7 +186,7 @@ func _run() -> void:
 	_check(game.burning_horizon.get_child_count() == 4, "Burning Horizon remains present while masked")
 	_check(game._boss_enemy != null and game._boss_enemy.hp > 0, "boss simulation remains independent from flashlight visibility")
 	_check(manager._tracked.has(game._boss_enemy.get_instance_id()), "boss is registered for the same whole-body flashlight reveal")
-	_check(is_equal_approx(Foundation.MOBILE_3D_RENDER_SCALE, 1.0), "HD mobile preset starts at full-resolution 3D")
+	_check(is_equal_approx(Foundation.MOBILE_3D_RENDER_SCALE, 0.40), "Android 3D starts at 40 percent resolution with a native-resolution HUD")
 	if OS.is_debug_build() and game.performance_diagnostics != null:
 		var local_lights := game.find_children("*", "OmniLight3D", true, false)
 		_check(local_lights.size() == 4, "four unshadowed local lights remain available for quality comparison")
