@@ -28,6 +28,7 @@ on:
       - codex/android-hd-80fps-20261030
       - codex/flashlight-air-shaft-20261030
       - codex/android-40pct-render-20261030
+      - codex/roof-clear-light-and-sketch-20261030
 
 permissions:
   contents: read
