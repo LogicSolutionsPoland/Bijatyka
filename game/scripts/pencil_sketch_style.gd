@@ -6,12 +6,64 @@ const OPAQUE_META := &"_pencil_sketch_opaque_material"
 
 var _material_cache: Dictionary = {}
 var _pending_mesh_ids: Dictionary = {}
+var _pending_mesh_queue: Array[int] = []
+var _original_mesh_materials: Dictionary = {}
+var _gameplay_pencil_enabled := false
+const MAX_MESHES_PER_FRAME := 6
 var _styled_surface_count := 0
 var _styled_mesh_count := 0
 
 func _ready() -> void:
 	get_tree().node_added.connect(_on_node_added)
-	_scan_tree(get_tree().root)
+	# The rooftop is intentionally drawn without graphite. Ground materials
+	# are converted in small per-frame batches while the lift is enclosed.
+	set_process(false)
+
+
+func set_gameplay_pencil_enabled(is_enabled: bool) -> void:
+	if _gameplay_pencil_enabled == is_enabled:
+		return
+	_gameplay_pencil_enabled = is_enabled
+	if is_enabled:
+		_scan_tree(get_tree().root)
+	else:
+		_pending_mesh_ids.clear()
+		_pending_mesh_queue.clear()
+		set_process(false)
+		_restore_original_materials()
+
+
+func is_gameplay_style_ready() -> bool:
+	return not _gameplay_pencil_enabled or _pending_mesh_queue.is_empty()
+
+
+func _process(_delta: float) -> void:
+	var count := mini(MAX_MESHES_PER_FRAME, _pending_mesh_queue.size())
+	for index in range(count):
+		var instance_id: int = _pending_mesh_queue.pop_front()
+		_pending_mesh_ids.erase(instance_id)
+		_apply_to_mesh(instance_id)
+	set_process(not _pending_mesh_queue.is_empty())
+
+
+func _restore_original_materials() -> void:
+	for instance_id in _original_mesh_materials:
+		var object: Object = instance_from_id(int(instance_id))
+		if not is_instance_valid(object) or not object is MeshInstance3D:
+			continue
+		var mesh := object as MeshInstance3D
+		if mesh.mesh == null:
+			continue
+		var original: Dictionary = _original_mesh_materials[instance_id]
+		mesh.material_override = original["material_override"] as Material
+		var overrides: Array = original["surface_overrides"]
+		for surface_index in range(mini(mesh.mesh.get_surface_count(), overrides.size())):
+			mesh.set_surface_override_material(surface_index, overrides[surface_index] as Material)
+		if mesh.has_meta(STYLE_META):
+			mesh.remove_meta(STYLE_META)
+	_original_mesh_materials.clear()
+	_styled_mesh_count = 0
+	_styled_surface_count = 0
 
 func _on_node_added(node: Node) -> void:
 	if node is MeshInstance3D:
@@ -24,25 +76,31 @@ func _scan_tree(node: Node) -> void:
 		_scan_tree(child)
 
 func _queue_mesh(mesh: MeshInstance3D) -> void:
+	if not _gameplay_pencil_enabled or mesh.mesh == null or mesh.has_meta(STYLE_META):
+		return
 	var instance_id := mesh.get_instance_id()
 	if _pending_mesh_ids.has(instance_id):
 		return
 	_pending_mesh_ids[instance_id] = true
-	# Defer only the ID so a scene freed before the callback does not pass a
-	# stale MeshInstance3D argument through Godot's deferred-call type check.
-	call_deferred("_apply_to_mesh", instance_id)
+	_pending_mesh_queue.append(instance_id)
+	set_process(true)
+
 
 func _apply_to_mesh(instance_id: int) -> void:
-	_pending_mesh_ids.erase(instance_id)
 	var object: Object = instance_from_id(instance_id)
-	if not is_instance_valid(object) or not object is MeshInstance3D:
-		return
-	apply_mesh(object as MeshInstance3D)
+	if is_instance_valid(object) and object is MeshInstance3D:
+		apply_mesh(object as MeshInstance3D)
+
 
 func apply_mesh(mesh: MeshInstance3D) -> void:
-	if mesh.mesh == null or mesh.has_meta(STYLE_META):
+	if not _gameplay_pencil_enabled or mesh.mesh == null or mesh.has_meta(STYLE_META):
 		return
 
+	# Remember exact source overrides for a lossless rooftop restoration.
+	var original_surface_overrides: Array[Material] = []
+	for surface_index in range(mesh.mesh.get_surface_count()):
+		original_surface_overrides.append(mesh.get_surface_override_material(surface_index))
+	var original_override := mesh.material_override
 	var changed := false
 	if mesh.material_override != null:
 		var override_replacement := _styled_material(mesh.material_override)
@@ -61,6 +119,10 @@ func apply_mesh(mesh: MeshInstance3D) -> void:
 			changed = true
 
 	if changed:
+		_original_mesh_materials[mesh.get_instance_id()] = {
+			"material_override": original_override,
+			"surface_overrides": original_surface_overrides,
+		}
 		mesh.set_meta(STYLE_META, true)
 		_styled_mesh_count += 1
 
@@ -105,11 +167,11 @@ func _styled_material(source: Material) -> ShaderMaterial:
 	return styled
 
 func is_enabled() -> bool:
-	return true
+	return _gameplay_pencil_enabled
 
 func get_style_stats() -> Dictionary:
 	return {
-		"enabled": true,
+		"enabled": _gameplay_pencil_enabled,
 		"styled_meshes": _styled_mesh_count,
 		"styled_surfaces": _styled_surface_count,
 		"shared_materials": _material_cache.size()
