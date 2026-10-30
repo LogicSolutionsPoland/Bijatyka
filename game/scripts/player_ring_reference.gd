@@ -11,6 +11,7 @@ class_name PlayerRingReferenceCombat
 ## copied Euler angles from a different skeleton.
 
 const BASE := preload("res://scripts/universal_base_combat.gd")
+const MMA_KICK := preload("res://scripts/player_mma_kick.gd")
 const LIBRARY_NAME := &"player_ring_reference"
 const PUNCH_VARIANTS := {
 	"left": ["left_jab", "left_hook", "left_uppercut"],
@@ -68,12 +69,21 @@ static func install(animator: AnimationPlayer, skeleton: Skeleton3D, profiles: D
 		for side in ["left", "right"]:
 			var variants: Array = PUNCH_VARIANTS[side] if kind == "punch" else KICK_VARIANTS[side]
 			var source := animator.get_animation(BASE.clip_path(kind, side))
+			var uses_mma_kick := false
+			if kind == "kick":
+				# Bake the user-supplied Mixamo motion onto the player's actual skeleton.
+				# Preserve the old kick if an incompatible rig is ever substituted.
+				var retargeted: Animation = MMA_KICK.bake(source, skeleton, side, profiles["kick"])
+				if retargeted != null:
+					source = retargeted
+					uses_mma_kick = true
 			for raw_name in variants:
 				var name := String(raw_name)
 				var clip := source.duplicate(true) as Animation
 				if clip == null:
 					return false
-				_overlay(clip, skeleton, _attack_offsets(name), float(profiles[kind].windup))
+				if not uses_mma_kick:
+					_overlay(clip, skeleton, _attack_offsets(name), float(profiles[kind].windup))
 				if library.add_animation(StringName(name), clip) != OK:
 					return false
 	for raw_name in MOVEMENT_DURATIONS:
@@ -82,10 +92,13 @@ static func install(animator: AnimationPlayer, skeleton: Skeleton3D, profiles: D
 		if clip == null or library.add_animation(StringName(name), clip) != OK:
 			return false
 	# Airborne leg strike reuses the right kick's exact gameplay hit time.
-	var flying := animator.get_animation(BASE.clip_path("kick", "right")).duplicate(true) as Animation
+	var flying_base := animator.get_animation(BASE.clip_path("kick", "right"))
+	var flying: Animation = MMA_KICK.bake(flying_base, skeleton, "right", profiles["kick"])
 	if flying == null:
-		return false
-	_overlay(flying, skeleton, _attack_offsets("airborne_kick"), float(profiles["kick"].windup))
+		flying = flying_base.duplicate(true) as Animation
+		if flying == null:
+			return false
+		_overlay(flying, skeleton, _attack_offsets("airborne_kick"), float(profiles["kick"].windup))
 	if library.add_animation(&"airborne_kick", flying) != OK:
 		return false
 	for side in ["left", "right"]:
