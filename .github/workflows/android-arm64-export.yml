@@ -29,6 +29,7 @@ on:
       - codex/flashlight-air-shaft-20261030
       - codex/android-40pct-render-20261030
       - codex/roof-clear-light-and-sketch-20261030
+      - codex/player-mma-kick-20261030
 
 permissions:
   contents: read

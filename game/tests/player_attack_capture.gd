@@ -36,7 +36,11 @@ func _run() -> void:
 	player._animation_player.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
 	for kind in ["punch", "kick"]:
 		for side in ["left", "right"]:
-			var clip := Player.FIGHT_ANIMATION_BUILDER.clip_path(kind, side)
+			var clip: StringName = Player.PLAYER_RING_REFERENCE.clip_path(side + "_front_kick") if kind == "kick" else Player.FIGHT_ANIMATION_BUILDER.clip_path(kind, side)
+			if not player._animation_player.has_animation(clip):
+				push_error("Missing visible player attack clip " + String(clip))
+				quit(1)
+				return
 			player._animation_player.play(clip, 0.0)
 			for phase in ["guard", "chamber", "contact", "recovery"]:
 				var time := 0.0
