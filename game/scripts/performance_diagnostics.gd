@@ -89,7 +89,7 @@ func _build_ui() -> void:
 	var graphics_row := HBoxContainer.new()
 	graphics_row.add_theme_constant_override("separation", 5)
 	column.add_child(graphics_row)
-	for scale in [0.5, 0.67, 1.0]:
+	for scale in [0.40, 0.67, 1.0]:
 		var chosen_scale: float = scale
 		var scale_button := Button.new()
 		scale_button.text = "3D %.2fx" % chosen_scale
