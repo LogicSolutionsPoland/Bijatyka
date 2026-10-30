@@ -107,6 +107,11 @@ var _performance_scenario := ""
 var _spawn_blockers: Array[AABB] = []
 
 func _ready() -> void:
+	# Disable the global graphite material converter before any rooftop meshes
+	# are created. Other preview/test scenes keep its normal default behavior.
+	var style_manager := get_tree().root.get_node_or_null("PencilSketchStyle")
+	if style_manager != null:
+		style_manager.set_gameplay_pencil_enabled(false)
 	if OS.has_feature("mobile"):
 		Engine.max_fps = MOBILE_FPS_LIMIT
 		get_viewport().scaling_3d_scale = MOBILE_3D_RENDER_SCALE
