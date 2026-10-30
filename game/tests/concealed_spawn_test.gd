@@ -331,18 +331,48 @@ func _test_elevator_ground_wave() -> void:
 		var enemy: FoundationEnemy = director._live.values().back()
 		enemy.set_physics_process(false)
 	)
+	arena._apply_camera_look(0.1, 0.0)
+	check(not arena._ground_map_preparing and not arena._ground_map_ready
+		and not arena._ground_wave_started, "camera movement alone cannot begin the ground transition")
 	check(not arena._ground_wave_started and elevator.interact(player),
 		"the roof lift starts with the player aboard")
+	var map_instance_id := arena.arena_map.get_instance_id()
+	var map_batch_count := arena._ground_map_visuals.size()
+	check(arena._ground_map_preparing and not arena._ground_map_ready
+		and elevator._car_enclosure.visible and not elevator._ground_floor_ready
+		and map_batch_count > 0, "downward ride starts staged map preparation inside the closed car")
+	arena._apply_camera_look(0.1, 0.0)
+	check(arena._ground_map_visual_index == 0 and director._live.is_empty(),
+		"camera look cannot trigger map setup or zombie activation")
 	director._physics_process(1.0)
 	check(elevator._travelling and director.ordinary_population_count() == 4
 		and director._live.is_empty() and positions.is_empty(),
 		"camera and elevator movement cannot activate the four stored zombies")
+	# Freeze map preparation to simulate a slow device: the car must stop at
+	# the bottom with the rider enclosed until preparation resumes.
+	arena.set_process(false)
 	for frame in range(360):
+		await physics_frame
+		if is_equal_approx(elevator._car_root.position.y, elevator.BOTTOM_CAR_Y):
+			break
+	check(elevator._travelling and elevator.is_player_riding(player)
+		and elevator._car_enclosure.visible and not arena._ground_wave_started
+		and director.ordinary_population_count() == 4,
+		"bottom doors stay closed and four zombies stay stored while map preparation is incomplete")
+	arena.set_process(true)
+	for frame in range(180):
 		await physics_frame
 		if not elevator._travelling:
 			break
 	check(player.global_position.y < 1.0 and arena._ground_wave_started,
 		"player arrival at ground level activates the encounter")
+	var all_batches_ready := true
+	for visual in arena._ground_map_visuals:
+		all_batches_ready = all_batches_ready and visual.visible
+	check(arena._ground_map_ready and not arena._ground_map_preparing and all_batches_ready
+		and not elevator._car_enclosure.visible and arena._environment.sky == arena._ground_sky
+		and arena.arena_map.get_instance_id() == map_instance_id,
+		"ground map and render profile finish before doors open without a second map instance")
 	check(director.population_limit == 13 and director._initial_population_pending + director._live.size() == 4
 		and director._stored_population.is_empty() and director._pending.is_empty(),
 		"ground arrival activates exactly four stored entries with a thirteen-zombie cap")
@@ -394,6 +424,12 @@ func _test_elevator_ground_wave() -> void:
 		and director._pending.is_empty() and not director.is_physics_processing()
 		and not arena.horde_far_visuals.visible,
 		"boarding for the roof immediately removes all actors and replacement debt")
+	var rooftop_batches_hidden := true
+	for visual in arena._ground_map_visuals:
+		rooftop_batches_hidden = rooftop_batches_hidden and not visual.visible
+	check(not arena._ground_map_preparing and not arena._ground_map_ready and rooftop_batches_hidden
+		and arena.arena_map.get_instance_id() == map_instance_id,
+		"upward ride restores roof profile and hides the same ground map batches")
 	await process_frame
 	var ordinary_actors := 0
 	for node in get_nodes_in_group("enemies"):
@@ -425,6 +461,15 @@ func _test_elevator_ground_wave() -> void:
 		and director._live.is_empty() and director._pending.is_empty()
 		and director._initial_population_pending == 0 and director._stored_population.size() == 4,
 		"rooftop respawn clears the wave and restores four data-only zombies")
+	check(arena.arena_map.get_instance_id() == map_instance_id
+		and arena._ground_map_visuals.size() == map_batch_count and not arena._ground_map_ready,
+		"respawn retains one dormant map and cancels the ground state")
+	check(elevator.interact(player), "lift can start another descent before a mid-ride respawn")
+	await process_frame
+	player._reset_at_safe_base()
+	check(not elevator._travelling and not elevator._car_enclosure.visible
+		and not arena._ground_map_preparing and director.ordinary_population_count() == 4,
+		"mid-ride rooftop respawn cancels preparation without waking zombies")
 	arena.queue_free()
 	await process_frame
 

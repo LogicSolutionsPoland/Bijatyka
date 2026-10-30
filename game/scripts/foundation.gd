@@ -84,6 +84,11 @@ var _boss_enemy: FoundationEnemy
 var _key_light: DirectionalLight3D
 var _high_detail_zombie_sample_assigned := false
 var _ground_wave_started := false
+var _ground_map_visuals: Array[GeometryInstance3D] = []
+var _ground_map_visual_index := 0
+var _ground_map_profile_step := 0
+var _ground_map_preparing := false
+var _ground_map_ready := false
 var burning_horizon: Node3D
 var _environment: Environment
 var _ground_sky: Sky
@@ -113,6 +118,13 @@ func _ready() -> void:
 	arena_map = ARENA_MAP_SCRIPT.new() as Node3D
 	arena_map.name = "AshenQuarantineMap"
 	add_child(arena_map)
+	# The map is already built in this scene. Keep its visual batches dormant
+	# on the roof and reveal the same instances over the downward ride.
+	for child in arena_map.get_children():
+		if child is GeometryInstance3D:
+			var visual := child as GeometryInstance3D
+			visual.visible = false
+			_ground_map_visuals.append(visual)
 	player = PLAYER_SCENE.instantiate() as FoundationPlayer
 	player.name = "ThornboundPlayer"
 	player.position = PLAYER_BASE_POSITION
@@ -185,6 +197,7 @@ func _process(delta: float) -> void:
 		return
 	burning_horizon.follow_player(player.global_position)
 	_update_rooftop_sky()
+	_advance_ground_map_preparation()
 	_rooftop_camera_blend = move_toward(
 		_rooftop_camera_blend,
 		_rooftop_camera_target,
@@ -293,19 +306,61 @@ func _build_environment() -> void:
 	add_child(sun)
 
 func _update_rooftop_sky() -> void:
-	# Hold the current camera and render profile for the full elevator ride.
-	# Apply the floor change once the arrival signal confirms the car has stopped.
+	# Height changes during a boarded ride do not control the map or sky.
+	# The elevator's ride-start signal prepares the ground profile instead.
 	if _is_player_in_elevator():
 		return
 	var on_roof := player.global_position.y >= ROOFTOP_SKY_MIN_HEIGHT
 	_rooftop_camera_target = 1.0 if on_roof else 0.0
 	if on_roof == _rooftop_sky_active:
 		return
+	_set_rooftop_render_profile(on_roof)
+
+
+func _set_rooftop_render_profile(on_roof: bool) -> void:
 	_rooftop_sky_active = on_roof
+	_rooftop_camera_target = 1.0 if on_roof else 0.0
 	_environment.sky = _rooftop_city_sky if on_roof else _ground_sky
 	# Keep the original four-panel Burning Horizon for ground-level play.
 	burning_horizon.visible = not on_roof
 	flashlight_visibility_manager.set_rooftop_sky_visible(on_roof)
+
+
+func _advance_ground_map_preparation() -> void:
+	if not _ground_map_preparing:
+		return
+	# One already-created MultiMesh batch per frame. No scene instantiation,
+	# geometry rebuilding, enemy AI or zombie spawning happens in this phase.
+	if _ground_map_visual_index < _ground_map_visuals.size():
+		_ground_map_visuals[_ground_map_visual_index].visible = true
+		_ground_map_visual_index += 1
+		return
+	if _ground_map_profile_step == 0:
+		_environment.sky = _ground_sky
+	elif _ground_map_profile_step == 1:
+		burning_horizon.visible = true
+	elif _ground_map_profile_step == 2:
+		flashlight_visibility_manager.set_rooftop_sky_visible(false)
+		_rooftop_sky_active = false
+		_rooftop_camera_target = 0.0
+	else:
+		_ground_map_preparing = false
+		_ground_map_ready = true
+		starting_tower.elevator.set_ground_floor_ready(true)
+		return
+	_ground_map_profile_step += 1
+
+
+func _restore_rooftop_map() -> void:
+	# Cancels any partial descent, including a respawn while the car is moving.
+	_ground_map_preparing = false
+	_ground_map_ready = false
+	_ground_map_visual_index = 0
+	_ground_map_profile_step = 0
+	for visual in _ground_map_visuals:
+		visual.visible = false
+	_set_rooftop_render_profile(true)
+	starting_tower.elevator.set_ground_floor_ready(true)
 
 
 func _is_player_in_elevator() -> bool:
@@ -410,6 +465,7 @@ func _build_starting_tower() -> void:
 		_material(Color(0.32, 0.19, 0.13), 0.84))
 	add_child(starting_tower)
 	starting_tower.elevator.rider_arrived.connect(_on_elevator_rider_arrived)
+	starting_tower.elevator.rider_ride_started.connect(_on_elevator_ride_started)
 	# Exclude the tower volume from concealed enemy placement, even in
 	# performance scenarios; the existing enemy-safe base remains intact.
 	var half_width := StartingTower.WIDTH * 0.5
@@ -606,9 +662,13 @@ func _update_camera_framing() -> void:
 	camera_arm.position.x = (0.5 - CAMERA_TARGET_SCREEN_X) * 2.0 * _camera_follow_distance() * tan(half_horizontal_fov)
 
 func _camera_pivot_height() -> float:
+	if _is_player_in_elevator():
+		return CAMERA_PIVOT_HEIGHT
 	return CAMERA_PIVOT_HEIGHT + ROOFTOP_CAMERA_PIVOT_LIFT * _rooftop_camera_blend
 
 func _camera_follow_distance() -> float:
+	if _is_player_in_elevator():
+		return 0.65
 	return lerpf(CAMERA_FOLLOW_DISTANCE, ROOFTOP_CAMERA_FOLLOW_DISTANCE, _rooftop_camera_blend)
 
 func _effective_camera_pitch() -> float:
@@ -717,14 +777,32 @@ func _spawn_enemy(kind: String, at: Vector3, boss_target: bool = false, high_det
 func _on_elevator_requested() -> void:
 	_interact_with_starting_elevator()
 
+func _on_elevator_ride_started(destination_floor: StringName) -> void:
+	# The car is closed and the rider is inside before this signal is emitted.
+	# Keep the camera inside the enclosure throughout the reveal sequence.
+	camera_rig.global_position = player.global_position + Vector3.UP * CAMERA_PIVOT_HEIGHT
+	camera_arm.spring_length = _camera_follow_distance()
+	_update_camera_framing()
+	if destination_floor == &"roof":
+		_restore_rooftop_map()
+		if _ground_wave_started:
+			_deactivate_ground_population()
+		return
+	if destination_floor != &"ground" or _ground_map_preparing or _ground_map_ready:
+		return
+	_ground_map_visual_index = 0
+	_ground_map_profile_step = 0
+	_ground_map_preparing = true
+	starting_tower.elevator.set_ground_floor_ready(false)
+
 func _on_elevator_rider_arrived(floor: StringName) -> void:
-	# Arrival is the single transition point for the roof/ground render profile.
+	# The visual transition finished during travel; arrival only starts combat.
 	_update_rooftop_sky()
 	if floor == &"roof":
 		if _ground_wave_started:
 			_deactivate_ground_population()
 		return
-	if floor != &"ground" or _ground_wave_started or not is_instance_valid(spawn_director):
+	if floor != &"ground" or not _ground_map_ready or _ground_wave_started or not is_instance_valid(spawn_director):
 		return
 	_ground_wave_started = true
 	if not _performance_scenario.is_empty():
@@ -740,6 +818,7 @@ func _on_elevator_rider_arrived(floor: StringName) -> void:
 func _on_player_respawned() -> void:
 	if is_instance_valid(starting_tower) and is_instance_valid(starting_tower.elevator):
 		starting_tower.elevator.reset_to_roof()
+		_restore_rooftop_map()
 	_update_rooftop_sky()
 	_rooftop_camera_blend = 1.0
 	_rooftop_camera_target = 1.0
@@ -759,12 +838,7 @@ func _deactivate_ground_population() -> void:
 func _interact_with_starting_elevator() -> bool:
 	if get_tree().paused or not is_instance_valid(player) or not is_instance_valid(starting_tower) or not is_instance_valid(starting_tower.elevator):
 		return false
-	var started := starting_tower.elevator.interact(player)
-	# Clear ground actors as soon as the player boards for the roof. They must
-	# remain dormant throughout the trip, not just after the roof camera blends.
-	if started and _ground_wave_started and starting_tower.elevator.is_player_riding(player):
-		_deactivate_ground_population()
-	return started
+	return starting_tower.elevator.interact(player)
 
 func _on_hud_action(action: String) -> void:
 	if get_tree().paused:
