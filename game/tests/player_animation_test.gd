@@ -67,6 +67,28 @@ func _check_ring_bank(player: FoundationPlayer) -> void:
 		if name not in ["duck", "slip_left", "slip_right", "pivot_left", "pivot_right"]:
 			var kind := "kick" if "kick" in name else "punch"
 			_check(is_equal_approx(clip.get_marker_time(&"contact"), float(Player.ATTACKS[kind].windup)), "ring clip %s contact matches damage timing" % name)
+	# The user-supplied MMA kick must drive the actual ring clips, not just
+	# exist as an unused asset or leave the old procedural kick selected.
+	for side in ["left", "right"]:
+		var ring_name := side + "_front_kick"
+		var clip := animator.get_animation(Player.PLAYER_RING_REFERENCE.clip_path(ring_name))
+		if clip == null:
+			_check(false, "MMA %s kick installed" % side)
+			continue
+		var thigh_name := "thigh_" + ("l" if side == "left" else "r")
+		var animates_leg := false
+		for track in range(clip.get_track_count()):
+			if clip.track_get_type(track) != Animation.TYPE_ROTATION_3D:
+				continue
+			var p := clip.track_get_path(track)
+			if p.get_subname_count() != 1 or String(p.get_subname(0)) != thigh_name:
+				continue
+			var first := clip.rotation_track_interpolate(track, 0.0)
+			var middle := clip.rotation_track_interpolate(track, clip.length * 0.5)
+			animates_leg = first.angle_to(middle) > 0.15
+			break
+		_check(animates_leg, "%s MMA kick is retargeted to the player's kicking leg" % side)
+
 	# Enemy visuals must never have the player-only library.
 	var enemy := Enemy.new() as FoundationEnemy
 	root.add_child(enemy)
