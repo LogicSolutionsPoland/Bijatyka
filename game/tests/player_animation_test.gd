@@ -70,12 +70,12 @@ func _check_ring_bank(player: FoundationPlayer) -> void:
 	# The user-supplied MMA kick must drive the actual ring clips, not just
 	# exist as an unused asset or leave the old procedural kick selected.
 	for side in ["left", "right"]:
-		var ring_name := side + "_front_kick"
+		var ring_name: String = String(side) + "_front_kick"
 		var clip := animator.get_animation(Player.PLAYER_RING_REFERENCE.clip_path(ring_name))
 		if clip == null:
 			_check(false, "MMA %s kick installed" % side)
 			continue
-		var thigh_name := "thigh_" + ("l" if side == "left" else "r")
+		var thigh_name: String = "thigh_" + ("l" if side == "left" else "r")
 		var animates_leg := false
 		for track in range(clip.get_track_count()):
 			if clip.track_get_type(track) != Animation.TYPE_ROTATION_3D:
