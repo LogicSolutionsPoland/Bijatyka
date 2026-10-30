@@ -65,6 +65,7 @@ static func install(animator: AnimationPlayer, skeleton: Skeleton3D, profiles: D
 				return false
 	var guard := animator.get_animation(&"Punch_Jab")
 	var library := AnimationLibrary.new()
+	var right_mma_kick: Animation = null
 	for kind in ["punch", "kick"]:
 		for side in ["left", "right"]:
 			var variants: Array = PUNCH_VARIANTS[side] if kind == "punch" else KICK_VARIANTS[side]
@@ -77,6 +78,8 @@ static func install(animator: AnimationPlayer, skeleton: Skeleton3D, profiles: D
 				if retargeted != null:
 					source = retargeted
 					uses_mma_kick = true
+					if side == "right":
+						right_mma_kick = retargeted
 			for raw_name in variants:
 				var name := String(raw_name)
 				var clip := source.duplicate(true) as Animation
@@ -93,7 +96,7 @@ static func install(animator: AnimationPlayer, skeleton: Skeleton3D, profiles: D
 			return false
 	# Airborne leg strike reuses the right kick's exact gameplay hit time.
 	var flying_base := animator.get_animation(BASE.clip_path("kick", "right"))
-	var flying: Animation = MMA_KICK.bake(flying_base, skeleton, "right", profiles["kick"])
+	var flying: Animation = right_mma_kick.duplicate(true) as Animation if right_mma_kick != null else null
 	if flying == null:
 		flying = flying_base.duplicate(true) as Animation
 		if flying == null:
