@@ -26,6 +26,7 @@ on:
       - codex/rooftop-burning-city-20261028
       - codex/roof-spawn-cage-30cm-20261029
       - codex/android-hd-80fps-20261030
+      - codex/flashlight-air-shaft-20261030
 
 permissions:
   contents: read
@@ -63,7 +64,7 @@ jobs:
       - name: Validate enemy and player animation and controls
         run: |
           set -euo pipefail
-          for suite in environment_render_test enemy_attack_animation_test zombie_animation_test player_animation_test test_runner; do
+          for suite in environment_render_test enemy_attack_animation_test zombie_animation_test player_animation_test test_runner concealed_spawn_test; do
             godot --headless --path game --script "res://tests/$suite.gd" 2>&1 | tee "$RUNNER_TEMP/$suite.log"
             grep -q 'PASS:' "$RUNNER_TEMP/$suite.log"
             if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/$suite.log"; then exit 1; fi
@@ -136,6 +137,7 @@ jobs:
             assets/project.binary \
             assets/scripts/foundation.gdc \
             assets/scripts/flashlight_visibility.gdc \
+            assets/scripts/concealed_spawn.gdc \
             assets/scripts/enemy.gdc \
             assets/scripts/horde_far_visuals.gdc \
             assets/scripts/player_controller.gdc \
@@ -161,6 +163,7 @@ jobs:
             assets/shaders/radial_ground.gdshader \
             assets/shaders/flashlight_visibility.gdshader \
             assets/shaders/flashlight_beam_sections.gdshader \
+            assets/shaders/flashlight_beam_volume.gdshader \
             assets/shaders/horde_crowd_animation.gdshader \
             assets/assets/audio/menu_music.mp3.import; do
             grep -Fxq "$entry" "$RUNNER_TEMP/apk-files.txt"

@@ -94,8 +94,17 @@ func _run() -> void:
 	game._camera_yaw = 0.0
 	game.camera_rig.rotation.y = 0.0
 	manager.set_aim_yaw(0.0)
+	# Rooftop residents are count-only now. Create two isolated classifier
+	# fixtures without activating the ground-floor population or its director.
 	var test_enemies: Array = game.horde_far_visuals._enemies.values()
-	_check(test_enemies.size() >= 2, "ordinary zombie population is registered with the shared visibility manager")
+	if test_enemies.size() < 2:
+		_check(game.spawn_director.ordinary_population_count() == 4 and game.spawn_director._live.is_empty(), "rooftop holds four dormant ordinary entries without actors")
+		for index in range(2):
+			var fixture := game._spawn_enemy("shambler", game.player.global_position + Vector3(45.0 + index, 0.0, 0.0))
+			game.horde_far_visuals.register_enemy(fixture)
+		game.horde_far_visuals.visible = true
+		test_enemies = game.horde_far_visuals._enemies.values()
+	_check(test_enemies.size() >= 2, "classifier fixtures are registered with the shared visibility manager")
 	if test_enemies.size() >= 2:
 		for enemy_variant in test_enemies:
 			var enemy := enemy_variant as FoundationEnemy
@@ -116,6 +125,10 @@ func _run() -> void:
 		manager._classify_enemies()
 		_check(dark_zombie.global_position.distance_to(dark_position) < 0.001, "turning the flashlight never teleports a hidden zombie")
 		_check(dark_zombie.is_physics_processing(), "hidden zombie physics and AI remain active")
+		for enemy in test_enemies:
+			(enemy as FoundationEnemy).queue_free()
+		await process_frame
+		game.horde_far_visuals.visible = false
 
 	var old_rig_position := game.camera_rig.global_position
 	game.player.global_position += Vector3.RIGHT * 2.0
@@ -173,7 +186,7 @@ func _run() -> void:
 	_check(game.burning_horizon.get_child_count() == 4, "Burning Horizon remains present while masked")
 	_check(game._boss_enemy != null and game._boss_enemy.hp > 0, "boss simulation remains independent from flashlight visibility")
 	_check(manager._tracked.has(game._boss_enemy.get_instance_id()), "boss is registered for the same whole-body flashlight reveal")
-	_check(is_equal_approx(Foundation.MOBILE_3D_RENDER_SCALE, 0.50), "mobile performance preset starts at half-resolution 3D")
+	_check(is_equal_approx(Foundation.MOBILE_3D_RENDER_SCALE, 1.0), "HD mobile preset starts at full-resolution 3D")
 	if OS.is_debug_build() and game.performance_diagnostics != null:
 		var local_lights := game.find_children("*", "OmniLight3D", true, false)
 		_check(local_lights.size() == 4, "four unshadowed local lights remain available for quality comparison")
