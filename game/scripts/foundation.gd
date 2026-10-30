@@ -24,12 +24,13 @@ const GROUND_ZOMBIE_HORDE_SIZE := 13
 const ZOMBIE_PERFORMANCE_CAPACITY := 200
 const ZOMBIE_SPAWN_DISTANCE := 50.0
 const VISIBILITY_RADIUS := 30.0
-# Target the project's HD 1280x720 viewport without 3D downscaling on Android.
-# The touch HUD remains at native UI resolution; the debug profiler can switch
-# to lower-cost scales for battery/thermal comparisons.
-const MOBILE_3D_RENDER_SCALE := 1.0
+# Preserve the 1280x720 Android viewport and native-resolution touch HUD, but
+# render the 3D scene at 40% linear resolution to reduce mobile GPU workload.
+# The debug profiler retains 67% and full 100% comparison presets.
+const MOBILE_3D_RENDER_SCALE := 0.40
 const MOBILE_BALANCED_RENDER_SCALE := 0.67
-const MOBILE_LOW_RENDER_SCALE := 0.50
+const MOBILE_LOW_RENDER_SCALE := 0.40
+const MOBILE_FULL_RENDER_SCALE := 1.0
 const MOBILE_FPS_LIMIT := 60
 const PLAYER_BASE_CENTER := Vector3(0.0, 0.0, -5.2)
 const PLAYER_BASE_POSITION := PLAYER_BASE_CENTER + Vector3(0.0, StartingTower.HEIGHT + 0.05, 0.0)
@@ -964,7 +965,7 @@ func _setup_performance_diagnostics() -> void:
 	add_child(performance_diagnostics)
 
 func _set_debug_render_scale(scale: float) -> void:
-	if OS.is_debug_build() and [MOBILE_LOW_RENDER_SCALE, MOBILE_BALANCED_RENDER_SCALE, MOBILE_3D_RENDER_SCALE].has(scale):
+	if OS.is_debug_build() and [MOBILE_LOW_RENDER_SCALE, MOBILE_BALANCED_RENDER_SCALE, MOBILE_FULL_RENDER_SCALE].has(scale):
 		get_viewport().scaling_3d_scale = scale
 
 func _set_debug_mask_visible(is_visible: bool) -> void:
