@@ -88,7 +88,8 @@ func _run() -> void:
 	sections.visible = false
 	environment.background_color = Color(0.72, 0.46, 0.34)
 	manager.set_rooftop_sky_visible(true)
-	manager._composite.visible = true
+	# Rooftop now deliberately disables the entire flashlight, rather than
+	# compositing a visible shaft over the panorama.
 	var off_axis := Vector2(image.get_width() * 0.85, image.get_height() * 0.3)
 	var near_axis := camera.unproject_position(manager.beam_origin + manager.beam_direction * 4.5) * Vector2(image.get_size()) / camera.get_viewport().get_visible_rect().size
 	for frame in range(4):
@@ -109,9 +110,10 @@ func _run() -> void:
 	var roof_near := roof_image.get_pixelv(Vector2i(near_axis))
 	var roof_off_axis := roof_image.get_pixelv(Vector2i(off_axis))
 	print("FLASHLIGHT_ROOF_AIR_PIXEL " + JSON.stringify({"beam": roof_axis, "sky_only": warm_axis, "near": roof_near, "near_sky_only": warm_near, "outside": roof_off_axis}))
-	_check(roof_axis.b > warm_axis.b + 0.07, "the shaft is visible above the floor against a bright rooftop sky")
-	_check(roof_near.b > warm_near.b + 0.07, "the air shaft is visible near the player, before the rooftop rail")
-	_check(absf(roof_off_axis.b - warm_off_axis.b) < 0.025, "rooftop sky outside the shaft is unchanged")
+	_check(not manager._composite.visible and not manager.spotlight.visible and absf(roof_axis.b - warm_axis.b) < 0.025,
+		"rooftop disables the fullscreen blackout and air beam without recoloring the city")
+	_check(absf(roof_near.b - warm_near.b) < 0.025, "rooftop has no beam near the player")
+	_check(absf(roof_off_axis.b - warm_off_axis.b) < 0.025, "rooftop sky off-axis is unchanged")
 
 	world.queue_free()
 	await process_frame
