@@ -38,6 +38,8 @@ var player: Node3D
 var camera: Camera3D
 var enabled := true
 var rooftop_sky_visible := false
+var _rooftop_mode := false
+var _composite_debug_visible := true
 var aim_direction := Vector3.FORWARD
 var beam_origin := Vector3.ZERO
 var beam_direction := Vector3.FORWARD
@@ -81,9 +83,22 @@ func get_beam_density(world_position: Vector3) -> float:
 		* smoothstep(0.0, 2.0, axial) * (1.0 - smoothstep(BRIGHT_RADIUS, MAX_RADIUS, axial))
 
 func set_rooftop_sky_visible(is_visible: bool) -> void:
+	# The rooftop has no flashlight at all: no blackout, spot cone or glints.
 	rooftop_sky_visible = is_visible
+	_rooftop_mode = is_visible
 	if _material != null:
 		_material.set_shader_parameter("rooftop_sky_visible", is_visible)
+	_sync_rooftop_render_visibility()
+
+
+func _sync_rooftop_render_visibility() -> void:
+	var should_draw := enabled and not _rooftop_mode
+	if is_instance_valid(_composite):
+		_composite.visible = should_draw and _composite_debug_visible
+	if is_instance_valid(spotlight):
+		spotlight.visible = should_draw
+	if is_instance_valid(_teeth_canvas):
+		_teeth_canvas.visible = should_draw
 
 func track_enemy(enemy: Node3D) -> void:
 	if not is_instance_valid(enemy):
@@ -152,10 +167,11 @@ func set_composite_visible_for_comparison(is_visible: bool) -> void:
 	# Debug-only A/B probe: stop drawing the full-screen pass while keeping
 	# exactly the same AI, horde classification, and scene geometry.
 	if OS.is_debug_build() and is_instance_valid(_composite):
-		_composite.visible = is_visible
+		_composite_debug_visible = is_visible
+		_sync_rooftop_render_visibility()
 
 func _process(delta: float) -> void:
-	if not is_instance_valid(player):
+	if not is_instance_valid(player) or _rooftop_mode:
 		return
 	# Uniforms update each frame for immediate aiming response. Actor classes are
 	# refreshed at 8.3 Hz, shared across both render queues.
@@ -184,6 +200,7 @@ func _build_composite() -> void:
 	_material.set_shader_parameter("oval_feather", OVAL_FEATHER)
 	_composite = MeshInstance3D.new()
 	_composite.name = "FlashlightVisibilityComposite"
+	_composite.add_to_group("flashlight_visibility_composite")
 	_composite.mesh = quad
 	_composite.material_override = _material
 	_composite.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -317,7 +334,7 @@ func _upload_shader_parameters() -> void:
 	if is_instance_valid(spotlight):
 		spotlight.global_position = beam_origin
 		spotlight.global_basis = Basis.looking_at(beam_direction, Vector3.UP)
-		spotlight.visible = enabled
+		spotlight.visible = enabled and not _rooftop_mode
 	if _material == null:
 		return
 	_material.set_shader_parameter("flashlight_origin", player.global_position)
