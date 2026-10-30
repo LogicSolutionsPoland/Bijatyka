@@ -14,8 +14,7 @@ func _run() -> void:
 	root.add_child(game)
 	for frame in range(12):
 		await process_frame
-	var player_position: Vector3 = game.player.global_position
-	# The lower skyline band must show the photo's zombie-filled streets above
+		# The lower skyline band must show the photo's zombie-filled streets above
 	# the rooftop guard, then return to black on the ground floor.
 	var city_view_point := root.get_visible_rect().size * Vector2(0.50, 0.56)
 	game.hud._root.visible = false
@@ -36,19 +35,22 @@ func _run() -> void:
 	var clear_sky_point := root.get_visible_rect().size * Vector2(0.50, 0.02)
 	var ground_sky := _sample(root.get_texture().get_image(), clear_sky_point)
 	_check(maxf(ground_sky.r, maxf(ground_sky.g, ground_sky.b)) < 0.03, "ground-level sky stays black with the flashlight")
-	game.player.global_position = player_position
-	game._update_rooftop_sky()
-	game._rooftop_camera_blend = 1.0
-	game.camera_rig.global_position = game.player.global_position + Vector3.UP * game._camera_pivot_height()
-	game.camera_arm.spring_length = Foundation.ROOFTOP_CAMERA_FOLLOW_DISTANCE
+	# Keep the player on the GROUND for flashlight blackout pixel checks.
+	# The rooftop now has no flashlight, so a rooftop pixel should never
+	# be expected to turn black outside the oval.
+	game._rooftop_camera_blend = 0.0
+	game.camera_rig.global_position = game.player.global_position + Vector3.UP * Foundation.CAMERA_PIVOT_HEIGHT
+	game.camera_arm.spring_length = Foundation.CAMERA_FOLLOW_DISTANCE
 	game.camera_arm.rotation.x = game._effective_camera_pitch()
 	game._update_camera_framing()
+	_check(not game._rooftop_sky_active and game.flashlight_visibility_manager._composite.visible,
+		"ground floor restores the real blackout pass before pixel probes")
 	# Hold the camera and player still while projecting colored pixel probes;
 	# the roof's camera profile otherwise moves during projection.
 	game.set_process(false)
 	game.player.set_physics_process(false)
 	game.hud._root.visible = true
-	game._boss_enemy.global_position = player_position + Vector3(3.0, 0.05, 5.0)
+	game._boss_enemy.global_position = game.player.global_position + Vector3(3.0, 0.05, 5.0)
 	game._update_boss_locator()
 	var viewport_size := game.camera.get_viewport().get_visible_rect().size
 	var lit_world := game.camera.project_position(viewport_size * Vector2(0.44, 0.53), 5.0)
@@ -58,8 +60,8 @@ func _run() -> void:
 	var dark_world := game.camera.project_position(viewport_size * Vector2(0.96, 0.58), 5.0)
 	var lit_probe := _add_probe(game, lit_world, Color(1.0, 0.05, 0.03))
 	var dark_probe := _add_probe(game, dark_world, Color(0.02, 1.0, 0.04))
-	_check(game.flashlight_visibility_manager.is_point_in_sector(lit_world) and lit_world.distance_to(player_position) < 22.0, "lit probe is within the original range and sector")
-	_check(game.flashlight_visibility_manager.is_point_in_sector(dark_world) and dark_world.distance_to(player_position) < 22.0, "dark probe differs only by its position outside the oval")
+	_check(game.flashlight_visibility_manager.is_point_in_sector(lit_world) and lit_world.distance_to(game.player.global_position) < 22.0, "lit probe is within the original range and sector")
+	_check(game.flashlight_visibility_manager.is_point_in_sector(dark_world) and dark_world.distance_to(game.player.global_position) < 22.0, "dark probe differs only by its position outside the oval")
 	for scale in [1.0, Foundation.MOBILE_BALANCED_RENDER_SCALE, Foundation.MOBILE_3D_RENDER_SCALE]:
 		root.scaling_3d_scale = scale
 		for frame in range(6):
