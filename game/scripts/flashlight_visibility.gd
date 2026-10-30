@@ -226,8 +226,8 @@ func _build_visible_beam_volume() -> void:
 	material.set_shader_parameter("beam_range", MAX_RADIUS)
 	material.set_shader_parameter("beam_tangent", BEAM_TANGENT)
 	material.set_shader_parameter("beam_color", Color(0.61, 0.80, 1.0))
-	material.set_shader_parameter("beam_opacity", 0.10)
-	material.set_shader_parameter("core_opacity", 0.08)
+	material.set_shader_parameter("beam_opacity", 0.12)
+	material.set_shader_parameter("core_opacity", 0.11)
 
 	var maximum_width := maxf(0.32, MAX_RADIUS * BEAM_TANGENT)
 	for index in range(3):
@@ -264,7 +264,9 @@ func _build_visible_beam_sections() -> void:
 	var vertices := PackedVector3Array()
 	var uvs := PackedVector2Array()
 	var indices := PackedInt32Array()
-	for distance in [3.0, 6.0, 9.5, 13.5, 18.0, 23.0, 28.0]:
+	# Spend the same seven depth-tested sections closer to the player, where
+	# the rooftop view previously showed only the distant part past the rail.
+	for distance in [2.0, 3.5, 5.5, 8.5, 13.0, 20.0, 27.0]:
 		var radius: float = float(distance) * BEAM_TANGENT
 		var base := vertices.size()
 		vertices.append_array(PackedVector3Array([

@@ -21,7 +21,7 @@ void fragment() {
 	float edge = 1.0 - smoothstep(0.78, 1.0, radial);
 	float core = 1.0 - smoothstep(0.0, 0.65, radial);
 	float radial_weight = edge * (0.35 + 0.65 * core);
-	float start_fade = smoothstep(0.0, 3.5, axial_distance);
+	float start_fade = smoothstep(0.5, 2.2, axial_distance);
 	float end_fade = 1.0 - smoothstep(fade_end_start, beam_range, axial_distance);
 	ALBEDO = beam_color;
 	ALPHA = section_opacity * radial_weight * start_fade * end_fade;

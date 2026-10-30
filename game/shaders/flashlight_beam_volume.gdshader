@@ -7,8 +7,8 @@ render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, fog_disabled;
 uniform float beam_range = 30.0;
 uniform float beam_tangent = 0.46630766;
 uniform vec3 beam_color : source_color = vec3(0.61, 0.80, 1.0);
-uniform float beam_opacity = 0.10;
-uniform float core_opacity = 0.08;
+uniform float beam_opacity = 0.12;
+uniform float core_opacity = 0.11;
 
 varying float axial_distance;
 varying float across_fraction;
@@ -24,7 +24,7 @@ void vertex() {
 }
 
 void fragment() {
-	float start_fade = smoothstep(0.2, 2.4, axial_distance);
+	float start_fade = smoothstep(0.2, 1.5, axial_distance);
 	float end_fade = 1.0 - smoothstep(beam_range * 0.78, beam_range, axial_distance);
 	float side_fade = 1.0 - smoothstep(0.58, 1.0, across_fraction);
 	float core_fade = 1.0 - smoothstep(0.0, 0.42, across_fraction);

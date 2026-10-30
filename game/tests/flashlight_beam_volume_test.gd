@@ -90,11 +90,13 @@ func _run() -> void:
 	manager.set_rooftop_sky_visible(true)
 	manager._composite.visible = true
 	var off_axis := Vector2(image.get_width() * 0.85, image.get_height() * 0.3)
+	var near_axis := camera.unproject_position(manager.beam_origin + manager.beam_direction * 4.5) * Vector2(image.get_size()) / camera.get_viewport().get_visible_rect().size
 	for frame in range(4):
 		await process_frame
 	await RenderingServer.frame_post_draw
 	var warm_image := root.get_texture().get_image()
 	var warm_axis := warm_image.get_pixelv(Vector2i(beam_screen))
+	var warm_near := warm_image.get_pixelv(Vector2i(near_axis))
 	var warm_off_axis := warm_image.get_pixelv(Vector2i(off_axis))
 	sections.visible = true
 	for node in manager.spotlight.find_children("PlayerFlashlightBeamSheet*", "MeshInstance3D", true, false):
@@ -104,15 +106,17 @@ func _run() -> void:
 	await RenderingServer.frame_post_draw
 	var roof_image := root.get_texture().get_image()
 	var roof_axis := roof_image.get_pixelv(Vector2i(beam_screen))
+	var roof_near := roof_image.get_pixelv(Vector2i(near_axis))
 	var roof_off_axis := roof_image.get_pixelv(Vector2i(off_axis))
-	print("FLASHLIGHT_ROOF_AIR_PIXEL " + JSON.stringify({"beam": roof_axis, "sky_only": warm_axis, "outside": roof_off_axis}))
+	print("FLASHLIGHT_ROOF_AIR_PIXEL " + JSON.stringify({"beam": roof_axis, "sky_only": warm_axis, "near": roof_near, "near_sky_only": warm_near, "outside": roof_off_axis}))
 	_check(roof_axis.b > warm_axis.b + 0.07, "the shaft is visible above the floor against a bright rooftop sky")
+	_check(roof_near.b > warm_near.b + 0.07, "the air shaft is visible near the player, before the rooftop rail")
 	_check(absf(roof_off_axis.b - warm_off_axis.b) < 0.025, "rooftop sky outside the shaft is unchanged")
 
 	world.queue_free()
 	await process_frame
 	if failures.is_empty():
-		print("PASS: visible flashlight air beam (%d checks)" % 6)
+		print("PASS: visible flashlight air beam (%d checks)" % 7)
 	else:
 		for failure in failures:
 			push_error(failure)
