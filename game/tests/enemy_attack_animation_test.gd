@@ -13,7 +13,7 @@ func _initialize() -> void:
 	call_deferred("_run")
 
 func _run() -> void:
-	_check(Foundation.ZOMBIE_HORDE_SIZE == 5, "ordinary zombie cap remains five")
+	_check(Foundation.ZOMBIE_HORDE_SIZE == 4, "rooftop ordinary population contains four dormant entries")
 	for variant in VARIANTS:
 		var enemy := Enemy.new() as FoundationEnemy
 		enemy.configure(variant)

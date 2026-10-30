@@ -12,6 +12,7 @@ const MOBILE_MAX_SPAWNS_PER_TICK := 1
 const MOBILE_SPAWN_INTERVAL := 0.12
 const RETRY_SECONDS := 0.25
 const REPLACEMENT_SECONDS := 1.0
+const MAX_PLAYER_ATTACKERS := 4
 const FORWARD_HALF_ANGLE := deg_to_rad(80.0)
 const RADIAL_SPREAD := 4.0
 const WORLD_LIMIT := 94.0
@@ -26,7 +27,7 @@ const VISUAL_EXTENTS := Vector3(1.5, 1.6, 1.5)
 
 var player: FoundationPlayer
 var camera: Camera3D
-var population_limit := 5
+var population_limit := 4
 var spawn_distance := 50.0
 var initial_spawn_min_distance := INITIAL_SPAWN_MIN_DISTANCE
 var initial_spawn_max_distance := INITIAL_SPAWN_MAX_DISTANCE
@@ -35,6 +36,9 @@ var blocked_boxes: Array[AABB] = []
 var last_candidate_count := 0
 var last_spawn_count := 0
 var _live: Dictionary = {}
+var _stored_population: Array[Dictionary] = []
+var _ground_active := true
+var _attackers: Dictionary = {}
 var _pending: Array[float] = []
 var _initial_population_pending := 0
 var _initial_sample_index := 0
@@ -49,31 +53,104 @@ func _init() -> void:
 	_capsule.radius = 0.55
 	_capsule.height = 1.95
 
+func store_upstairs_population(count: int) -> void:
+	# Only data remains upstairs. The arena removes the actors before this reset.
+	_ground_active = false
+	set_physics_process(false)
+	_live.clear()
+	_attackers.clear()
+	_pending.clear()
+	_initial_population_pending = 0
+	_recent.clear()
+	_retry_time = 0.0
+	_mobile_spawn_cooldown = 0.0
+	_stored_population.clear()
+	population_limit = count
+	for index in range(count):
+		_stored_population.append({"kind": "shambler"})
+
+func activate_ground_population(cap: int) -> void:
+	if _ground_active:
+		return
+	# Consume the four stored entries, not the full thirteen-slot capacity.
+	var opening_count := mini(_stored_population.size(), cap)
+	_stored_population.clear()
+	population_limit = cap
+	_initial_population_pending = opening_count
+	_ground_active = true
+	set_physics_process(true)
+
+func activate_profiling_population(cap: int) -> void:
+	_stored_population.clear()
+	population_limit = cap
+	_ground_active = true
+	set_physics_process(true)
+
+func ordinary_population_count() -> int:
+	if not _ground_active:
+		return _stored_population.size()
+	var living := 0
+	for enemy in _live.values():
+		if is_instance_valid(enemy) and enemy.hp > 0:
+			living += 1
+	return living
+
 func request_initial_population() -> void:
+	if not _ground_active:
+		return
 	while _live.size() + _pending.size() + _initial_population_pending < population_limit:
 		_initial_population_pending += 1
 
 func request_population() -> void:
+	if not _ground_active:
+		return
 	while _live.size() + _pending.size() + _initial_population_pending < population_limit:
 		_pending.append(_clock)
 
 func register_enemy(enemy: FoundationEnemy) -> void:
-	if enemy.is_boss or _live.has(enemy.get_instance_id()):
+	if not _ground_active or enemy.is_boss or _live.has(enemy.get_instance_id()) or _live.size() >= population_limit:
 		return
 	var id := enemy.get_instance_id()
 	_live[id] = enemy
+	enemy.attack_director = self
 	enemy.tree_exiting.connect(_on_removed.bind(id))
 
 func replace_enemy(enemy: FoundationEnemy) -> void:
-	_on_removed(enemy.get_instance_id())
+	if not enemy.is_boss:
+		_on_removed(enemy.get_instance_id(), 2)
 
-func _on_removed(id: int) -> void:
+func _on_removed(id: int, replacements: int = 1) -> void:
 	if not _live.has(id):
 		return
+	var enemy := _live[id] as FoundationEnemy
+	if is_instance_valid(enemy):
+		enemy.attack_director = null
+	_attackers.erase(id)
 	_live.erase(id)
-	_pending.append(_clock + REPLACEMENT_SECONDS)
+	if _ground_active:
+		# Pending births reserve slots. A death at thirteen therefore adds one;
+		# a death in the opening group can add both requested replacements.
+		var available := maxi(0, population_limit - _live.size() - _pending.size() - _initial_population_pending)
+		for index in range(mini(replacements, available)):
+			_pending.append(_clock + REPLACEMENT_SECONDS)
+
+func try_acquire_attacker(enemy: FoundationEnemy) -> bool:
+	var id := enemy.get_instance_id()
+	if not _ground_active or enemy.hp <= 0 or not _live.has(id):
+		return false
+	if _attackers.has(id):
+		return true
+	if _attackers.size() >= MAX_PLAYER_ATTACKERS:
+		return false
+	_attackers[id] = true
+	return true
+
+func release_attacker(enemy: FoundationEnemy) -> void:
+	_attackers.erase(enemy.get_instance_id())
 
 func _physics_process(delta: float) -> void:
+	if not _ground_active:
+		return
 	_clock += delta
 	_retry_time = maxf(0.0, _retry_time - delta)
 	last_candidate_count = 0
@@ -154,7 +231,7 @@ func _grounded_candidate(at: Vector3) -> Vector3:
 	var query := PhysicsRayQueryParameters3D.create(Vector3(at.x, player.global_position.y + 6.0, at.z), Vector3(at.x, -8.0, at.z), 1)
 	query.exclude = [player.get_rid()]
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
-	if hit.is_empty() or hit.normal.dot(Vector3.UP) < 0.85:
+	if hit.is_empty() or hit.normal.dot(Vector3.UP) < 0.85 or absf(hit.position.y) > 0.5:
 		return Vector3.INF
 	return hit.position + Vector3.UP * 0.05
 
@@ -186,6 +263,15 @@ func is_valid_spawn(at: Vector3, require_forward: bool = true) -> bool:
 	query.collide_with_areas = true
 	if not get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty():
 		return false
+	# This arena currently uses flat collision-ground movement. If navigation
+	# regions are added, also require the candidate to lie on a reachable mesh.
+	var nav_map := get_world_3d().navigation_map
+	if not NavigationServer3D.map_get_regions(nav_map).is_empty():
+		if NavigationServer3D.map_get_closest_point(nav_map, at).distance_to(at) > 0.75:
+			return false
+		var route := NavigationServer3D.map_get_path(nav_map, at, player.global_position, true)
+		if route.size() < 2 or route[0].distance_to(at) > 0.75 or route[route.size() - 1].distance_to(player.global_position) > 2.0:
+			return false
 	if not is_concealed(at):
 		return false
 	# Leave room for the first part of the dash instead of spawning against a wall.

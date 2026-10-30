@@ -56,7 +56,7 @@ func run() -> void:
 	check(arena.player.global_position.is_equal_approx(Foundation.PLAYER_BASE_POSITION), "respawn returns to the tower rooftop")
 	check(arena._environment.sky == rooftop_sky and not backdrop.visible, "respawn restores the city panorama")
 	check(arena.flashlight_visibility_manager.rooftop_sky_visible, "respawn restores visible rooftop sky")
-	check(Foundation.ZOMBIE_HORDE_SIZE == 5 and Foundation.ZOMBIE_SPAWN_DISTANCE == 50.0, "5-zombie horde keeps 50 m concealed replacements")
+	check(Foundation.ZOMBIE_HORDE_SIZE == 4 and Foundation.ZOMBIE_SPAWN_DISTANCE == 50.0, "four dormant rooftop entries keep 50 m concealed replacements")
 	check(Foundation.ZOMBIE_PERFORMANCE_CAPACITY == 200, "stress scenarios retain 200-zombie capacity")
 	arena.queue_free()
 	await process_frame

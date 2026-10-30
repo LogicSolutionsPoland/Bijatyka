@@ -63,6 +63,7 @@ var _full_animation_selected := false
 var _flashlight_render_visible := true
 var _flashlight_full_body_visible := false
 var combat_target: Node3D
+var attack_director: Node
 var _decision_time := 0.0
 var _wander_time := 0.0
 var _wander_direction := Vector3.ZERO
@@ -706,6 +707,7 @@ func _update_ai(delta: float, distance: float) -> void:
 	if not _valid_target():
 		combat_target = null
 		if state == "windup":
+			_release_player_attack_slot()
 			state = "recovery"
 			state_time = recovery_duration
 			_attack_animation = ""
@@ -749,6 +751,11 @@ func _update_ai(delta: float, distance: float) -> void:
 			velocity.z = direction.z * move_speed * slow_factor * (1.0 if is_boss else 1.45)
 			_play_animation("Sprint" if _is_high_speed_chase() else "Walk")
 		elif distance <= attack_range and _clear_sight(combat_target):
+			if combat_target == _player and not is_boss and is_instance_valid(attack_director) and not attack_director.call("try_acquire_attacker", self):
+				# Continue waiting in range until a current attacker finishes.
+				velocity.x = 0.0
+				velocity.z = 0.0
+				return
 			state = "windup"
 			state_time = telegraph_duration if is_boss else telegraph_duration * 0.55
 			_attack_sequence += 1
@@ -778,6 +785,7 @@ func _resolve_enemy_attack(distance: float) -> void:
 				_player.interrupt_by_zombie(0.75, 0.60)
 			hit = true
 	attack_resolved.emit(self, hit)
+	_release_player_attack_slot()
 	if not _attack_animation.is_empty() and _animation_player != null and _animation_player.current_animation == _attack_animation:
 		var clip := _animation_player.get_animation(_attack_animation)
 		var remaining := maxf(0.01, clip.length - _attack_contact_time)
@@ -804,6 +812,7 @@ func begin_player_grapple(owner: FoundationPlayer, duration: float) -> bool:
 	if hp <= 0 or is_boss or not is_instance_valid(owner) or duration <= 0.0:
 		return false
 	_finish_spawn_assault()
+	_release_player_attack_slot()
 	_player_grapple_owner = owner
 	_player_grapple_time = duration
 	state = "hit"
@@ -825,6 +834,7 @@ func receive_hit(damage: int, hit_direction: Vector3 = Vector3.ZERO, is_jump_hit
 	if hp <= 0 or damage <= 0 or _death_started:
 		return 0
 	_finish_spawn_assault()
+	_release_player_attack_slot()
 	var dealt := mini(hp, damage)
 	hp -= dealt
 	_update_health_display()
@@ -859,7 +869,15 @@ func receive_hit(damage: int, hit_direction: Vector3 = Vector3.ZERO, is_jump_hit
 
 func apply_stun(duration: float) -> void:
 	_finish_spawn_assault()
+	if state == "windup":
+		state = "approach"
+		_attack_animation = ""
+	_release_player_attack_slot()
 	stun_time = maxf(stun_time, duration)
+
+func _release_player_attack_slot() -> void:
+	if is_instance_valid(attack_director):
+		attack_director.call("release_attacker", self)
 
 func apply_slow(factor: float, duration: float) -> void:
 	slow_factor = minf(slow_factor, clampf(factor, 0.1, 1.0))

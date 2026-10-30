@@ -139,7 +139,7 @@ func _test_repeated_zombie_death_and_replacement(pool: FoundationCombatFxPool) -
 	enemy.defeated.emit(enemy)
 	director.replace_enemy(enemy)
 	_check(director._live.is_empty(), "death removes its live slot once")
-	_check(director._pending.size() == 1, "duplicate death signals schedule one replacement only")
+	_check(director._pending.size() == 2, "duplicate death signals schedule one pair of replacements only")
 	await process_frame
 	_check(not is_instance_valid(enemy), "completed death frees the original zombie")
 	for effect in pool.get_active_effects("zombie_hit_flash"):

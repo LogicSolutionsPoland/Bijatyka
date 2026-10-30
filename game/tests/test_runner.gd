@@ -358,7 +358,7 @@ func _test_ten_button_controls() -> void:
 	var player: FoundationPlayer = arena.player
 	var hud: FoundationHUD = arena.hud
 	_check(player.rage.rage_changed.is_connected(arena._refresh_hud), "game startup completes and connects the combat HUD after model initialization")
-	_check(Foundation.ZOMBIE_HORDE_SIZE == 5 and arena.spawn_director.population_limit == 5, "normal gameplay retains exactly five ordinary zombies")
+	_check(Foundation.ZOMBIE_HORDE_SIZE == 4 and arena.spawn_director.ordinary_population_count() == 4 and arena.spawn_director._live.is_empty(), "normal rooftop gameplay stores four ordinary zombies without actors")
 	var tower := arena.starting_tower
 	_check(tower != null and tower.get_parent() == arena, "game spawns the starting tower in the arena")
 	if tower != null:

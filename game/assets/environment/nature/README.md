@@ -9,5 +9,5 @@ The dead-tree bark is reduced to 1024 px, and its normal map and rock texture
 to 512 px for the Android build. The glTF mesh geometry and material references
 are unchanged. `arena_map_upgrade.gd` places six dead trees, eight rocks, and
 six shrubs as four non-colliding `MultiMeshInstance3D` batches along the outer
-fence. These do not affect the protected base, five-zombie population, boss,
+fence. These do not affect the protected base, four-zombie opening population, boss,
 enemy spawning, or combat lanes.

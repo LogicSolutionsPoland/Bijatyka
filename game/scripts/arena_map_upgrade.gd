@@ -32,7 +32,7 @@ func _build_map() -> void:
 
 func _build_nature() -> void:
 	# Quaternius CC0 scenery from Zasoby. Keep trunks beyond the fence and the
-	# protected base so the five-zombie combat routes and spawn logic stay open.
+	# protected base so the four opening zombies' combat routes and spawns stay open.
 	_add_nature_batch("DeadTreesShort", DEAD_TREE_1, [
 		_nature_transform(-17.8, -22.0, 20.0, 0.65),
 		_nature_transform(23.0, 7.5, -37.0, 0.65),

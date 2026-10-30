@@ -19,7 +19,7 @@ const RADIAL_GROUND_SHADER := preload("res://shaders/radial_ground.gdshader")
 const RUIN_SURFACE_SHADER := preload("res://shaders/ruined_surface.gdshader")
 const ARENA_MAP_SCRIPT := preload("res://scripts/arena_map_upgrade.gd")
 const STARTING_TOWER := preload("res://scripts/starting_tower.gd")
-const ZOMBIE_HORDE_SIZE := 5
+const ZOMBIE_HORDE_SIZE := 4
 const GROUND_ZOMBIE_HORDE_SIZE := 13
 const ZOMBIE_PERFORMANCE_CAPACITY := 200
 const ZOMBIE_SPAWN_DISTANCE := 50.0
@@ -672,8 +672,11 @@ func _spawn_enemies() -> void:
 	spawn_director.blocked_boxes = _spawn_blockers
 	spawn_director.spawn_requested.connect(_spawn_assault_zombie)
 	add_child(spawn_director)
-	# Seed the opening horde around the arena, concealed beyond the 30 m view.
-	spawn_director.request_initial_population()
+	# The four upstairs entries are data only; no ordinary enemy actors exist.
+	spawn_director.store_upstairs_population(ZOMBIE_HORDE_SIZE)
+	horde_far_visuals.visible = false
+	horde_far_visuals.set_process(false)
+	horde_far_visuals.multimesh.visible_instance_count = 0
 	# Keep one boss in the original arena; the HUD locator can point to it when
 	# the player moves beyond the 30 m render radius.
 	_spawn_enemy("boss", Vector3(0.6, 0.05, -16.2), true)
@@ -717,19 +720,22 @@ func _on_elevator_requested() -> void:
 func _on_elevator_rider_arrived(floor: StringName) -> void:
 	# Arrival is the single transition point for the roof/ground render profile.
 	_update_rooftop_sky()
+	if floor == &"roof":
+		if _ground_wave_started:
+			_deactivate_ground_population()
+		return
 	if floor != &"ground" or _ground_wave_started or not is_instance_valid(spawn_director):
 		return
 	_ground_wave_started = true
 	if not _performance_scenario.is_empty():
 		return
-	spawn_director.population_limit = GROUND_ZOMBIE_HORDE_SIZE
 	# Bring this new wave into the fight during its 4.5 s opening assault,
 	# while keeping every visual envelope outside the 30 m culling edge.
 	spawn_director.initial_spawn_min_distance = 34.0
 	spawn_director.initial_spawn_max_distance = 45.0
-	# Existing rooftop zombies count toward the wave. The remaining slots use
-	# the concealed all-around opening sampler, capped at two births per tick.
-	spawn_director.request_initial_population()
+	spawn_director.activate_ground_population(GROUND_ZOMBIE_HORDE_SIZE)
+	horde_far_visuals.visible = true
+	horde_far_visuals.set_process(true)
 
 func _on_player_respawned() -> void:
 	if is_instance_valid(starting_tower) and is_instance_valid(starting_tower.elevator):
@@ -743,8 +749,9 @@ func _on_player_respawned() -> void:
 		camera_arm.spring_length = _camera_follow_distance()
 		camera_arm.rotation.x = _effective_camera_pitch()
 	_update_camera_framing()
-	# A new rooftop life starts with five ordinary zombies, even if the last
-	# life had activated the thirteen-zombie ground encounter.
+	_deactivate_ground_population()
+
+func _deactivate_ground_population() -> void:
 	_ground_wave_started = false
 	_performance_scenario = ""
 	_reset_ordinary_population()
@@ -752,7 +759,12 @@ func _on_player_respawned() -> void:
 func _interact_with_starting_elevator() -> bool:
 	if get_tree().paused or not is_instance_valid(player) or not is_instance_valid(starting_tower) or not is_instance_valid(starting_tower.elevator):
 		return false
-	return starting_tower.elevator.interact(player)
+	var started := starting_tower.elevator.interact(player)
+	# Clear ground actors as soon as the player boards for the roof. They must
+	# remain dormant throughout the trip, not just after the roof camera blends.
+	if started and _ground_wave_started and starting_tower.elevator.is_player_riding(player):
+		_deactivate_ground_population()
+	return started
 
 func _on_hud_action(action: String) -> void:
 	if get_tree().paused:
@@ -939,9 +951,15 @@ func start_performance_scenario(population: int, mode: String) -> bool:
 	spawn_director._initial_population_pending = 0
 	for enemy in get_tree().get_nodes_in_group("enemies"):
 		if enemy is FoundationEnemy and not enemy.is_boss:
+			enemy.visible = false
+			enemy.process_mode = Node.PROCESS_MODE_DISABLED
+			enemy.collision_layer = 0
+			enemy.collision_mask = 0
 			enemy.queue_free()
 
-	spawn_director.population_limit = population
+	spawn_director.activate_profiling_population(population)
+	horde_far_visuals.visible = true
+	horde_far_visuals.set_process(true)
 	_performance_scenario = "%d/%s" % [population, mode]
 	# The spawn director's candidate selection and enemy initial state use the
 	# global RNG. A fixed seed makes comparison runs repeatable where practical.
@@ -967,20 +985,19 @@ func stop_performance_scenario() -> void:
 func _reset_ordinary_population() -> void:
 	if not is_instance_valid(spawn_director):
 		return
-	var was_processing := spawn_director.is_physics_processing()
 	spawn_director.set_physics_process(false)
-	spawn_director._live.clear()
-	spawn_director._pending.clear()
-	spawn_director._initial_population_pending = 0
-	spawn_director._recent.clear()
-	spawn_director._retry_time = 0.0
 	for enemy in get_tree().get_nodes_in_group("enemies"):
 		if enemy is FoundationEnemy and not enemy.is_boss:
+			enemy.visible = false
+			enemy.process_mode = Node.PROCESS_MODE_DISABLED
+			enemy.collision_layer = 0
+			enemy.collision_mask = 0
 			enemy.queue_free()
-	spawn_director.population_limit = GROUND_ZOMBIE_HORDE_SIZE if _ground_wave_started else ZOMBIE_HORDE_SIZE
+	spawn_director.store_upstairs_population(ZOMBIE_HORDE_SIZE)
+	horde_far_visuals.multimesh.visible_instance_count = 0
 	spawn_director.initial_spawn_min_distance = 34.0 if _ground_wave_started else CONCEALED_SPAWN.INITIAL_SPAWN_MIN_DISTANCE
 	spawn_director.initial_spawn_max_distance = 45.0 if _ground_wave_started else CONCEALED_SPAWN.INITIAL_SPAWN_MAX_DISTANCE
-	# Restore the active floor's ordinary population with a concealed map spread.
-	seed(int(Time.get_ticks_usec() & 0x7fffffff))
-	spawn_director.request_initial_population()
-	spawn_director.set_physics_process(was_processing)
+	horde_far_visuals.visible = _ground_wave_started
+	horde_far_visuals.set_process(_ground_wave_started)
+	if _ground_wave_started:
+		spawn_director.activate_ground_population(GROUND_ZOMBIE_HORDE_SIZE)

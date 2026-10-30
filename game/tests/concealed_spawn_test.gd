@@ -70,6 +70,7 @@ func run() -> void:
 	await _test_wall_collision()
 	await _test_player_base_boundary()
 	await _test_elevator_ground_wave()
+	await _test_attacker_slots()
 	await _test_population_and_replacements()
 	if failures.is_empty():
 		print("PASS: concealed spawn — %d checks" % checks)
@@ -285,14 +286,14 @@ func _test_initial_population_distribution() -> void:
 	var positions: Array[Vector3] = []
 	director.spawn_requested.connect(func(at: Vector3) -> void: positions.append(at))
 	director.request_initial_population()
-	check(director._initial_population_pending == 5, "opening population queues exactly 5 ordinary zombies")
+	check(director._initial_population_pending == 4, "opening population queues exactly 4 ordinary zombies")
 	var budgets_ok := true
 	for frame in range(120):
 		await physics_frame
 		budgets_ok = budgets_ok and director.last_candidate_count <= Director.MAX_CANDIDATES_PER_TICK and director.last_spawn_count <= Director.MAX_SPAWNS_PER_TICK
-		if positions.size() == 5:
+		if positions.size() == 4:
 			break
-	check(positions.size() == 5, "initial population finishes at exactly 5 zombies")
+	check(positions.size() == 4, "initial population finishes at exactly 4 zombies")
 	check(director._initial_population_pending == 0 and director._pending.is_empty(), "initial population does not create replacement debt")
 	check(budgets_ok, "initial map spread respects candidate and per-tick spawn budgets")
 	var sectors := [0, 0, 0, 0]
@@ -318,65 +319,100 @@ func _test_elevator_ground_wave() -> void:
 	var director = arena.spawn_director
 	var player := arena.player
 	var elevator := arena.starting_tower.elevator
-	director.set_physics_process(false)
-	check(director.population_limit == 5 and director._initial_population_pending == 5,
-		"roof starts with the five-zombie budget before the lift arrives")
+	check(director.population_limit == 4 and director.ordinary_population_count() == 4
+		and director._stored_population.size() == 4 and director._live.is_empty()
+		and not director.is_physics_processing() and not arena.horde_far_visuals.visible,
+		"roof holds four data entries without any ordinary zombie actor or processing")
+	check(is_instance_valid(arena._boss_enemy) and not director._live.has(arena._boss_enemy.get_instance_id()),
+		"boss stays outside the ordinary population")
 	var positions: Array[Vector3] = []
 	director.spawn_requested.connect(func(at: Vector3) -> void:
 		positions.append(at)
 		var enemy: FoundationEnemy = director._live.values().back()
 		enemy.set_physics_process(false)
 	)
-	for frame in range(120):
-		await physics_frame
-		director._physics_process(1.0 / 60.0)
-		if director._live.size() == 5:
-			break
-	check(director._live.size() == 5 and director._initial_population_pending == 0,
-		"the rooftop already has its five ordinary zombies")
 	check(not arena._ground_wave_started and elevator.interact(player),
 		"the roof lift starts with the player aboard")
+	director._physics_process(1.0)
+	check(elevator._travelling and director.ordinary_population_count() == 4
+		and director._live.is_empty() and positions.is_empty(),
+		"camera and elevator movement cannot activate the four stored zombies")
 	for frame in range(360):
 		await physics_frame
 		if not elevator._travelling:
 			break
 	check(player.global_position.y < 1.0 and arena._ground_wave_started,
 		"player arrival at ground level activates the encounter")
-	check(director.population_limit == 13 and director._initial_population_pending == 8,
-		"ground arrival queues eight new zombies alongside the existing five")
+	check(director.population_limit == 13 and director._initial_population_pending + director._live.size() == 4
+		and director._stored_population.is_empty() and director._pending.is_empty(),
+		"ground arrival activates exactly four stored entries with a thirteen-zombie cap")
+	director.set_physics_process(false)
 	for frame in range(180):
 		await physics_frame
 		director._physics_process(1.0 / 60.0)
-		if director._live.size() == 13:
+		if director._live.size() == 4:
 			break
-	check(director._live.size() == 13 and director._initial_population_pending == 0,
-		"the budgeted ground wave fills all thirteen slots without a visible birth")
-	for index in range(5, positions.size()):
-		var horizontal := positions[index] - player.global_position
-		horizontal.y = 0.0
-		check(horizontal.length() >= 34.0 and horizontal.length() <= 45.0,
-			"ground wave arrives close enough to reach the player during its opening rush")
+	check(director._live.size() == 4 and director._initial_population_pending == 0,
+		"only the four stored zombies are materialized for the first fight")
 	for at in positions:
-		check(director.is_concealed(at), "every ground wave member starts concealed")
+		var horizontal := at - player.global_position
+		horizontal.y = 0.0
+		check(horizontal.length() >= 34.0 and horizontal.length() <= 45.0
+			and absf(at.y - 0.05) < 0.1 and director.is_concealed(at),
+			"each opening fighter starts on valid concealed ground")
 	elevator.rider_arrived.emit(&"ground")
-	check(director._live.size() == 13 and director._pending.is_empty() and director._initial_population_pending == 0,
-		"repeat arrival never schedules a fourteenth zombie")
-	if director._live.size() >= 2:
-		var victims: Array = director._live.values().slice(0, 2)
-		for victim: FoundationEnemy in victims:
-			victim.receive_hit(10000)
-			victim._complete_death()
-		check(director._live.size() == 11 and director._pending.size() == 2,
-			"two deaths queue exactly two replacements")
+	check(director._live.size() == 4 and director._pending.is_empty() and director._initial_population_pending == 0,
+		"repeat ground arrival does not add a zombie")
+	var first_victim: FoundationEnemy = director._live.values()[0]
+	first_victim.receive_hit(10000)
+	first_victim._complete_death()
+	arena._on_enemy_defeated(first_victim)
+	check(director._live.size() == 3 and director._pending.size() == 2,
+		"first confirmed death adds two slots exactly once")
+	for target_count in range(5, 14):
 		for frame in range(120):
 			await physics_frame
 			director._physics_process(0.1)
-			if director._live.size() == 13:
+			if director._live.size() == target_count:
 				break
-		check(director._live.size() == 13 and director._pending.is_empty(),
-			"the capped encounter replenishes after simultaneous kills")
-	check(elevator.interact(player) and elevator.is_player_riding(player),
+		check(director._live.size() == target_count and director._pending.is_empty(),
+			"confirmed kills grow the living horde by one up to %d" % target_count)
+		if target_count < 13:
+			var victim: FoundationEnemy = director._live.values()[0]
+			victim.receive_hit(10000)
+			victim._complete_death()
+			check(director._pending.size() == 2 and director._live.size() == target_count - 1,
+				"death below cap reserves both replacement slots")
+	var capped_victim: FoundationEnemy = director._live.values()[0]
+	capped_victim.receive_hit(10000)
+	capped_victim._complete_death()
+	check(director._live.size() == 12 and director._pending.size() == 1,
+		"a death at thirteen reserves only one free slot")
+	check(arena._interact_with_starting_elevator() and elevator.is_player_riding(player),
 		"ground-floor lift can start its return trip")
+	check(director.ordinary_population_count() == 4 and director._live.is_empty()
+		and director._pending.is_empty() and not director.is_physics_processing()
+		and not arena.horde_far_visuals.visible,
+		"boarding for the roof immediately removes all actors and replacement debt")
+	await process_frame
+	var ordinary_actors := 0
+	for node in get_nodes_in_group("enemies"):
+		if node is FoundationEnemy and not node.is_boss:
+			ordinary_actors += 1
+	check(ordinary_actors == 0, "roof trip runs no ordinary actor physics or animation")
+	for frame in range(360):
+		await physics_frame
+		if not elevator._travelling:
+			break
+	check(player.global_position.y > 19.0 and director.ordinary_population_count() == 4,
+		"roof arrival retains exactly four dormant entries")
+	check(arena._interact_with_starting_elevator(), "player can descend again after the roof reset")
+	for frame in range(360):
+		await physics_frame
+		if not elevator._travelling:
+			break
+	check(arena._ground_wave_started and director._initial_population_pending + director._live.size() == 4,
+		"a second ground arrival activates a fresh group of four")
 	player._reset_at_safe_base()
 	check(not elevator._travelling and not elevator.is_player_riding(player)
 		and is_equal_approx(elevator._car_root.position.y, elevator.TOP_CAR_Y),
@@ -385,18 +421,53 @@ func _test_elevator_ground_wave() -> void:
 		and arena.camera_rig.global_position.is_equal_approx(
 			player.global_position + Vector3.UP * (Foundation.CAMERA_PIVOT_HEIGHT + Foundation.ROOFTOP_CAMERA_PIVOT_LIFT)),
 		"respawn returns player and camera to the roof together")
-	check(not arena._ground_wave_started and director.population_limit == 5
+	check(not arena._ground_wave_started and director.population_limit == 4
 		and director._live.is_empty() and director._pending.is_empty()
-		and director._initial_population_pending == 5,
-		"rooftop respawn clears the ground wave and queues exactly five fresh zombies")
-	for frame in range(120):
-		await physics_frame
-		director._physics_process(1.0 / 60.0)
-		if director._live.size() == 5:
-			break
-	check(director._live.size() == 5 and director._initial_population_pending == 0,
-		"rooftop respawn restores five concealed ordinary zombies")
+		and director._initial_population_pending == 0 and director._stored_population.size() == 4,
+		"rooftop respawn clears the wave and restores four data-only zombies")
 	arena.queue_free()
+	await process_frame
+
+func _test_attacker_slots() -> void:
+	var fixture := _fixture()
+	var director = fixture.get_node("Director")
+	var player := fixture.get_node("Player") as FoundationPlayer
+	director.population_limit = 13
+	var enemies: Array[FoundationEnemy] = []
+	for index in range(5):
+		var enemy := Enemy.new() as FoundationEnemy
+		enemy._player = player
+		enemy.position = Vector3(8.0 + float(index) * 2.0, 0.05, -2.0)
+		fixture.add_child(enemy)
+		enemy.set_physics_process(false)
+		director.register_enemy(enemy)
+		enemy.defeated.connect(director.replace_enemy)
+		enemies.append(enemy)
+	for index in range(4):
+		check(director.try_acquire_attacker(enemies[index]), "one of four zombies reserves a player attack")
+	check(not director.try_acquire_attacker(enemies[4]) and director._attackers.size() == 4,
+		"fifth simultaneous player attacker must wait")
+	check(director.try_acquire_attacker(enemies[0]) and director._attackers.size() == 4,
+		"repeated windup cannot occupy two attacker slots")
+	enemies[4].global_position = Vector3(0.0, 0.05, -1.5)
+	enemies[4].combat_target = player
+	enemies[4]._decision_time = 1.0
+	enemies[4]._update_ai(0.2, 1.5)
+	check(enemies[4].state != "windup", "waiting enemy AI cannot begin a fifth player windup")
+	enemies[0].receive_hit(1)
+	enemies[4]._update_ai(0.2, 1.5)
+	check(enemies[4].state == "windup" and director._attackers.size() == 4,
+		"a hit interrupts a windup and waiting AI acquires the freed slot")
+	enemies[4].apply_stun(0.5)
+	check(director._attackers.size() == 3, "stun releases an attacker slot")
+	enemies[1].combat_target = player
+	enemies[1]._resolve_enemy_attack(1.0)
+	check(director._attackers.size() == 2, "resolved attack releases its slot")
+	enemies[2].receive_hit(10000)
+	enemies[2]._complete_death()
+	check(director._attackers.size() == 1 and director._pending.size() == 2,
+		"confirmed death releases its slot and queues two replacements")
+	fixture.queue_free()
 	await process_frame
 
 func _test_player_base_boundary() -> void:
@@ -437,12 +508,11 @@ func _test_population_and_replacements() -> void:
 	arena._boss_enemy.set_physics_process(false)
 	var director = arena.spawn_director
 	director.set_physics_process(false)
-	check(Foundation.ZOMBIE_HORDE_SIZE == 5 and director.population_limit == 5 and director._initial_population_pending == 5, "normal game starts with a strict 5-zombie population separate from the boss")
+	check(Foundation.ZOMBIE_HORDE_SIZE == 4 and director.population_limit == 4 and director._stored_population.size() == 4, "normal game stores four ordinary zombies separately from the boss")
 	director.request_population()
-	check(director._pending.is_empty() and director._initial_population_pending == 5, "the normal spawn queue cannot schedule a 6th ordinary zombie")
-	director._initial_population_pending = 0
-	director._pending.clear()
-	director.population_limit = 200
+	check(director._pending.is_empty() and director._initial_population_pending == 0, "upstairs cannot schedule an ordinary zombie")
+	director.activate_profiling_population(200)
+	director.set_physics_process(false)
 	director.spawn_requested.connect(func(at: Vector3) -> void:
 		var enemy: FoundationEnemy = director._live.values().back()
 		enemy.set_physics_process(false)
@@ -535,6 +605,6 @@ func _test_population_and_replacements() -> void:
 	check(director._live.size() == 200 and director._pending.is_empty(), "spawn queue recovers after the camera returns")
 	arena._boss_enemy.receive_hit(10000)
 	check(director._live.size() == 200 and director._pending.is_empty(), "boss defeat does not add a 201st ordinary zombie")
-	check(Foundation.ZOMBIE_HORDE_SIZE == 5 and Foundation.ZOMBIE_SPAWN_DISTANCE == 50.0 and Foundation.VISIBILITY_RADIUS == 30.0, "5-zombie cap, 50 m replacement distance and 30 m visibility remain intact")
+	check(Foundation.ZOMBIE_HORDE_SIZE == 4 and Foundation.ZOMBIE_SPAWN_DISTANCE == 50.0 and Foundation.VISIBILITY_RADIUS == 30.0, "four dormant entries, 50 m replacement distance and 30 m visibility remain intact")
 	arena.queue_free()
 	await process_frame

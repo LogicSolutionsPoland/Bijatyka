@@ -26,6 +26,7 @@ func _run() -> void:
 	var director := SpawnDirector.new()
 	fixture.add_child(director)
 	director.set_physics_process(false)
+	director.population_limit = 200 # Debug-only rig stress fixture, not normal gameplay.
 	var crowd: Array[FoundationEnemy] = []
 	for index in range(200):
 		var enemy := _add_enemy(fixture, batch, director, index)
