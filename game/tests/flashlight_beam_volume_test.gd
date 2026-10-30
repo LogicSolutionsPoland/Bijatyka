@@ -50,7 +50,9 @@ func _run() -> void:
 
 	var image := root.get_texture().get_image()
 	var axis_point := manager.beam_origin + manager.beam_direction * 14.0
-	var beam_screen := camera.unproject_position(axis_point)
+	# The project viewport can differ from the captured root image when the
+	# test sets root.size (notably on software Compatibility rendering).
+	var beam_screen := camera.unproject_position(axis_point) * Vector2(image.get_size()) / camera.get_viewport().get_visible_rect().size
 	_check(Rect2(Vector2.ZERO, Vector2(image.get_width(), image.get_height())).has_point(beam_screen), "beam axis projects inside the view")
 	var visible_blue := _sample_blue_max(image, beam_screen, 4)
 	print("FLASHLIGHT_AIR_BEAM_PIXEL " + JSON.stringify({"blue": visible_blue, "screen": beam_screen, "size": image.get_size()}))
@@ -67,9 +69,9 @@ func _run() -> void:
 	wall_material.albedo_color = Color.BLACK
 	wall.material_override = wall_material
 	wall.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	world.add_child(wall)
 	wall.global_position = manager.beam_origin + manager.beam_direction * 8.5
 	wall.global_basis = Basis.looking_at(manager.beam_direction, Vector3.UP)
-	world.add_child(wall)
 	for frame in range(4):
 		await process_frame
 	await RenderingServer.frame_post_draw
@@ -78,10 +80,39 @@ func _run() -> void:
 	print("FLASHLIGHT_WALL_CUTOFF_PIXEL " + JSON.stringify({"before": visible_blue, "after": blocked_blue}))
 	_check(blocked_blue < visible_blue * 0.70, "opaque wall cuts off the far flashlight shaft")
 
+	# The real rooftop has a bright, warm city panorama. Probe the live
+	# composite and the entire beam against warm sky with the geometry off/on:
+	# a black-background probe alone cannot catch additive glow washing out.
+	wall.queue_free()
+	await process_frame
+	sections.visible = false
+	environment.background_color = Color(0.72, 0.46, 0.34)
+	manager.set_rooftop_sky_visible(true)
+	manager._composite.visible = true
+	var off_axis := Vector2(image.get_width() * 0.85, image.get_height() * 0.3)
+	for frame in range(4):
+		await process_frame
+	await RenderingServer.frame_post_draw
+	var warm_image := root.get_texture().get_image()
+	var warm_axis := warm_image.get_pixelv(Vector2i(beam_screen))
+	var warm_off_axis := warm_image.get_pixelv(Vector2i(off_axis))
+	sections.visible = true
+	for node in manager.spotlight.find_children("PlayerFlashlightBeamSheet*", "MeshInstance3D", true, false):
+		(node as MeshInstance3D).visible = true
+	for frame in range(4):
+		await process_frame
+	await RenderingServer.frame_post_draw
+	var roof_image := root.get_texture().get_image()
+	var roof_axis := roof_image.get_pixelv(Vector2i(beam_screen))
+	var roof_off_axis := roof_image.get_pixelv(Vector2i(off_axis))
+	print("FLASHLIGHT_ROOF_AIR_PIXEL " + JSON.stringify({"beam": roof_axis, "sky_only": warm_axis, "outside": roof_off_axis}))
+	_check(roof_axis.b > warm_axis.b + 0.07, "the shaft is visible above the floor against a bright rooftop sky")
+	_check(absf(roof_off_axis.b - warm_off_axis.b) < 0.025, "rooftop sky outside the shaft is unchanged")
+
 	world.queue_free()
 	await process_frame
 	if failures.is_empty():
-		print("PASS: visible flashlight air beam (%d checks)" % 4)
+		print("PASS: visible flashlight air beam (%d checks)" % 6)
 	else:
 		for failure in failures:
 			push_error(failure)

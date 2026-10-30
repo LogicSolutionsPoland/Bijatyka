@@ -1,10 +1,10 @@
 shader_type spatial;
-render_mode unshaded, blend_add, depth_draw_never, cull_disabled, fog_disabled;
+render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, fog_disabled;
 
 // Thin cross-sections make the shaft visible when the third-person camera
 // looks straight down the beam. Each fragment still depth-tests against walls.
-uniform vec3 beam_color : source_color = vec3(0.72, 0.84, 1.0);
-uniform float section_opacity = 0.075;
+uniform vec3 beam_color : source_color = vec3(0.61, 0.80, 1.0);
+uniform float section_opacity = 0.16;
 uniform float beam_range = 30.0;
 uniform float fade_end_start = 24.0;
 

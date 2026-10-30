@@ -1,13 +1,14 @@
 shader_type spatial;
-render_mode unshaded, blend_add, depth_draw_never, cull_disabled, fog_disabled;
+render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, fog_disabled;
 
 // Crossed, camera-independent sheets form a depth-tested 3D flashlight shaft.
-// The material uses additive color so the beam stays visible in the blackout.
+// Alpha tint keeps the shaft readable over both the warm rooftop sky and
+// the ground-floor blackout. Opaque world geometry still occludes each sheet.
 uniform float beam_range = 30.0;
 uniform float beam_tangent = 0.46630766;
-uniform vec3 beam_color : source_color = vec3(0.72, 0.84, 1.0);
-uniform float beam_opacity = 0.22;
-uniform float core_opacity = 0.18;
+uniform vec3 beam_color : source_color = vec3(0.61, 0.80, 1.0);
+uniform float beam_opacity = 0.10;
+uniform float core_opacity = 0.08;
 
 varying float axial_distance;
 varying float across_fraction;

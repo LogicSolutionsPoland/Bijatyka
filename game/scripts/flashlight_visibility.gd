@@ -210,8 +210,8 @@ func _build_beam_light() -> void:
 	spotlight.spot_range = MAX_RADIUS
 	spotlight.spot_angle = BEAM_HALF_ANGLE_DEGREES
 	spotlight.spot_attenuation = 1.4
-	# One unshadowed local light lights surfaces; crossed 3D sheets below
-	# make its shaft visible in the air on Compatibility/mobile.
+	# One unshadowed local light lights surfaces. The translucent, depth-tested
+	# sheets below make its shaft visible in the air on Compatibility/mobile.
 	spotlight.shadow_enabled = false
 	player.add_child(spotlight)
 	_build_visible_beam_volume()
@@ -220,14 +220,14 @@ func _build_beam_light() -> void:
 func _build_visible_beam_volume() -> void:
 	var material := ShaderMaterial.new()
 	material.shader = BEAM_VOLUME_SHADER
-	# Draw after the fullscreen darkness mask. The default depth test stays on,
-	# so opaque walls and buildings still hide the beam behind them.
+	# Draw after the fullscreen darkness mask. Depth testing stays on, so
+	# opaque walls and buildings still hide the beam behind them.
 	material.render_priority = 127
 	material.set_shader_parameter("beam_range", MAX_RADIUS)
 	material.set_shader_parameter("beam_tangent", BEAM_TANGENT)
-	material.set_shader_parameter("beam_color", Color(0.72, 0.84, 1.0))
-	material.set_shader_parameter("beam_opacity", 0.22)
-	material.set_shader_parameter("core_opacity", 0.18)
+	material.set_shader_parameter("beam_color", Color(0.61, 0.80, 1.0))
+	material.set_shader_parameter("beam_opacity", 0.10)
+	material.set_shader_parameter("core_opacity", 0.08)
 
 	var maximum_width := maxf(0.32, MAX_RADIUS * BEAM_TANGENT)
 	for index in range(3):
@@ -254,8 +254,8 @@ func _build_visible_beam_sections() -> void:
 	var material := ShaderMaterial.new()
 	material.shader = BEAM_SECTIONS_SHADER
 	material.render_priority = 127
-	material.set_shader_parameter("beam_color", Color(0.72, 0.84, 1.0))
-	material.set_shader_parameter("section_opacity", 0.075)
+	material.set_shader_parameter("beam_color", Color(0.61, 0.80, 1.0))
+	material.set_shader_parameter("section_opacity", 0.16)
 	material.set_shader_parameter("beam_range", MAX_RADIUS)
 	material.set_shader_parameter("fade_end_start", 24.0)
 
@@ -264,7 +264,7 @@ func _build_visible_beam_sections() -> void:
 	var vertices := PackedVector3Array()
 	var uvs := PackedVector2Array()
 	var indices := PackedInt32Array()
-	for distance in [4.0, 7.0, 10.0, 13.0, 16.0, 19.0, 22.0, 25.0, 28.0]:
+	for distance in [3.0, 6.0, 9.5, 13.5, 18.0, 23.0, 28.0]:
 		var radius: float = float(distance) * BEAM_TANGENT
 		var base := vertices.size()
 		vertices.append_array(PackedVector3Array([
@@ -320,8 +320,6 @@ func _upload_shader_parameters() -> void:
 		return
 	_material.set_shader_parameter("flashlight_origin", player.global_position)
 	_material.set_shader_parameter("flashlight_forward", aim_direction)
-	_material.set_shader_parameter("beam_origin", beam_origin)
-	_material.set_shader_parameter("beam_forward", beam_direction)
 	_material.set_shader_parameter("flashlight_enabled", enabled)
 	_material.set_shader_parameter("rooftop_sky_visible", rooftop_sky_visible)
 
