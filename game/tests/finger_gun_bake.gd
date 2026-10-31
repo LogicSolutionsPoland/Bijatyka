@@ -110,7 +110,7 @@ func _bake() -> void:
 			var idx := target.find_bone(name)
 			var pose := target.get_bone_pose_rotation(idx)
 			if name.begins_with("RightHand") and name != "RightHand":
-				var finger := name.substr("RightHand".length())
+				var finger: String = String(name).substr("RightHand".length())
 				var part := int(finger.substr(finger.length() - 1))
 				finger = finger.substr(0, finger.length() - 1)
 				var bend := float(CURLS[finger][part - 1]) * grip
