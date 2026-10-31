@@ -5,6 +5,7 @@ extends SceneTree
 ## then authors an independent binary Godot Animation resource.
 const PLAYER := preload("res://scripts/player_controller.gd")
 const EXO_DATA := preload("res://scripts/exo_mixamo_data.gd")
+const RETARGET := preload("res://scripts/player_exo_gray_retarget.gd")
 const OUTPUT := "res://assets/characters/exo_gray/animations/Finger_Gun_Shoot.res"
 const SOURCE := &"Punch_Cross"
 const FRAME_RATE := 30.0
@@ -28,17 +29,33 @@ func _initialize() -> void:
 	call_deferred("_bake")
 
 func _bake() -> void:
-	var player := PLAYER.new()
+	# Instantiate the exact imported GLBs without gameplay/overlay side effects.
+	# This avoids running the expensive kick contact-analysis pipeline in the baker.
+	var player := Node3D.new()
+	player.name = "FingerGunBakeStage"
 	root.add_child(player)
-	player.set_physics_process(false)
-	var source_anim := player._animation_player as AnimationPlayer
-	var source_rig := player._skeleton as Skeleton3D
-	var exo := player._exo_visual_model as Node3D
-	var retarget := player._exo_retarget as PlayerExoGrayRetarget
-	if source_anim == null or source_rig == null or exo == null or retarget == null:
+	var source_scene := load(PLAYER.PLAYER_MODEL_PATH) as PackedScene
+	var exo_scene := load(PLAYER.EXO_MODEL_PATH) as PackedScene
+	if source_scene == null or exo_scene == null:
+		_fail("Real imported Universal Base and Exo Gray GLBs are required", player)
+		return
+	var source_model := source_scene.instantiate() as Node3D
+	var exo := exo_scene.instantiate() as Node3D
+	player.add_child(source_model)
+	player.add_child(exo)
+	source_model.rotation.y = PI
+	exo.rotation.y = PI
+	var source_anim := source_model.find_child("AnimationPlayer", true, false) as AnimationPlayer
+	var source_rig := source_model.find_child("Skeleton3D", true, false) as Skeleton3D
+	var target := exo.find_child("Skeleton3D", true, false) as Skeleton3D
+	var retarget := RETARGET.new() as PlayerExoGrayRetarget
+	if source_anim == null or source_rig == null or target == null or retarget == null:
 		_fail("Active source and Exo Gray animation rigs are required", player)
 		return
-	var target := retarget.target_skeleton as Skeleton3D
+	exo.add_child(retarget)
+	if not retarget.configure(source_rig, target):
+		_fail("Exo Gray rest-relative retarget map is incompatible", player)
+		return
 	if target == null or target.get_bone_count() != 112:
 		_fail("Exo Gray's actual 112-bone skeleton is missing", player)
 		return
