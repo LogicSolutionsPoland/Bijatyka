@@ -88,6 +88,7 @@ func _run() -> void:
 	animator.seek(0.0, true)
 	animator.advance(EVENT + 0.012)
 	await process_frame
+	await process_frame
 	_check(fire_events == 1, "exactly one firing signal emitted on forward playback")
 	if marker != null and fire_events == 1:
 		var muzzle_delta := emitted_transform.origin.distance_to(marker.global_position)
