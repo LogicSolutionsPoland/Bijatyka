@@ -123,7 +123,7 @@ func _check_exo_mixamo_clips(player: FoundationPlayer) -> void:
 			if not animator.has_animation(combat_path):
 				continue
 			var compact := animator.get_animation(combat_path)
-			var source_name := clip_name if side == authored else clip_name + "_mirrored"
+			var source_name: String = clip_name if side == authored else clip_name + "_mirrored"
 			var full := animator.get_animation(StringName("exo_mixamo/" + source_name))
 			_check(is_equal_approx(compact.length, PlayerExoMixamoOverlay.STRIKE_LENGTH),
 				"combat clip preserves the five-hit cadence: " + clip_name + " " + side)
