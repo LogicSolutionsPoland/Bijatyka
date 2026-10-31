@@ -337,6 +337,11 @@ func _update_movement(delta: float) -> void:
 func request_attack(kind: String, side: String = "right") -> bool:
 	if not ATTACKS.has(kind) or side not in ["left", "right"] or rage.current_soul_condemned:
 		return false
+	# All accepted melee inputs (even approach/grapple) interrupt the purely
+	# visual finger-gun windup. Keep physical attack buffering untouched.
+	if _exo_overlay != null and _exo_overlay.is_finger_gun_playing():
+		_finger_gun_visuals.clear()
+		_exo_overlay.stop_clip()
 	if attack_phase in ["approach", "grapple", "windup", "active"]:
 		_queue_attack(kind, side)
 		return true

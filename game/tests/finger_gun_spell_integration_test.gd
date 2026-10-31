@@ -52,6 +52,7 @@ func _run() -> void:
 		"accepted offensive magic starts dedicated 1x finger-gun animation")
 	_check(player._finger_gun_visuals.size() == 1 and visuals.is_empty(),
 		"visual projectile is queued until the 0.300-second firing frame")
+	var expected_destination: Vector3 = player._finger_gun_visuals[0]["at"]
 	animator.advance(0.12)
 	await process_frame
 	_check(visuals.is_empty(), "no projectile before fire marker")
@@ -64,8 +65,8 @@ func _run() -> void:
 		_check(String(shot["school"]) == "fire", "projectile has the selected school's color and type")
 		_check((shot["from"] as Vector3).distance_to(tip.global_position) < 0.01,
 			"projectile starts at animated RightHandIndex3")
-		_check((shot["to"] as Vector3).distance_to(enemy.global_position + Vector3.UP) < 0.05,
-			"projectile travels toward the selected enemy")
+		_check((shot["to"] as Vector3).distance_to(expected_destination) < 0.05,
+			"projectile travels toward the cast-time target position")
 	_check(not get_nodes_in_group("finger_gun_projectiles").is_empty(),
 		"lightweight visual-only MeshInstance3D projectile exists")
 	# Light is healing, not a projectile. Its old animation remains selected.

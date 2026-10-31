@@ -337,6 +337,11 @@ func _stabilize_upper_body(clip: Animation, contact_time: float) -> void:
 ## Use the independent Exo animation for accepted offensive spell casts.
 ## Multiple casts during windup share the pending fire marker; after that
 ## marker a new accepted cast restarts the clip at its unchanged 1x speed.
+func is_finger_gun_playing() -> bool:
+	return _ready_to_play and is_instance_valid(_animator) and _animator.is_playing() \
+		and _animator.current_animation == FINGER_GUN.CLIP
+
+
 func play_finger_gun() -> bool:
 	if not _ready_to_play or not is_instance_valid(_animator) or not _animator.has_animation(FINGER_GUN.CLIP):
 		return false
