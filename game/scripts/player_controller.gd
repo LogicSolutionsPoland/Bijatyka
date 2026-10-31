@@ -18,6 +18,7 @@ const PLAYER_CHOREOGRAPHY := preload("res://scripts/player_choreography.gd")
 const PLAYER_MODEL_PATH := "res://assets/characters/universal_base/Universal_Base_Characters_Male.glb"
 const EXO_MODEL_PATH := "res://assets/characters/exo_gray/Exo_Gray_Player.glb"
 const EXO_RETARGET := preload("res://scripts/player_exo_gray_retarget.gd")
+const EXO_MIXAMO_OVERLAY_SCRIPT := preload("res://scripts/player_exo_mixamo_overlay.gd")
 const GRAVITY := 24.0
 const MAX_HEALTH := 100
 const MAX_MAGIC := 100.0
@@ -67,6 +68,7 @@ var _animation_player: AnimationPlayer
 var _skeleton: Skeleton3D
 var _exo_visual_model: Node3D
 var _exo_retarget: PlayerExoGrayRetarget
+var _exo_overlay: PlayerExoMixamoOverlay
 var _fight_animations_ready := false
 var _ring_animations_ready := false
 var _choreography_ready := false
@@ -167,6 +169,13 @@ func _attach_exo_gray_player_model(source_model: Node3D) -> void:
 	_exo_retarget = retarget
 	# Invisible source model still runs its AnimationPlayer and Skeleton3D.
 	source_model.visible = false
+	# Optional imported Mixamo clips affect the Exo mesh only, never combat timing.
+	var overlay := EXO_MIXAMO_OVERLAY_SCRIPT.new() as PlayerExoMixamoOverlay
+	model.add_child(overlay)
+	if overlay.configure(model, target, retarget):
+		_exo_overlay = overlay
+	else:
+		overlay.queue_free()
 
 
 ## Explicit preview only: keep the 10s study out of normal melee state/timing.
@@ -445,6 +454,20 @@ func _begin_strike() -> void:
 			_animation_player.seek(0.0, true)
 		else:
 			_animation_player.stop()
+	_play_exo_attack_visual()
+
+func _play_exo_attack_visual() -> void:
+	if _exo_overlay == null:
+		return
+	if attack_kind != "kick" or attack_side != "right":
+		_exo_overlay.stop_clip()
+		return
+	# A compact visual strike reaches extension on the 0.12s damage marker,
+	# even when queued melee input repeats at 5 attacks per second.
+	var airborne := not is_on_floor() and velocity.y > 0.1
+	var uses_roundhouse := posmod(int(_ring_attack_counts.get("kick_right", 1)) - 1, 3) == 1
+	var clip := "fly_kick" if airborne else ("roundhouse" if uses_roundhouse else "mma_kick")
+	_exo_overlay.play_strike(clip)
 
 func _start_queued_attack() -> bool:
 	if _queued_attack_kind.is_empty():
@@ -554,6 +577,8 @@ func try_jump() -> bool:
 	velocity.y = 8.2
 	jump_impact_armed = true
 	_was_airborne = true
+	# The original Jump animation stays active: the imported Mixamo leap
+	# leans horizontally at midpoint without its source root translation.
 	return true
 
 func _resolve_jump_impact() -> void:
@@ -916,6 +941,14 @@ func _play_character_action(action_name: String, duration: float) -> void:
 		return
 	_character_action_time = maxf(0.0, duration)
 	_animation_player.play(clip, ATTACK_ANIMATION_BLEND_SECONDS)
+	if _exo_overlay != null:
+		# The Exo skin rolls over the same collision-safe 15m dash path.
+		# Airborne dash keeps the existing source animation.
+		if action_name == "Dash":
+			if not _exo_overlay.play_ground_roll():
+				_exo_overlay.stop_clip()
+		elif action_name in ["Landing", "Hit", "Defeat"]:
+			_exo_overlay.stop_clip()
 
 func _on_selection_resolved(_milestone: int, aura_id: String) -> void:
 	current_spell = aura_id
@@ -924,6 +957,8 @@ func _on_condemned(_threshold: float, _maximum: float) -> void:
 	call_deferred("_reset_at_safe_base")
 
 func _reset_at_safe_base() -> void:
+	if _exo_overlay != null:
+		_exo_overlay.stop_clip()
 	_finish_attack()
 	_previous_engagement_target = null
 	global_position = safe_base_position
