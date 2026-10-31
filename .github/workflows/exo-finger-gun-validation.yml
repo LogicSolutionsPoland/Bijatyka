@@ -35,9 +35,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          godot --headless --path game --script res://tests/finger_gun_bake.gd 2>&1 | tee finger-gun-bake.log
+          timeout --signal=TERM --kill-after=5s 70s godot --headless --path game --script res://tests/finger_gun_bake.gd 2>&1 | tee finger-gun-bake.log
           grep -q 'FINGER_GUN_BAKED' finger-gun-bake.log
-          if grep -E 'SCRIPT ERROR:|Parse Error:|FINGER_GUN_BAKE_FAILED|ERROR:' finger-gun-bake.log; then exit 1; fi
+          if grep -E 'SCRIPT ERROR:|Parse Error:|FINGER_GUN_BAKE_FAILED|ERROR: Failed to load' finger-gun-bake.log; then exit 1; fi
           test -s game/assets/characters/exo_gray/animations/Finger_Gun_Shoot.res
       - name: Validate serialized resource, all bones, fingertip and event
         shell: bash

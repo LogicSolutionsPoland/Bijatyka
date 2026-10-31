@@ -31,6 +31,7 @@ func _initialize() -> void:
 func _bake() -> void:
 	# Instantiate the exact imported GLBs without gameplay/overlay side effects.
 	# This avoids running the expensive kick contact-analysis pipeline in the baker.
+	print("FINGER_GUN_DIAG start")
 	var player := Node3D.new()
 	player.name = "FingerGunBakeStage"
 	root.add_child(player)
@@ -45,6 +46,7 @@ func _bake() -> void:
 	player.add_child(exo)
 	source_model.rotation.y = PI
 	exo.rotation.y = PI
+	print("FINGER_GUN_DIAG glbs_loaded")
 	var source_anim := source_model.find_child("AnimationPlayer", true, false) as AnimationPlayer
 	var source_rig := source_model.find_child("Skeleton3D", true, false) as Skeleton3D
 	var target := exo.find_child("Skeleton3D", true, false) as Skeleton3D
@@ -113,7 +115,10 @@ func _bake() -> void:
 			var name := "RightHand%s%d" % [finger, part]
 			axes[name] = _curl_axis(target, name, finger == "Thumb")
 	var count := ceili(original.length * FRAME_RATE)
+	print("FINGER_GUN_DIAG frames=" + str(count))
 	for frame in range(count + 1):
+		if frame % 10 == 0:
+			print("FINGER_GUN_DIAG frame=" + str(frame))
 		var at := minf(original.length, float(frame) / FRAME_RATE)
 		# Never retime the punch: preserve its natural source cadence and full length.
 		source_anim.seek(at, true)
@@ -149,6 +154,7 @@ func _bake() -> void:
 	if DirAccess.make_dir_recursive_absolute(folder) != OK:
 		_fail("Cannot create output folder: " + folder, player)
 		return
+	print("FINGER_GUN_DIAG saving")
 	var status := ResourceSaver.save(clip, OUTPUT)
 	if status != OK:
 		_fail("ResourceSaver failed: " + str(status), player)
