@@ -1,0 +1,81 @@
+name: Exo Finger Gun - bake and validate (NO APK)
+
+on:
+  push:
+    branches:
+      - feat/exo-finger-gun-shoot-20261031
+    paths:
+      - game/**
+      - .github/workflows/exo-finger-gun-validation.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  finger-gun:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Install Godot 4.7.2
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+      - name: Import Exo Gray model and compile all scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --editor --path game --import --quit 2>&1 | tee import.log
+          if grep -E 'SCRIPT ERROR:|Parse Error:|ERROR: Failed to load' import.log; then exit 1; fi
+      - name: Bake independent animation using real Exo skeleton
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path game --script res://tests/finger_gun_bake.gd 2>&1 | tee finger-gun-bake.log
+          grep -q 'FINGER_GUN_BAKED' finger-gun-bake.log
+          if grep -E 'SCRIPT ERROR:|Parse Error:|FINGER_GUN_BAKE_FAILED|ERROR:' finger-gun-bake.log; then exit 1; fi
+          test -s game/assets/characters/exo_gray/animations/Finger_Gun_Shoot.res
+      - name: Validate serialized resource, all bones, fingertip and event
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path game --script res://tests/finger_gun_validation.gd 2>&1 | tee finger-gun-validation.log
+          grep -q 'PASS: Finger Gun Shoot Exo rig' finger-gun-validation.log
+          if grep -E 'SCRIPT ERROR:|Parse Error:|FINGER_GUN_VALIDATION_FAILED|ERROR:' finger-gun-validation.log; then exit 1; fi
+      - name: Player and combat regression checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path game --script res://tests/player_animation_test.gd 2>&1 | tee player-animation.log
+          grep -q 'PASS: player martial animation' player-animation.log
+          godot --headless --path game --script res://tests/player_character_quality_test.gd 2>&1 | tee exo-quality.log
+          grep -q 'PASS: Exo Gray player model' exo-quality.log
+          if grep -E 'SCRIPT ERROR:|Parse Error:|ERROR:' player-animation.log exo-quality.log; then exit 1; fi
+      - name: Commit baked binary Godot Animation (.res) on development branch
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add game/assets/characters/exo_gray/animations/Finger_Gun_Shoot.res
+          if ! git diff --cached --quiet; then
+            git commit -m "Bake validated Finger_Gun_Shoot.res from Exo Gray punch"
+            git push origin "HEAD:feat/exo-finger-gun-shoot-20261031"
+          fi
+      - name: Save validation logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: exo-finger-gun-validation-logs
+          path: |
+            import.log
+            finger-gun-bake.log
+            finger-gun-validation.log
+            player-animation.log
+            exo-quality.log
+          if-no-files-found: warn
