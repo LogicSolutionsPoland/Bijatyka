@@ -131,11 +131,15 @@ func _check_exo_mixamo_clips(player: FoundationPlayer) -> void:
 				"short clip preserves full body: " + clip_name + " " + side)
 			var max_difference := 0.0
 			for i in range(ExoMixamoData.BONES.size()):
+				# Only the Spine pitch is repaired; the original Mixamo legs,
+				# hips, arms and head tracks must remain untouched at contact.
+				if String(ExoMixamoData.BONES[i]) == "Spine":
+					continue
 				var actual := compact.rotation_track_interpolate(i, PlayerExoMixamoOverlay.STRIKE_CONTACT)
 				var expected := full.rotation_track_interpolate(i, full.length * peak)
 				max_difference = maxf(max_difference, actual.angle_to(expected))
 			_check(max_difference < 0.02,
-				"all Exo bones meet actual measured impact at 0.12s: " + clip_name + " " + side)
+				"19 Mixamo bone rotations preserved at 0.12s: " + clip_name + " " + side)
 			_check(overlay.play_strike(clip_name, side), "visible " + side + " kick starts: " + clip_name)
 			_check(not player._exo_retarget.is_processing(), "retargeter pauses while Exo owns the skeleton")
 			animator.seek(PlayerExoMixamoOverlay.STRIKE_CONTACT, true)
@@ -149,6 +153,11 @@ func _check_exo_mixamo_clips(player: FoundationPlayer) -> void:
 				"visible " + side + " kick extends toward the target: " + clip_name)
 			_check(strike_pos.y - plant_pos.y > 0.16,
 				"visible " + side + " kick raises the striking foot: " + clip_name)
+			var head_pos := target.to_global(target.get_bone_global_pose(target.find_bone("Head")).origin)
+			var hips_pos := target.to_global(target.get_bone_global_pose(target.find_bone("Hips")).origin)
+			var torso_up := (head_pos - hips_pos).normalized().dot(Vector3.UP)
+			_check(torso_up > 0.50,
+				"contact torso is balanced rather than folded forward: " + clip_name + " " + side)
 			overlay.stop_clip()
 			_check(player._exo_retarget.is_processing(), "normal rig resumes after " + side + " kick")
 	# Interrupted and restarted clips must never write to the actor root.
