@@ -576,8 +576,8 @@ func try_jump() -> bool:
 	velocity.y = 8.2
 	jump_impact_armed = true
 	_was_airborne = true
-	if _exo_overlay != null and attack_phase == "ready":
-		_exo_overlay.play_clip("jump", 0.72)
+	# The original Jump animation stays active: the imported Mixamo leap
+	# leans horizontally at midpoint without its source root translation.
 	return true
 
 func _resolve_jump_impact() -> void:
@@ -941,9 +941,9 @@ func _play_character_action(action_name: String, duration: float) -> void:
 	_character_action_time = maxf(0.0, duration)
 	_animation_player.play(clip, ATTACK_ANIMATION_BLEND_SECONDS)
 	if _exo_overlay != null:
-		if action_name == "Dash":
-			_exo_overlay.play_clip("roll", DASH_DURATION)
-		elif action_name in ["Landing", "Hit", "Defeat"]:
+		# Keep the trusted dash visual until the imported rolling clip can play
+		# with correct ground/root movement. Retiming 2.42s into 0.30s is unsafe.
+		if action_name in ["Dash", "Landing", "Hit", "Defeat"]:
 			_exo_overlay.stop_clip()
 
 func _on_selection_resolved(_milestone: int, aura_id: String) -> void:
