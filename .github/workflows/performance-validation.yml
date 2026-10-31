@@ -63,7 +63,7 @@ jobs:
         run: |
           set -o pipefail
           godot --headless --path game --script res://tests/player_character_quality_test.gd 2>&1 | tee "$RUNNER_TEMP/player-character-quality.log"
-          grep -q "PASS: current Universal Base player quality" "$RUNNER_TEMP/player-character-quality.log"
+          grep -Eq "PASS: (current Universal Base player quality|Exo Gray player model and retained source rig)" "$RUNNER_TEMP/player-character-quality.log"
           if grep -E "SCRIPT ERROR:|ERROR:" "$RUNNER_TEMP/player-character-quality.log"; then exit 1; fi
 
       - name: Capture current player in-game views

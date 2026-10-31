@@ -16,14 +16,19 @@ func _run() -> void:
 	root.add_child(player)
 	player.set_physics_process(false)
 	await process_frame
-	_check(player.visual_root != null and player.visual_root.get_child_count() == 1, "Universal Base player model is instantiated")
+	_check(player.visual_root != null and player.visual_root.get_child_count() == 2, "source animation rig and visible Exo Gray model are instantiated")
 	_check(player._animation_player != null and player._skeleton != null, "player model has an animator and skeleton")
 	_check(player._character_motion_ready and player._fight_animations_ready and player._ring_animations_ready, "movement, combat, and ring clips install on the player rig")
 	if player._animation_player == null or player._skeleton == null:
 		_finish(player)
 		return
 	var model := player.visual_root.get_child(0) as Node3D
-	_check(model != null and model.scene_file_path == Player.PLAYER_MODEL_PATH, "runtime player uses the Universal Base male asset")
+	_check(model != null and model.scene_file_path == Player.PLAYER_MODEL_PATH, "source gameplay rig remains Universal Base male")
+	_check(model != null and not model.visible, "source gameplay rig is hidden without stopping animation")
+	_check(player._exo_visual_model != null and player._exo_visual_model.scene_file_path == Player.EXO_MODEL_PATH, "visible player uses Exo Gray GLB")
+	_check(player._exo_retarget != null and player._exo_retarget.target_skeleton != null, "Exo Gray retargeter is running")
+	if player._exo_retarget != null and player._exo_retarget.target_skeleton != null:
+		_check(player._exo_retarget.target_skeleton.get_bone_count() == 112, "Exo Gray retains its 112-bone skinned rig")
 	var animator := player._animation_player as AnimationPlayer
 	_check(player._skeleton.get_bone_count() == 65, "current imported player rig has 65 bones")
 	for clip_name in ["Idle_Loop", "Walk_Loop", "Sprint_Loop", "Jump_Loop", "Spell_Simple_Shoot"]:
@@ -41,7 +46,7 @@ func _run() -> void:
 	var triangles := 0
 	for node in player.visual_root.find_children("*", "MeshInstance3D", true, false):
 		var instance := node as MeshInstance3D
-		if instance == null or instance.mesh == null:
+		if instance == null or instance.mesh == null or not instance.is_visible_in_tree():
 			continue
 		mesh_count += 1
 		if instance.skin != null:
@@ -60,9 +65,9 @@ func _run() -> void:
 				texture = (material as ShaderMaterial).get_shader_parameter(&"albedo_texture")
 			if texture is Texture2D:
 				textured_count += 1
-	_check(mesh_count >= 3 and skinned_count == mesh_count, "all imported player meshes use the 65-bone skin (%d/%d)" % [skinned_count, mesh_count])
+	_check(mesh_count >= 3 and skinned_count == mesh_count, "all visible Exo Gray meshes are skinned (%d/%d)" % [skinned_count, mesh_count])
 	_check(textured_count >= 2, "player materials keep at least two textures after Pencil conversion (%d)" % textured_count)
-	_check(triangles >= 10000 and triangles <= 25000, "mobile player geometry stays in its 10k–25k triangle budget (%d)" % triangles)
+	_check(triangles >= 10000 and triangles <= 35000, "Exo Gray remains within the 35k mobile triangle cap (%d)" % triangles)
 	print("PLAYER_QUALITY_REPORT bones=%d meshes=%d skinned=%d textured_surfaces=%d triangles=%d" % [player._skeleton.get_bone_count(), mesh_count, skinned_count, textured_count, triangles])
 	_finish(player)
 
@@ -74,7 +79,7 @@ func _check(condition: bool, description: String) -> void:
 func _finish(player: Node) -> void:
 	player.queue_free()
 	if failures.is_empty():
-		print("PASS: current Universal Base player quality (%d checks)" % checks)
+		print("PASS: Exo Gray player model and retained source rig (%d checks)" % checks)
 		quit(0)
 	else:
 		for failure in failures:
