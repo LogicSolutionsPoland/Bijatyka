@@ -45,6 +45,7 @@ jobs:
           grep 'EXO_KICK_ANALYSIS' exo-quality.log
           if grep -E 'SCRIPT ERROR:|Parse Error:' exo-quality.log; then exit 1; fi
       - name: Create before/after rear and side screenshots (software OpenGL)
+        if: always()
         shell: bash
         run: |
           set -euo pipefail
