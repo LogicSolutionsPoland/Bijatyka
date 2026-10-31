@@ -69,6 +69,11 @@ var _skeleton: Skeleton3D
 var _exo_visual_model: Node3D
 var _exo_retarget: PlayerExoGrayRetarget
 var _exo_overlay: PlayerExoMixamoOverlay
+# Long Mixamo kicks use their native source timing; punch cadence is unchanged.
+var _exo_kick_active := false
+var _exo_kick_duration := 0.0
+var _exo_kick_impact := 0.0
+const EXO_KICK_ACTIVE_SECONDS := 0.08
 var _fight_animations_ready := false
 var _ring_animations_ready := false
 var _choreography_ready := false
@@ -328,7 +333,7 @@ func request_attack(kind: String, side: String = "right") -> bool:
 		_queue_attack(kind, side)
 		return true
 	if attack_phase == "recovery":
-		if _attack_recovery_locked:
+		if _attack_recovery_locked or _exo_kick_active:
 			_queue_attack(kind, side)
 			return true
 		_finish_attack()
@@ -421,13 +426,16 @@ func _begin_grapple() -> void:
 	offset.y = 0.0
 	if offset.length_squared() > 0.01:
 		rotation.y = atan2(-offset.x, -offset.z)
-	if not _engagement_target.begin_player_grapple(self, CHAIN_GRAB_SECONDS + TARGET_MELEE_CYCLE_SECONDS + 0.12):
+	if not _engagement_target.begin_player_grapple(self, CHAIN_GRAB_SECONDS + (2.6 if attack_kind == "kick" and _exo_overlay != null else TARGET_MELEE_CYCLE_SECONDS) + 0.12):
 		_begin_strike()
 		return
 	_grabbed_target = _engagement_target
 	_play_engagement_pose("grapple_reach")
 
 func _begin_strike() -> void:
+	_exo_kick_active = false
+	_exo_kick_duration = 0.0
+	_exo_kick_impact = 0.0
 	attack_phase = "windup"
 	attack_phase_time = float(ATTACKS[attack_kind].windup)
 	attack_count += 1
@@ -455,6 +463,10 @@ func _begin_strike() -> void:
 		else:
 			_animation_player.stop()
 	_play_exo_attack_visual()
+	if _exo_kick_active:
+		# The damage event must match the actual extended foot, not the old
+		# 0.12-second contact of the hidden fallback combat rig.
+		attack_phase_time = _exo_kick_impact
 
 func _play_exo_attack_visual() -> void:
 	if _exo_overlay == null:
@@ -462,12 +474,15 @@ func _play_exo_attack_visual() -> void:
 	if attack_kind != "kick":
 		_exo_overlay.stop_clip()
 		return
-	# A compact visual strike reaches extension on the 0.12s damage marker,
-	# even when queued melee input repeats at 5 attacks per second.
+	# Full-speed source animation: delay damage until its measured kick frame.
+	# New inputs wait until the whole clip finishes rather than cutting it off.
 	var airborne := not is_on_floor() and velocity.y > 0.1
 	var uses_roundhouse := posmod(int(_ring_attack_counts.get("kick_" + attack_side, 1)) - 1, 3) == 1
 	var clip := "fly_kick" if airborne else ("roundhouse" if uses_roundhouse else "mma_kick")
-	_exo_overlay.play_strike(clip, attack_side)
+	if _exo_overlay.play_strike(clip, attack_side):
+		_exo_kick_duration = _exo_overlay.strike_duration(clip)
+		_exo_kick_impact = _exo_overlay.impact_time(clip)
+		_exo_kick_active = _exo_kick_duration > _exo_kick_impact + EXO_KICK_ACTIVE_SECONDS
 
 func _start_queued_attack() -> bool:
 	if _queued_attack_kind.is_empty():
@@ -488,6 +503,11 @@ func _finish_attack() -> void:
 		_previous_engagement_target = _engagement_target
 	_grabbed_target = null
 	_engagement_target = null
+	if _exo_kick_active and _exo_overlay != null:
+		_exo_overlay.stop_clip()
+	_exo_kick_active = false
+	_exo_kick_duration = 0.0
+	_exo_kick_impact = 0.0
 	attack_phase = "ready"
 	attack_kind = ""
 	attack_phase_time = 0.0
@@ -527,9 +547,14 @@ func _update_attack(delta: float) -> void:
 		"windup":
 			attack_phase = "active"
 			_resolve_attack()
-			attack_phase_time = float(ATTACKS[attack_kind].active)
+			attack_phase_time = EXO_KICK_ACTIVE_SECONDS if _exo_kick_active else float(ATTACKS[attack_kind].active)
 		"active":
-			if not _start_queued_attack():
+			# Full-length Exo kicks cannot chain at the 0.2s punch boundary.
+			if _exo_kick_active:
+				attack_phase = "recovery"
+				attack_phase_time = maxf(0.01, _exo_kick_duration - _exo_kick_impact - EXO_KICK_ACTIVE_SECONDS)
+				_attack_recovery_locked = false
+			elif not _start_queued_attack():
 				attack_phase = "recovery"
 				attack_phase_time = float(ATTACKS[attack_kind].recovery)
 				_attack_recovery_locked = false
