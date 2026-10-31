@@ -160,6 +160,10 @@ func _find_contact(source: Animation, side: String) -> Dictionary:
 		if clearance > max_clearance:
 			max_clearance = clearance
 			max_clearance_frame = frame
+		# A turning, planted support foot may travel forward during a spin.
+		# It is not the kicking leg unless it actually leaves the ground.
+		if clearance < 0.20:
+			continue
 		var foot_ahead_of_knee := (foot - knee).dot(forward)
 		var support_drift := planted.distance_to(start_support)
 		var upright := torso.normalized().dot(Vector3.UP)
@@ -174,6 +178,8 @@ func _find_contact(source: Animation, side: String) -> Dictionary:
 			best_frame = frame
 			best_clearance = clearance
 	_restore_pose(saved)
+	if best_score == -INF:
+		best_score = -1000.0
 	return {"fraction": minf(1.0, float(best_frame) / float(DATA.FPS) / source.length),
 		"frame": best_frame, "score": best_score,
 		"clearance": best_clearance, "max_clearance": max_clearance,
