@@ -1,0 +1,118 @@
+name: Bijatyka Finger Gun - Android ARM64 Debug APK
+
+on:
+  push:
+    branches:
+      - codex/finger-gun-arm64-apk-20261031
+    paths:
+      - .github/workflows/finger-gun-arm64-apk.yml
+      - game/**
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out exact Finger Gun game revision
+        uses: actions/checkout@v4
+
+      - name: Install Godot 4.7.2 and Android templates
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: true
+
+      - name: Import game and compile scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --editor --path game --import --quit 2>&1 | tee import.log
+          if grep -E 'SCRIPT ERROR:|Parse Error:|ERROR: Failed to load' import.log; then exit 1; fi
+
+      - name: Verify Finger Gun animation, spell combat and game regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          for spec in finger_gun_spell_integration_test finger_gun_validation player_animation_test player_character_quality_test elevator_loading_test test_runner; do
+            timeout 150s godot --headless --path game --script "res://tests/$spec.gd" 2>&1 | tee "$spec.log"
+            grep -q 'PASS:' "$spec.log"
+            if grep -E 'SCRIPT ERROR:|Parse Error:|FINGER_GUN_INTEGRATION_FAILED|FINGER_GUN_VALIDATION_FAILED|ERROR: Failed to load' "$spec.log"; then exit 1; fi
+          done
+          test -s game/assets/characters/exo_gray/animations/Finger_Gun_Shoot.res
+
+      - name: Export a single Android ARM64 debug APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${ANDROID_HOME:-}"
+          mkdir -p build
+          godot --headless --path game --export-debug "Android ARM64" "$GITHUB_WORKSPACE/build/Bijatyka-FingerGun-Android-arm64.apk" 2>&1 | tee export.log
+          if grep -E 'SCRIPT ERROR:|Parse Error:|ERROR:' export.log; then exit 1; fi
+          test -s build/Bijatyka-FingerGun-Android-arm64.apk
+
+      - name: Verify APK and Finger Gun files
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="build/Bijatyka-FingerGun-Android-arm64.apk"
+          unzip -tqq "$apk"
+          unzip -Z1 "$apk" > apk-files.txt
+          grep -Fxq 'lib/arm64-v8a/libgodot_android.so' apk-files.txt
+          grep -Fxq 'assets/project.binary' apk-files.txt
+          grep -Fxq 'assets/scripts/player_controller.gdc' apk-files.txt
+          grep -Fxq 'assets/scripts/player_exo_mixamo_overlay.gdc' apk-files.txt
+          grep -Fxq 'assets/scripts/exo_finger_gun.gdc' apk-files.txt
+          grep -Fxq 'assets/scripts/finger_gun_fire_event.gdc' apk-files.txt
+          grep -q 'Finger_Gun_Shoot.res' apk-files.txt
+          grep -q 'Exo_Gray_Player.glb' apk-files.txt
+          if grep -Eq '^lib/(armeabi-v7a|x86|x86_64)/' apk-files.txt; then
+            echo "Non-ARM64 native library detected" >&2
+            exit 1
+          fi
+          sha256sum "$apk" | tee build/Bijatyka-FingerGun-Android-arm64.sha256
+          aapt_bin="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
+          test -n "$aapt_bin"
+          "$aapt_bin" dump badging "$apk" | grep -q "package: name='org.logicsolutionspoland.bijatyka'"
+          du -h "$apk"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bijatyka-FingerGun-Android-arm64
+          path: |
+            build/Bijatyka-FingerGun-Android-arm64.apk
+            build/Bijatyka-FingerGun-Android-arm64.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish directly downloadable APK as prerelease
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="bijatyka-finger-gun-arm64-20261031"
+          gh release create "$tag" \
+            build/Bijatyka-FingerGun-Android-arm64.apk \
+            build/Bijatyka-FingerGun-Android-arm64.sha256 \
+            --target "$GITHUB_SHA" \
+            --title "Bijatyka - Finger Gun - Android ARM64 debug" \
+            --notes "Godot 4.7.2 GL Compatibility debug APK, ARM64 only. Source based on tested c0f1233 with Exo Gray Finger_Gun_Shoot (1.0s), magical fingertip projectile marker at 0.30s, existing spell combat and elevator loading retained. Development prerelease: device FPS/visual review remains required." \
+            --prerelease
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bijatyka-FingerGun-Build-Logs
+          path: |
+            import.log
+            export.log
+            apk-files.txt
+            *.log
+          if-no-files-found: warn
