@@ -19,6 +19,7 @@ const RADIAL_GROUND_SHADER := preload("res://shaders/radial_ground.gdshader")
 const RUIN_SURFACE_SHADER := preload("res://shaders/ruined_surface.gdshader")
 const ARENA_MAP_SCRIPT := preload("res://scripts/arena_map_upgrade.gd")
 const STARTING_TOWER := preload("res://scripts/starting_tower.gd")
+const GROUND_LOADING_COORDINATOR := preload("res://scripts/ground_loading_coordinator.gd")
 const ZOMBIE_HORDE_SIZE := 4
 const GROUND_ZOMBIE_HORDE_SIZE := 13
 const ZOMBIE_PERFORMANCE_CAPACITY := 200
@@ -90,6 +91,7 @@ var _ground_map_visual_index := 0
 var _ground_map_profile_step := 0
 var _ground_map_preparing := false
 var _ground_map_ready := false
+var _ground_loading_coordinator: GroundLoadingCoordinator
 var burning_horizon: Node3D
 var _environment: Environment
 var _ground_sky: Sky
@@ -155,6 +157,10 @@ func _ready() -> void:
 	burning_horizon.follow_player(player.global_position)
 	_update_rooftop_sky()
 	_build_hud()
+	_ground_loading_coordinator = GROUND_LOADING_COORDINATOR.new() as GroundLoadingCoordinator
+	_ground_loading_coordinator.name = "GroundMapLoadingCoordinator"
+	_ground_loading_coordinator.configure(self)
+	add_child(_ground_loading_coordinator)
 	_spawn_enemies()
 	_setup_performance_diagnostics()
 	_update_distance_visibility()
@@ -206,7 +212,7 @@ func _process(delta: float) -> void:
 		return
 	burning_horizon.follow_player(player.global_position)
 	_update_rooftop_sky()
-	_advance_ground_map_preparation()
+	# Ground loading is now driven by actual elevator lifecycle signals.
 	_rooftop_camera_blend = move_toward(
 		_rooftop_camera_blend,
 		_rooftop_camera_target,
@@ -218,7 +224,7 @@ func _process(delta: float) -> void:
 	camera_arm.rotation.x = _effective_camera_pitch()
 	_update_camera_framing()
 	_update_gamepad_camera(delta)
-	if Input.is_action_just_pressed("interact_elevator"):
+	if not _ground_loading_coordinator.is_active() and Input.is_action_just_pressed("interact_elevator"):
 		_on_elevator_requested()
 	if hud != null and is_instance_valid(starting_tower) and is_instance_valid(starting_tower.elevator):
 		hud.set_elevator_prompt(starting_tower.elevator.get_prompt_for_player(player))
@@ -317,7 +323,7 @@ func _build_environment() -> void:
 func _update_rooftop_sky() -> void:
 	# Height changes during a boarded ride do not control the map or sky.
 	# The elevator's ride-start signal prepares the ground profile instead.
-	if _is_player_in_elevator():
+	if _is_player_in_elevator() or (is_instance_valid(_ground_loading_coordinator) and _ground_loading_coordinator.is_preparing_ground_profile()):
 		return
 	var on_roof := player.global_position.y >= ROOFTOP_SKY_MIN_HEIGHT
 	_rooftop_camera_target = 1.0 if on_roof else 0.0
@@ -482,6 +488,8 @@ func _build_starting_tower() -> void:
 	add_child(starting_tower)
 	starting_tower.elevator.rider_arrived.connect(_on_elevator_rider_arrived)
 	starting_tower.elevator.rider_ride_started.connect(_on_elevator_ride_started)
+	starting_tower.elevator.lift_called.connect(_on_elevator_called)
+	starting_tower.elevator.lift_call_arrived.connect(_on_elevator_call_arrived)
 	# Exclude the tower volume from concealed enemy placement, even in
 	# performance scenarios; the existing enemy-safe base remains intact.
 	var half_width := StartingTower.WIDTH * 0.5
@@ -791,7 +799,20 @@ func _spawn_enemy(kind: String, at: Vector3, boss_target: bool = false, high_det
 	return enemy
 
 func _on_elevator_requested() -> void:
-	_interact_with_starting_elevator()
+	if not _ground_loading_coordinator.is_active():
+		_interact_with_starting_elevator()
+
+
+func _on_elevator_called(destination_floor: StringName) -> void:
+	# CALL LIFT with an empty car is the earliest useful preparation event.
+	if destination_floor == &"roof" and player.global_position.y >= ROOFTOP_SKY_MIN_HEIGHT:
+		_ground_loading_coordinator.start_call()
+
+
+func _on_elevator_call_arrived(destination_floor: StringName) -> void:
+	if destination_floor == &"roof":
+		_ground_loading_coordinator.call_arrived()
+
 
 func _on_elevator_ride_started(destination_floor: StringName) -> void:
 	# The car is closed and the rider is inside before this signal is emitted.
@@ -800,20 +821,20 @@ func _on_elevator_ride_started(destination_floor: StringName) -> void:
 	camera_arm.spring_length = _camera_follow_distance()
 	_update_camera_framing()
 	if destination_floor == &"roof":
+		_ground_loading_coordinator.cancel()
 		_restore_rooftop_map()
 		if _ground_wave_started:
 			_deactivate_ground_population()
 		return
 	if destination_floor != &"ground" or _ground_map_preparing or _ground_map_ready:
 		return
-	_ground_map_visual_index = 0
-	_ground_map_profile_step = 0
-	_ground_map_preparing = true
-	starting_tower.elevator.set_ground_floor_ready(false)
+	_ground_loading_coordinator.start_descent()
 
 func _on_elevator_rider_arrived(floor: StringName) -> void:
-	# The visual transition finished during travel; arrival only starts combat.
+	# Keep the screen over the first ground draw and zombie activation.
 	_update_rooftop_sky()
+	if floor == &"ground":
+		_ground_loading_coordinator.ground_arrived()
 	if floor == &"roof":
 		if _ground_wave_started:
 			_deactivate_ground_population()
@@ -834,7 +855,9 @@ func _on_elevator_rider_arrived(floor: StringName) -> void:
 func _on_player_respawned() -> void:
 	if is_instance_valid(starting_tower) and is_instance_valid(starting_tower.elevator):
 		starting_tower.elevator.reset_to_roof()
+		_ground_loading_coordinator.cancel()
 		_restore_rooftop_map()
+	player.set_physics_process(true)
 	_update_rooftop_sky()
 	_rooftop_camera_blend = 1.0
 	_rooftop_camera_target = 1.0
@@ -852,12 +875,12 @@ func _deactivate_ground_population() -> void:
 	_reset_ordinary_population()
 
 func _interact_with_starting_elevator() -> bool:
-	if get_tree().paused or not is_instance_valid(player) or not is_instance_valid(starting_tower) or not is_instance_valid(starting_tower.elevator):
+	if get_tree().paused or _ground_loading_coordinator.is_active() or not is_instance_valid(player) or not is_instance_valid(starting_tower) or not is_instance_valid(starting_tower.elevator):
 		return false
 	return starting_tower.elevator.interact(player)
 
 func _on_hud_action(action: String) -> void:
-	if get_tree().paused:
+	if get_tree().paused or _ground_loading_coordinator.is_active():
 		return
 	match action:
 		"punch_left": player.request_attack("punch", "left")
