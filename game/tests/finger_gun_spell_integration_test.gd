@@ -121,9 +121,9 @@ func _run() -> void:
 func _on_visual(from: Vector3, to: Vector3, school: String) -> void:
 	visuals.append({"from": from, "to": to, "school": school})
 
-func _check(pass: bool, description: String) -> void:
+func _check(condition: bool, description: String) -> void:
 	checks += 1
-	if not pass:
+	if not condition:
 		failures.append(description)
 
 func _finish(player: Node, enemy: Node) -> void:
