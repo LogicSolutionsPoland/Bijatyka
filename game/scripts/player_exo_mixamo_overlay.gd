@@ -10,7 +10,11 @@ const BLEND_SECONDS := 0.045
 const STRIKE_LENGTH := 0.32
 const STRIKE_CONTACT := 0.12
 const ROLL_VISUAL_DURATION := 0.50
-const PEAK_FRACTIONS := {"mma_kick": 0.37, "roundhouse": 0.65, "fly_kick": 0.50}
+# Impact frames are selected from actual Exo Gray foot/knee geometry, not guessed
+# percentages of the source animation. Computed once at model initialization.
+const STRIKE_NAMES := ["mma_kick", "roundhouse", "fly_kick"]
+const IMPACT_MIN_SECONDS := 0.18
+const IMPACT_END_FRACTION := 0.92
 
 var _animator: AnimationPlayer
 var _driver: PlayerExoGrayRetarget
@@ -20,6 +24,9 @@ var _exo_model: Node3D
 var _roll_actor: CharacterBody3D
 var _roll_active := false
 var _roll_lift := 0.0
+var _impact_fractions: Dictionary = {}
+var _original_sides: Dictionary = {}
+var _contact_scores: Dictionary = {}
 
 func configure(exo_model: Node3D, skeleton: Skeleton3D, driver: PlayerExoGrayRetarget) -> bool:
 	if exo_model == null or skeleton == null or driver == null or DATA.CLIPS.is_empty():
@@ -32,6 +39,9 @@ func configure(exo_model: Node3D, skeleton: Skeleton3D, driver: PlayerExoGrayRet
 			push_warning("Exo Mixamo: missing bone " + String(name))
 			return false
 		bone_indices.append(index)
+	_skeleton = skeleton
+	_exo_model = exo_model
+	_roll_actor = exo_model.get_parent().get_parent() as CharacterBody3D
 	var library := AnimationLibrary.new()
 	for raw_name in DATA.CLIPS:
 		var name := String(raw_name)
@@ -61,12 +71,33 @@ func configure(exo_model: Node3D, skeleton: Skeleton3D, driver: PlayerExoGrayRet
 				animation.rotation_track_insert_key(track, minf(duration, float(frame) / float(DATA.FPS)), q)
 		if library.add_animation(StringName(name), animation) != OK:
 			return false
-	# Bake short, impact-aligned previews once. Gameplay hit markers stay on
-	# the hidden source rig and are never driven by this visible animation.
-	for strike_name in PEAK_FRACTIONS:
+	# Diagnose strike geometry using the visible 112-bone rig. Mirror in
+	# rest-relative global space only when the source leg differs from input.
+	# This never alters the physical CharacterBody3D or the hidden combat rig.
+	for strike_name in STRIKE_NAMES:
 		var original := library.get_animation(StringName(strike_name))
-		var strike := _bake_strike(original, float(PEAK_FRACTIONS[strike_name]))
-		if strike == null or library.add_animation(StringName(strike_name + "_combat"), strike) != OK:
+		var left := _find_contact(original, "left")
+		var right := _find_contact(original, "right")
+		var source_side := "left" if float(left["score"]) > float(right["score"]) else "right"
+		var analysis: Dictionary = left if source_side == "left" else right
+		_original_sides[strike_name] = source_side
+		_impact_fractions[strike_name] = float(analysis["fraction"])
+		_contact_scores[strike_name] = float(analysis["score"])
+		print("EXO_KICK_ANALYSIS %s source=%s frame=%d impact=%.3fs score=%.3f" % [
+			strike_name, source_side, int(analysis["frame"]),
+			float(analysis["fraction"]) * original.length, float(analysis["score"])])
+		var reflected := _mirror_animation(original)
+		if reflected == null or library.add_animation(StringName(strike_name + "_mirrored"), reflected) != OK:
+			return false
+		for side in ["left", "right"]:
+			var selected := original if side == source_side else reflected
+			var compact := _bake_strike(selected, float(analysis["fraction"]))
+			if compact == null or library.add_animation(StringName(strike_name + "_" + side + "_combat"), compact) != OK:
+				return false
+		# Compatibility alias for existing preview/tests; explicit gameplay
+		# calls always select the anatomically correct left/right variant.
+		if library.add_animation(StringName(strike_name + "_combat"),
+			library.get_animation(StringName(strike_name + "_right_combat"))) != OK:
 			return false
 	_animator = AnimationPlayer.new()
 	_animator.name = "ExoMixamoAnimationPlayer"
@@ -79,12 +110,150 @@ func configure(exo_model: Node3D, skeleton: Skeleton3D, driver: PlayerExoGrayRet
 		return false
 	_animator.animation_finished.connect(_on_animation_finished)
 	_driver = driver
-	_skeleton = skeleton
-	_exo_model = exo_model
-	_roll_actor = exo_model.get_parent().get_parent() as CharacterBody3D
 	_ready_to_play = true
 	set_process(false)
 	return true
+
+
+# Sample the stored source rotations on Exo's *actual* skeleton. A bent torso
+# or raised knee alone cannot win: the foot must travel forward, clear the
+# support foot, and straighten beyond the knee. No runtime per-frame search.
+func _find_contact(source: Animation, side: String) -> Dictionary:
+	var foot_index := _skeleton.find_bone("LeftFoot" if side == "left" else "RightFoot")
+	var knee_index := _skeleton.find_bone("LeftLeg" if side == "left" else "RightLeg")
+	var hip_index := _skeleton.find_bone("LeftUpLeg" if side == "left" else "RightUpLeg")
+	var support_index := _skeleton.find_bone("RightFoot" if side == "left" else "LeftFoot")
+	var head_index := _skeleton.find_bone("Head")
+	var pelvis_index := _skeleton.find_bone("Hips")
+	var forward := -_roll_actor.global_transform.basis.z.normalized() if is_instance_valid(_roll_actor) else -_exo_model.global_transform.basis.z.normalized()
+	var saved := _save_pose()
+	_apply_source_pose(source, 0.0)
+	var start_foot := _bone_position(foot_index)
+	var start_support := _bone_position(support_index)
+	var start_forward := (start_foot - start_support).dot(forward)
+	var best_score := -INF
+	var best_frame := 0
+	var steps := maxi(2, ceili(source.length * float(DATA.FPS)))
+	for frame in range(steps):
+		var time := minf(source.length, float(frame) / float(DATA.FPS))
+		if time < IMPACT_MIN_SECONDS or time > source.length * IMPACT_END_FRACTION:
+			continue
+		_apply_source_pose(source, time)
+		var foot := _bone_position(foot_index)
+		var knee := _bone_position(knee_index)
+		var hip := _bone_position(hip_index)
+		var planted := _bone_position(support_index)
+		var torso := _bone_position(head_index) - _bone_position(pelvis_index)
+		var leg_a := (hip - knee).normalized()
+		var leg_b := (foot - knee).normalized()
+		var straightness := -leg_a.dot(leg_b)  # 1 means a straight knee
+		var reach := (foot - planted).dot(forward) - start_forward
+		var travel := (foot - start_foot).dot(forward)
+		var clearance := foot.y - planted.y
+		var foot_ahead_of_knee := (foot - knee).dot(forward)
+		var support_drift := planted.distance_to(start_support)
+		var upright := torso.normalized().dot(Vector3.UP)
+		var score := 1.8 * reach + 0.9 * travel + 0.6 * maxf(0.0, clearance) \\
+			+ 0.55 * straightness + 0.40 * foot_ahead_of_knee \\
+			- 0.8 * support_drift - 1.0 * maxf(0.0, 0.40 - upright)
+		if score > best_score:
+			best_score = score
+			best_frame = frame
+	_restore_pose(saved)
+	return {"fraction": minf(1.0, float(best_frame) / float(DATA.FPS) / source.length),
+		"frame": best_frame, "score": best_score}
+
+
+func _save_pose() -> Array[Quaternion]:
+	var result: Array[Quaternion] = []
+	for name in DATA.BONES:
+		result.append(_skeleton.get_bone_pose_rotation(_skeleton.find_bone(String(name))))
+	return result
+
+
+func _restore_pose(rotations: Array[Quaternion]) -> void:
+	for i in range(DATA.BONES.size()):
+		_skeleton.set_bone_pose_rotation(_skeleton.find_bone(String(DATA.BONES[i])), rotations[i])
+	_skeleton.force_update_all_bone_transforms()
+
+
+func _apply_source_pose(clip: Animation, time: float) -> void:
+	for i in range(DATA.BONES.size()):
+		var idx := _skeleton.find_bone(String(DATA.BONES[i]))
+		_skeleton.set_bone_pose_rotation(idx, clip.rotation_track_interpolate(i, time))
+	_skeleton.force_update_all_bone_transforms()
+
+
+func _bone_position(index: int) -> Vector3:
+	return _skeleton.to_global(_skeleton.get_bone_global_pose(index).origin)
+
+
+# True bilateral mirroring: swap left/right homologous joints and reflect each
+# REST-RELATIVE GLOBAL rotation across the sagittal plane. Mirroring the
+# quaternion's arbitrary components would corrupt the Mixamo joint axes.
+func _mirror_animation(source: Animation) -> Animation:
+	var mirrored := Animation.new()
+	mirrored.length = source.length
+	mirrored.step = source.step
+	mirrored.loop_mode = Animation.LOOP_NONE
+	var saved := _save_pose()
+	var mirror_basis := Basis(Vector3(-1.0, 0.0, 0.0), Vector3(0.0, 1.0, 0.0), Vector3(0.0, 0.0, 1.0))
+	var track_indices: Dictionary = {}
+	for name in DATA.BONES:
+		var track := mirrored.add_track(Animation.TYPE_ROTATION_3D)
+		mirrored.track_set_path(track, source.track_get_path(DATA.BONES.find(name)))
+		mirrored.track_set_interpolation_type(track, Animation.INTERPOLATION_LINEAR)
+		track_indices[String(name)] = track
+	var frames := maxi(2, ceili(source.length * float(DATA.FPS)))
+	for frame in range(frames):
+		var time := minf(source.length, float(frame) / float(DATA.FPS))
+		_apply_source_pose(source, time)
+		var source_deltas: Dictionary = {}
+		for raw_name in DATA.BONES:
+			var name := String(raw_name)
+			var bone := _skeleton.find_bone(name)
+			var actual := _skeleton.get_bone_global_pose(bone).basis.get_rotation_quaternion()
+			var rest := _skeleton.get_bone_global_rest(bone).basis.get_rotation_quaternion()
+			source_deltas[name] = (actual * rest.inverse()).normalized()
+		var output_globals: Dictionary = {}
+		for raw_name in DATA.BONES:
+			var name := String(raw_name)
+			var opposite := _opposite_bone_name(name)
+			var bone := _skeleton.find_bone(name)
+			var delta := Basis(source_deltas[opposite] as Quaternion)
+			var reflected := (mirror_basis * delta * mirror_basis).get_rotation_quaternion().normalized()
+			var global_rest := _skeleton.get_bone_global_rest(bone).basis.get_rotation_quaternion()
+			var wanted_global := (reflected * global_rest).normalized()
+			var parent := _skeleton.get_bone_parent(bone)
+			var parent_global := Quaternion.IDENTITY
+			if parent >= 0:
+				var parent_name := String(_skeleton.get_bone_name(parent))
+				if output_globals.has(parent_name):
+					parent_global = output_globals[parent_name] as Quaternion
+				else:
+					parent_global = _skeleton.get_bone_global_rest(parent).basis.get_rotation_quaternion()
+			var local_rotation := (parent_global.inverse() * wanted_global).normalized()
+			mirrored.rotation_track_insert_key(int(track_indices[name]), time, local_rotation)
+			output_globals[name] = wanted_global
+	_restore_pose(saved)
+	return mirrored
+
+
+func _opposite_bone_name(name: String) -> String:
+	if name.begins_with("Left"):
+		return "Right" + name.substr(4)
+	if name.begins_with("Right"):
+		return "Left" + name.substr(5)
+	return name
+
+
+func impact_fraction(name: String) -> float:
+	return float(_impact_fractions.get(name, 0.0))
+
+
+func authored_side(name: String) -> String:
+	return String(_original_sides.get(name, ""))
+
 
 func _bake_strike(source: Animation, peak_fraction: float) -> Animation:
 	if source == null:
@@ -95,9 +264,12 @@ func _bake_strike(source: Animation, peak_fraction: float) -> Animation:
 	clip.loop_mode = Animation.LOOP_NONE
 	# Impact is at the *actual* damage boundary, not at a late source-frame.
 	# Fast follow-up attacks at 5 Hz still show the kick at t=0.12 s.
-	var times := [0.0, 0.04, 0.08, STRIKE_CONTACT, 0.20, 0.27, STRIKE_LENGTH]
-	var fractions := [0.0, 0.09, peak_fraction * 0.55, peak_fraction,
-		lerpf(peak_fraction, 1.0, 0.55), 1.0, 0.0]
+	# Chamber -> extension -> hit -> brief follow-through -> planted recovery.
+	# Do not seek across the entire remaining 2-second spin in 0.15 seconds.
+	var times := [0.0, 0.04, 0.08, STRIKE_CONTACT, 0.16, 0.20, 0.27, STRIKE_LENGTH]
+	var fractions := [0.0, peak_fraction * 0.42, peak_fraction * 0.76, peak_fraction,
+		minf(1.0, peak_fraction + 0.045), minf(1.0, peak_fraction + 0.09),
+		minf(1.0, peak_fraction + 0.15), 0.0]
 	for source_track in range(source.get_track_count()):
 		if source.track_get_type(source_track) != Animation.TYPE_ROTATION_3D:
 			continue
@@ -109,10 +281,10 @@ func _bake_strike(source: Animation, peak_fraction: float) -> Animation:
 			clip.rotation_track_insert_key(track, float(times[i]), pose)
 	return clip
 
-func play_strike(name: String) -> bool:
-	if not PEAK_FRACTIONS.has(name):
+func play_strike(name: String, side: String = "right") -> bool:
+	if name not in STRIKE_NAMES or side not in ["left", "right"]:
 		return false
-	return play_clip(name + "_combat", STRIKE_LENGTH)
+	return play_clip(name + "_" + side + "_combat", STRIKE_LENGTH)
 
 func play_ground_roll() -> bool:
 	if not is_instance_valid(_roll_actor) or not _roll_actor.is_on_floor():
