@@ -53,6 +53,16 @@ jobs:
           timeout 120s godot --headless --path game --script res://tests/test_runner.gd 2>&1 | tee core-tests.log
           grep -q 'PASS:' core-tests.log
           if grep -E 'SCRIPT ERROR:|Parse Error:|FINGER_GUN_INTEGRATION_FAILED|ERROR: Failed to load' player-animation.log exo-quality.log core-tests.log; then exit 1; fi
+      - name: Capture six actual Exo poses from rear and side (software GL)
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb libgl1-mesa-dri
+          timeout 90s env LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a godot --path game --rendering-method gl_compatibility --script res://tests/finger_gun_spell_capture.gd 2>&1 | tee finger-gun-captures.log
+          grep -q 'FINGER_GUN_CAPTURED=6 ERRORS=0' finger-gun-captures.log
+          test "$(find build/finger_gun_spell_review -type f -name '*.png' | wc -l)" -eq 6
+          if grep -E 'SCRIPT ERROR:|Parse Error:|ERROR: Failed to load' finger-gun-captures.log; then exit 1; fi
       - name: Save validation logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -65,4 +75,6 @@ jobs:
             player-animation.log
             exo-quality.log
             core-tests.log
+            finger-gun-captures.log
+            build/finger_gun_spell_review/*.png
           if-no-files-found: warn
