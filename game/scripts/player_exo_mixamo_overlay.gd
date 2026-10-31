@@ -153,8 +153,8 @@ func _find_contact(source: Animation, side: String) -> Dictionary:
 		var foot_ahead_of_knee := (foot - knee).dot(forward)
 		var support_drift := planted.distance_to(start_support)
 		var upright := torso.normalized().dot(Vector3.UP)
-		var score := 1.8 * reach + 0.9 * travel + 0.6 * maxf(0.0, clearance) \\
-			+ 0.55 * straightness + 0.40 * foot_ahead_of_knee \\
+		var score := 1.8 * reach + 0.9 * travel + 0.6 * maxf(0.0, clearance) \
+			+ 0.55 * straightness + 0.40 * foot_ahead_of_knee \
 			- 0.8 * support_drift - 1.0 * maxf(0.0, 0.40 - upright)
 		if score > best_score:
 			best_score = score
@@ -204,7 +204,7 @@ func _mirror_animation(source: Animation) -> Animation:
 		mirrored.track_set_path(track, source.track_get_path(DATA.BONES.find(name)))
 		mirrored.track_set_interpolation_type(track, Animation.INTERPOLATION_LINEAR)
 		track_indices[String(name)] = track
-	var frames := maxi(2, ceili(source.length * float(DATA.FPS)))
+	var frames := maxi(2, roundi(source.length * float(DATA.FPS)) + 1)
 	for frame in range(frames):
 		var time := minf(source.length, float(frame) / float(DATA.FPS))
 		_apply_source_pose(source, time)
