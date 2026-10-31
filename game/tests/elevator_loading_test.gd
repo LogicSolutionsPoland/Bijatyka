@@ -67,6 +67,8 @@ func _run_checks() -> void:
 	_check(world._ground_wave_started, "zombie population starts only at arrival")
 	_check(world.player.is_physics_processing(), "ground controls must be restored")
 
+	# The real respawn signal is sent after the controller moves the player.
+	world.player.global_position = world.player.safe_base_position
 	world._on_player_respawned()
 	_check(not coordinator.is_active(), "respawn must cancel pending loading")
 	_check(world._rooftop_sky_active, "respawn must restore rooftop profile")
