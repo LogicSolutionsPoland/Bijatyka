@@ -69,13 +69,13 @@ func _physics_process(delta: float) -> void:
 		_position_rider()
 		_rider.velocity = Vector3.ZERO
 	_rider = null
-	if is_instance_valid(arrived_rider):
-		rider_arrived.emit(&"roof" if _target_y == TOP_CAR_Y else &"ground")
-	else:
-		lift_call_arrived.emit(&"roof" if _target_y == TOP_CAR_Y else &"ground")
 	_set_car_enclosed(false)
 	if is_instance_valid(arrived_rider):
 		arrived_rider.set_physics_process(true)
+		# Receiver may hold controls disabled until the screen is removed.
+		rider_arrived.emit(&"roof" if _target_y == TOP_CAR_Y else &"ground")
+	else:
+		lift_call_arrived.emit(&"roof" if _target_y == TOP_CAR_Y else &"ground")
 
 
 func get_prompt_for_player(player: CharacterBody3D) -> String:
