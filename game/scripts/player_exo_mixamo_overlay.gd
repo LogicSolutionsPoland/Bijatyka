@@ -95,8 +95,13 @@ func configure(exo_model: Node3D, skeleton: Skeleton3D, driver: PlayerExoGrayRet
 			return false
 		for side in ["left", "right"]:
 			var selected := original if side == source_side else reflected
-			# Keep every source keyframe at 1x playback speed.
-			if library.add_animation(StringName(strike_name + "_" + side + "_combat"), selected) != OK:
+			# Retain the complete, unretimed FBX timeline and all source joint
+			# rotations except a small upper-body balance correction.
+			var full_speed := selected.duplicate(true) as Animation
+			if full_speed == null:
+				return false
+			_stabilize_upper_body(full_speed, float(analysis["fraction"]) * original.length)
+			if library.add_animation(StringName(strike_name + "_" + side + "_combat"), full_speed) != OK:
 				return false
 		# Compatibility alias for existing preview/tests; explicit gameplay
 		# calls always select the anatomically correct left/right variant.
@@ -285,6 +290,46 @@ func strike_duration(name: String) -> float:
 	return float(_strike_durations.get(name, 0.0))
 
 
+# Source FBX pitching can fold Exo's upper torso. Keep full clip length,
+# exact 1x source frame times and all 19 other bone rotations unchanged.
+func _stabilize_upper_body(clip: Animation, contact_time: float) -> void:
+	var spine := _skeleton.find_bone("Spine")
+	var head := _skeleton.find_bone("Head")
+	var hips := _skeleton.find_bone("Hips")
+	if spine < 0 or head < 0 or hips < 0:
+		return
+	var parent := _skeleton.get_bone_parent(spine)
+	var spine_track := DATA.BONES.find("Spine")
+	if parent < 0 or spine_track < 0 or spine_track >= clip.get_track_count():
+		return
+	var saved := _save_pose()
+	for key in range(clip.track_get_key_count(spine_track)):
+		var time := clip.track_get_key_time(spine_track, key)
+		var weight := 0.0
+		if time <= contact_time:
+			weight = clampf((time - 0.08) / maxf(0.08, contact_time - 0.08), 0.0, 1.0)
+		else:
+			weight = clampf((clip.length - time) / maxf(0.1, clip.length - contact_time), 0.0, 1.0)
+		if weight < 0.01:
+			continue
+		_apply_source_pose(clip, time)
+		var torso := _skeleton.get_bone_global_pose(head).origin - _skeleton.get_bone_global_pose(hips).origin
+		if torso.length_squared() < 0.0001:
+			continue
+		torso = torso.normalized()
+		var angle := torso.angle_to(Vector3.UP)
+		var correction_angle := minf(deg_to_rad(80.0), maxf(0.0, angle - deg_to_rad(33.0))) * weight
+		var axis := torso.cross(Vector3.UP)
+		if axis.length_squared() < 0.0001 or correction_angle < 0.001:
+			continue
+		var correction := Quaternion(axis.normalized(), correction_angle)
+		var parent_rotation := _skeleton.get_bone_global_pose(parent).basis.get_rotation_quaternion()
+		var old_global := _skeleton.get_bone_global_pose(spine).basis.get_rotation_quaternion()
+		var corrected_local := (parent_rotation.inverse() * correction * old_global).normalized()
+		clip.track_set_key_value(spine_track, key, corrected_local)
+	_restore_pose(saved)
+
+
 func play_strike(name: String, side: String = "right") -> bool:
 	if name not in STRIKE_NAMES or side not in ["left", "right"]:
 		return false
@@ -313,7 +358,10 @@ func play_clip(name: String, requested_duration: float = 0.0) -> bool:
 	# still-running clip. At 5 hits/sec the old 0.32s strike would remain in
 	# its recovery phase; force the first frame on every accepted input.
 	var restart_same := _animator.is_playing() and _animator.current_animation == key
-	_animator.play(key, 0.0 if restart_same else BLEND_SECONDS, playback_speed)
+	# A completed full-length strike must restart without a leftover blend
+	# from the rig's previous pose or the previous completed clip.
+	var blend := 0.0 if restart_same or name.ends_with("_combat") else BLEND_SECONDS
+	_animator.play(key, blend, playback_speed)
 	_animator.seek(0.0, true)
 	_animator.advance(0.0)
 	return true
