@@ -30,6 +30,7 @@ on:
       - codex/android-40pct-render-20261030
       - codex/roof-clear-light-and-sketch-20261030
       - codex/player-mma-kick-20261030
+      - codex/exo-gray-player-model-20261031
 
 permissions:
   contents: read
