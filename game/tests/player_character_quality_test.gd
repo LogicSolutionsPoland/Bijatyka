@@ -125,24 +125,23 @@ func _check_exo_mixamo_clips(player: FoundationPlayer) -> void:
 			var compact := animator.get_animation(combat_path)
 			var source_name: String = clip_name if side == authored else clip_name + "_mirrored"
 			var full := animator.get_animation(StringName("exo_mixamo/" + source_name))
-			_check(is_equal_approx(compact.length, PlayerExoMixamoOverlay.STRIKE_LENGTH),
-				"combat clip preserves the five-hit cadence: " + clip_name + " " + side)
+			_check(is_equal_approx(compact.length, full.length),
+				"combat clip retains the native FBX duration: " + clip_name + " " + side)
+			_check(is_equal_approx(overlay.impact_time(clip_name), full.length * peak),
+				"actual source kick contact time is preserved: " + clip_name)
 			_check(compact.get_track_count() == ExoMixamoData.BONES.size(),
 				"short clip preserves full body: " + clip_name + " " + side)
 			var max_difference := 0.0
 			for i in range(ExoMixamoData.BONES.size()):
-				# Only the Spine pitch is repaired; the original Mixamo legs,
-				# hips, arms and head tracks must remain untouched at contact.
-				if String(ExoMixamoData.BONES[i]) == "Spine":
-					continue
-				var actual := compact.rotation_track_interpolate(i, PlayerExoMixamoOverlay.STRIKE_CONTACT)
+				# All original source bones (including Spine) stay unchanged.
+				var actual := compact.rotation_track_interpolate(i, overlay.impact_time(clip_name))
 				var expected := full.rotation_track_interpolate(i, full.length * peak)
 				max_difference = maxf(max_difference, actual.angle_to(expected))
 			_check(max_difference < 0.02,
-				"19 Mixamo bone rotations preserved at 0.12s: " + clip_name + " " + side)
+				"20 Mixamo bone rotations preserved at native impact: " + clip_name + " " + side)
 			_check(overlay.play_strike(clip_name, side), "visible " + side + " kick starts: " + clip_name)
 			_check(not player._exo_retarget.is_processing(), "retargeter pauses while Exo owns the skeleton")
-			animator.seek(PlayerExoMixamoOverlay.STRIKE_CONTACT, true)
+			animator.seek(overlay.impact_time(clip_name), true)
 			target.force_update_all_bone_transforms()
 			var kick_foot := "LeftFoot" if side == "left" else "RightFoot"
 			var other_foot := "RightFoot" if side == "left" else "LeftFoot"
@@ -168,15 +167,33 @@ func _check_exo_mixamo_clips(player: FoundationPlayer) -> void:
 		_check(overlay.play_strike("mma_kick", "right"), "strike restart " + str(hit))
 		_check(is_zero_approx(animator.current_animation_position),
 			"repeated input rewinds actual visual clip to zero: " + str(hit))
-		animator.advance(0.12)
+		animator.advance(overlay.impact_time("mma_kick"))
 		target.force_update_all_bone_transforms()
 		var foot := target.to_global(target.get_bone_global_pose(repeat_foot).origin)
 		var planted := target.to_global(target.get_bone_global_pose(repeat_planted).origin)
 		_check((foot - planted).dot(-player.global_transform.basis.z) > 0.20,
-			"every repeated attack visibly extends foot at damage time: " + str(hit))
+			"every manually replayed kick extends foot at native impact: " + str(hit))
 		_check(foot.y - planted.y > 0.16,
 			"every repeated attack raises kick above supporting foot: " + str(hit))
-		animator.advance(0.08)
+		animator.advance(overlay.strike_duration("mma_kick") - overlay.impact_time("mma_kick"))
+	# Gameplay must buffer follow-up attacks until the native kick completes.
+	player._ring_attack_counts.clear()
+	_check(player.request_attack("kick", "right"), "original-duration kick starts via player input")
+	_check(player._exo_kick_active, "player kick uses full-source timeline")
+	var first_impact := player._exo_kick_impact
+	var first_length := player._exo_kick_duration
+	_check(first_impact > 0.5 and first_impact < first_length, "impact uses the full FBX timeline")
+	_check(player.request_attack("punch", "left"), "punch can be buffered during an ongoing kick")
+	_check(player._queued_attack_kind == "punch", "buffer does not interrupt active Exo kick")
+	player._update_attack(first_impact)
+	_check(player.attack_phase == "active", "kick damages at original source contact time")
+	player._update_attack(Player.EXO_KICK_ACTIVE_SECONDS)
+	_check(player.attack_phase == "recovery" and player._queued_attack_kind == "punch",
+		"buffered follow-up waits past native kick contact")
+	player._update_attack(player.attack_phase_time)
+	_check(player.attack_kind == "punch" and player.attack_phase == "windup",
+		"buffered punch begins only after the full kick duration")
+	player._finish_attack()
 	_check(player.global_transform.is_equal_approx(start_transform),
 		"five consecutive attacks cannot displace the gameplay actor")
 	overlay.stop_clip()
