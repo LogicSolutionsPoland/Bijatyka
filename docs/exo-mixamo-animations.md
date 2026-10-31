@@ -9,8 +9,8 @@ Base: `codex/exo-gray-player-model-20261031`, containing Exo Gray's visible GLB 
 | Mma Kick (1).fbx | `mma_kick` | Right kick, primary/third ring variant |
 | Chapa Giratoria 2.fbx | `roundhouse` | Right kick, second ring variant |
 | Flying Kick.fbx | `fly_kick` | Right airborne kick |
-| Jumping.fbx | `jump` | Ground jump |
-| Run To Rolling.fbx | `roll` | Dash |
+| Jumping.fbx | `jump` | Visual preview only; original jump retained (leans horizontally without source root motion) |
+| Run To Rolling.fbx | `roll` | Visual preview only; original dash retained (2.42s roll cannot be safely compressed into 0.30s) |
 
 Left kicks, punches, zombie/boss animation, melee cadence, attack markers, controls, movement, and collision keep their established paths.
 
@@ -36,3 +36,9 @@ bash install_exo_mixamo.sh
 The installer reuses an existing clean checkout, fetches `feat/exo-mixamo-clips-20261031`, fills in the clip bank and pushes a single commit. It does **not** start an APK workflow or create a PR. This branch is not listed in the Android export workflow's push branch allowlist.
 
 Do not merge into main until actual Godot import, player visual checks, and mobile performance validation pass.
+
+## Godot 4.7.2 visual review (2026-10-31)
+
+PR #50 CI imported model and all five clips, validated controller/hit timing, and captured 15 visible Exo Gray poses. The source jump leans almost horizontally in the middle frame; roll collapses into a low crouch without root translation. They remain in the clip bank for review but are **not** used automatically during normal jump/dash. Retargeting both movements needs a locomotion-aware solution with floor placement and physical collision, not unconditional root motion on the mesh.
+
+The source kick clips are 2.03–2.35s long while the strike window is 0.48s, so the preview demonstrates pose compatibility, not final combat realism at 5 hits/second. PR remains draft for visual and performance follow-up. No APK.
