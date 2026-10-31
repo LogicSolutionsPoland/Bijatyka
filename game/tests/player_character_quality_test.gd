@@ -4,6 +4,7 @@ extends SceneTree
 ## Motion timing and input behavior are covered by player_animation_test.gd.
 
 const Player := preload("res://scripts/player_controller.gd")
+const ExoMixamoData := preload("res://scripts/exo_mixamo_data.gd")
 
 var failures: Array[String] = []
 var checks := 0
@@ -27,6 +28,7 @@ func _run() -> void:
 	_check(model != null and not model.visible, "source gameplay rig is hidden without stopping animation")
 	_check(player._exo_visual_model != null and player._exo_visual_model.scene_file_path == Player.EXO_MODEL_PATH, "visible player uses Exo Gray GLB")
 	_check(player._exo_retarget != null and player._exo_retarget.target_skeleton != null, "Exo Gray retargeter is running")
+	_check_exo_mixamo_clips(player)
 	if player._exo_retarget != null and player._exo_retarget.target_skeleton != null:
 		_check(player._exo_retarget.target_skeleton.get_bone_count() == 112, "Exo Gray retains its 112-bone skinned rig")
 	var animator := player._animation_player as AnimationPlayer
@@ -70,6 +72,43 @@ func _run() -> void:
 	_check(triangles >= 10000 and triangles <= 35000, "Exo Gray remains within the 35k mobile triangle cap (%d)" % triangles)
 	print("PLAYER_QUALITY_REPORT bones=%d meshes=%d skinned=%d textured_surfaces=%d triangles=%d" % [player._skeleton.get_bone_count(), mesh_count, skinned_count, textured_count, triangles])
 	_finish(player)
+
+func _check_exo_mixamo_clips(player: FoundationPlayer) -> void:
+	_check(ExoMixamoData.CLIPS.size() == 5, "five real Mixamo clips are installed")
+	var overlay := player._exo_overlay as PlayerExoMixamoOverlay
+	_check(overlay != null, "Exo Gray Mixamo visual overlay initializes")
+	if overlay == null:
+		return
+	var target := player._exo_retarget.target_skeleton as Skeleton3D
+	var animator := overlay._animator as AnimationPlayer
+	_check(target != null and animator != null, "overlay has a real Skeleton3D and AnimationPlayer")
+	if target == null or animator == null:
+		return
+	# Deterministic pose samples: gameplay physics and hidden source animation do not run.
+	animator.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
+	for clip_name in ["mma_kick", "roundhouse", "fly_kick", "jump", "roll"]:
+		var path := StringName("exo_mixamo/" + clip_name)
+		_check(animator.has_animation(path), "Exo Mixamo clip available: " + clip_name)
+		if not animator.has_animation(path):
+			continue
+		var clip := animator.get_animation(path)
+		var clip_data: Dictionary = ExoMixamoData.CLIPS[clip_name]
+		_check(clip.get_track_count() == ExoMixamoData.BONES.size(), "clip drives 20 Exo bones: " + clip_name)
+		_check(is_equal_approx(clip.length, float(clip_data["length"])), "clip duration survives import: " + clip_name)
+		_check(overlay.play_clip(clip_name, 0.5), "visual clip starts: " + clip_name)
+		_check(not player._exo_retarget.is_processing(), "source retargeter pauses during Exo clip: " + clip_name)
+		animator.seek(clip.length * 0.18, true)
+		var first: Array[Quaternion] = []
+		for name in ExoMixamoData.BONES:
+			first.append(target.get_bone_pose_rotation(target.find_bone(String(name))))
+		animator.seek(clip.length * 0.64, true)
+		var maximum := 0.0
+		for index in range(ExoMixamoData.BONES.size()):
+			var bone := target.find_bone(String(ExoMixamoData.BONES[index]))
+			maximum = maxf(maximum, first[index].angle_to(target.get_bone_pose_rotation(bone)))
+		_check(maximum > 0.10, "clip has distinct body poses (%.2f radians): %s" % [maximum, clip_name])
+		overlay.stop_clip()
+		_check(player._exo_retarget.is_processing(), "retargeter resumes after clip: " + clip_name)
 
 func _check(condition: bool, description: String) -> void:
 	checks += 1
