@@ -67,6 +67,27 @@ func _capture_exo_clips(game: Variant) -> void:
 			await _save("exo_%s_%02d" % [clip_name, roundi(float(fraction) * 100.0)])
 			count += 1
 		overlay.stop_clip()
+	# Combat frames are captured at the real 0.12s damage instant.
+	for clip_name in ["mma_kick", "roundhouse", "fly_kick"]:
+		if not overlay.play_strike(clip_name):
+			push_error("No fast Exo strike: " + clip_name)
+			continue
+		var compact := animator.get_animation(StringName("exo_mixamo/" + clip_name + "_combat"))
+		for sample in [0.04, 0.12, 0.20]:
+			animator.seek(float(sample), true)
+			await _save("exo_fast_%s_%02d" % [clip_name, roundi(float(sample) * 100)])
+			count += 1
+		overlay.stop_clip()
+	# The visual-only roll is captured independently of the player's dash route.
+	# Preview snapshots also test whether its floor correction holds the mesh up.
+	if overlay.play_ground_roll():
+		var roll_clip := animator.get_animation(StringName("exo_mixamo/roll"))
+		for fraction in [0.22, 0.55, 0.80]:
+			animator.seek(roll_clip.length * float(fraction), true)
+			overlay._process(0.016)
+			await _save("exo_ground_roll_%02d" % roundi(float(fraction) * 100))
+			count += 1
+		overlay.stop_clip()
 	print("CAPTURED_EXO_POSES=%d" % count)
 
 func FoundationPlayerPosition(game: Variant) -> Vector3:
