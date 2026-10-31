@@ -133,12 +133,15 @@ func _check_exo_mixamo_clips(player: FoundationPlayer) -> void:
 				"short clip preserves full body: " + clip_name + " " + side)
 			var max_difference := 0.0
 			for i in range(ExoMixamoData.BONES.size()):
-				# All original source bones (including Spine) stay unchanged.
+				# The Spine track is corrected for upright balance; all other
+				# 19 joints preserve exact original source motion at impact.
+				if String(ExoMixamoData.BONES[i]) == "Spine":
+					continue
 				var actual := compact.rotation_track_interpolate(i, overlay.impact_time(clip_name))
 				var expected := full.rotation_track_interpolate(i, full.length * peak)
 				max_difference = maxf(max_difference, actual.angle_to(expected))
 			_check(max_difference < 0.02,
-				"20 Mixamo bone rotations preserved at native impact: " + clip_name + " " + side)
+				"19 source bone rotations preserved at native impact: " + clip_name + " " + side)
 			_check(overlay.play_strike(clip_name, side), "visible " + side + " kick starts: " + clip_name)
 			_check(not player._exo_retarget.is_processing(), "retargeter pauses while Exo owns the skeleton")
 			animator.seek(overlay.impact_time(clip_name), true)
