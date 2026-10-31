@@ -5,6 +5,7 @@ class_name PlayerExoMixamoOverlay
 ## combat physics/timers keep running; these animations never move the player.
 ## Animations are pre-retargeted and quantized offline from the user's FBX files.
 const DATA := preload("res://scripts/exo_mixamo_data.gd")
+const FINGER_GUN := preload("res://scripts/exo_finger_gun.gd")
 const LIBRARY_NAME := &"exo_mixamo"
 const BLEND_SECONDS := 0.045
 const ROLL_VISUAL_DURATION := 0.50
@@ -118,6 +119,8 @@ func configure(exo_model: Node3D, skeleton: Skeleton3D, driver: PlayerExoGrayRet
 		_animator = null
 		return false
 	_animator.animation_finished.connect(_on_animation_finished)
+	# Optional standalone visual clip; gameplay actions and punch stay unchanged.
+	FINGER_GUN.install(exo_model, skeleton, _animator)
 	_driver = driver
 	_ready_to_play = true
 	set_process(false)
