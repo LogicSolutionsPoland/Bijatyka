@@ -90,7 +90,10 @@ func _run() -> void:
 	await process_frame
 	_check(fire_events == 1, "exactly one firing signal emitted on forward playback")
 	if marker != null and fire_events == 1:
-		_check(emitted_transform.origin.distance_to(marker.global_position) < 0.15,
+		var muzzle_delta := emitted_transform.origin.distance_to(marker.global_position)
+		print("FINGER_GUN_MUZZLE emitted=%s marker=%s delta=%.6f" % [
+			str(emitted_transform.origin), str(marker.global_position), muzzle_delta])
+		_check(muzzle_delta < 0.15,
 			"firing world origin matches animated index fingertip")
 	animator.seek(clip.length, true)
 	animator.stop()
