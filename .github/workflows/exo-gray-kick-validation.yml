@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - fix/exo-gray-kick-contact-20261031
+      - fix/exo-original-kick-duration-20261031
   pull_request:
     branches:
       - codex/exo-mixamo-arm64-build-20261031
@@ -36,7 +37,7 @@ jobs:
           godot --headless --path game --script res://tests/player_animation_test.gd 2>&1 | tee player.log
           grep -q 'PASS: player martial animation' player.log
           if grep -E 'SCRIPT ERROR:|Parse Error:' player.log; then exit 1; fi
-      - name: Exo Gray kinematics, mirroring, source rig and rapid attacks
+      - name: Exo Gray kinematics, mirroring, native duration, and buffered kicks
         shell: bash
         run: |
           set -euo pipefail
@@ -44,7 +45,7 @@ jobs:
           grep -q 'PASS: Exo Gray player model' exo-quality.log
           grep 'EXO_KICK_ANALYSIS' exo-quality.log
           if grep -E 'SCRIPT ERROR:|Parse Error:' exo-quality.log; then exit 1; fi
-      - name: Create before/after rear and side screenshots (software OpenGL)
+      - name: Create native-speed rear and side screenshots (software OpenGL)
         if: always()
         shell: bash
         run: |
