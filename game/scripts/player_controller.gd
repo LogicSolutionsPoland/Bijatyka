@@ -16,6 +16,8 @@ const CHARACTER_MOTION := preload("res://scripts/universal_base_motion.gd")
 const PLAYER_RING_REFERENCE := preload("res://scripts/player_ring_reference.gd")
 const PLAYER_CHOREOGRAPHY := preload("res://scripts/player_choreography.gd")
 const PLAYER_MODEL_PATH := "res://assets/characters/universal_base/Universal_Base_Characters_Male.glb"
+const EXO_MODEL_PATH := "res://assets/characters/exo_gray/Exo_Gray_Player.glb"
+const EXO_RETARGET := preload("res://scripts/player_exo_gray_retarget.gd")
 const GRAVITY := 24.0
 const MAX_HEALTH := 100
 const MAX_MAGIC := 100.0
@@ -63,6 +65,8 @@ var jump_impact_armed := false
 var _was_airborne := false
 var _animation_player: AnimationPlayer
 var _skeleton: Skeleton3D
+var _exo_visual_model: Node3D
+var _exo_retarget: PlayerExoGrayRetarget
 var _fight_animations_ready := false
 var _ring_animations_ready := false
 var _choreography_ready := false
@@ -133,8 +137,37 @@ func _load_player_visual() -> void:
 				# Avoid displaying the imported T-pose on the first gameplay frame.
 				if _animation_player.current_animation == "Idle":
 					_animation_player.seek(0.05, true)
+				_attach_exo_gray_player_model(model)
 				return
 	_add_debug_visual()
+
+func _attach_exo_gray_player_model(source_model: Node3D) -> void:
+	# Preserve the fully working 65-bone gameplay skeleton, animations,
+	# combat hit markers, camera and physics. Only the rendered model changes.
+	if _skeleton == null or not ResourceLoader.exists(EXO_MODEL_PATH):
+		push_warning("Exo Gray model not installed; preserving Universal Base player visual")
+		return
+	var asset := load(EXO_MODEL_PATH) as PackedScene
+	if asset == null:
+		return
+	var model := asset.instantiate() as Node3D
+	if model == null:
+		return
+	model.name = "ExoGrayPlayerModel"
+	model.rotation.y = PI
+	visual_root.add_child(model)
+	var target := model.find_child("Skeleton3D", true, false) as Skeleton3D
+	var retarget := EXO_RETARGET.new() as PlayerExoGrayRetarget
+	if retarget == null or not retarget.configure(_skeleton, target):
+		push_warning("Exo Gray rig is incompatible; using original player model")
+		model.queue_free()
+		return
+	model.add_child(retarget)
+	_exo_visual_model = model
+	_exo_retarget = retarget
+	# Invisible source model still runs its AnimationPlayer and Skeleton3D.
+	source_model.visible = false
+
 
 ## Explicit preview only: keep the 10s study out of normal melee state/timing.
 ## The demo scene can call this; the production player never auto-plays it.
