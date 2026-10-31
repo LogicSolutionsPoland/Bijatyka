@@ -119,19 +119,19 @@ func _check_exo_mixamo_clips(player: FoundationPlayer) -> void:
 			continue
 		var compact := animator.get_animation(combat_path)
 		var full := animator.get_animation(StringName("exo_mixamo/" + clip_name))
-		_check(is_equal_approx(compact.length, overlay.STRIKE_LENGTH),
+		_check(is_equal_approx(compact.length, PlayerExoMixamoOverlay.STRIKE_LENGTH),
 			"short strike does not exceed intended cadence: " + clip_name)
 		_check(compact.get_track_count() == 20, "short clip retains all 20 bones: " + clip_name)
 		var pelvis_index := 0
-		var actual := compact.rotation_track_interpolate(pelvis_index, overlay.STRIKE_CONTACT)
+		var actual := compact.rotation_track_interpolate(pelvis_index, PlayerExoMixamoOverlay.STRIKE_CONTACT)
 		var expected := full.rotation_track_interpolate(pelvis_index,
-			full.length * float(overlay.PEAK_FRACTIONS[clip_name]))
+			full.length * float(PlayerExoMixamoOverlay.PEAK_FRACTIONS[clip_name]))
 		_check(actual.angle_to(expected) < 0.02, "kick extension matches damage instant: " + clip_name)
 		_check(overlay.play_strike(clip_name), "short strike plays: " + clip_name)
 		_check(not player._exo_retarget.is_processing(), "short strike owns rendered rig: " + clip_name)
 		overlay.stop_clip()
 		_check(player._exo_retarget.is_processing(), "normal animation resumes after strike: " + clip_name)
-	_check(overlay.ROLL_VISUAL_DURATION > Player.DASH_DURATION,
+	_check(PlayerExoMixamoOverlay.ROLL_VISUAL_DURATION > Player.DASH_DURATION,
 		"ground roll remains visible after physical dash without changing dash timing")
 	_check(not overlay.play_ground_roll(), "roll is rejected without established floor contact")
 	_check(player._exo_visual_model.position.y == 0.0, "visual floor correction starts at zero")
