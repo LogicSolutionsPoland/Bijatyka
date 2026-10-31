@@ -373,7 +373,12 @@ func play_clip(name: String, requested_duration: float = 0.0) -> bool:
 	var duration := _animator.get_animation(key).length
 	var playback_speed := duration / requested_duration if requested_duration > 0.05 else 1.0
 	_driver.set_process(false)
-	_animator.play(key, BLEND_SECONDS, playback_speed)
+	# AnimationPlayer.play() does not rewind when asked to play the SAME
+	# still-running clip. At 5 hits/sec the old 0.32s strike would remain in
+	# its recovery phase; force the first frame on every accepted input.
+	var restart_same := _animator.is_playing() and _animator.current_animation == key
+	_animator.play(key, 0.0 if restart_same else BLEND_SECONDS, playback_speed)
+	_animator.seek(0.0, true)
 	_animator.advance(0.0)
 	return true
 
