@@ -39,8 +39,35 @@ func _capture() -> void:
 	game.player.request_attack("kick", "right")
 	await create_timer(0.15).timeout
 	await _save("kick")
+	await _capture_exo_clips(game)
 	print("CAPTURED_PLAYER_VIEWS=" + output_path)
 	quit(0)
+
+func _capture_exo_clips(game: Variant) -> void:
+	var overlay := game.player._exo_overlay as PlayerExoMixamoOverlay
+	if overlay == null:
+		push_error("Exo Mixamo overlay is missing; no visual animation can be reviewed")
+		return
+	var animator := overlay._animator as AnimationPlayer
+	if animator == null:
+		push_error("Exo Mixamo AnimationPlayer is missing")
+		return
+	game.player.set_physics_process(false)
+	game.player.velocity = Vector3.ZERO
+	animator.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
+	await _set_camera_and_settle(game, PI)
+	var count := 0
+	for clip_name in ["mma_kick", "roundhouse", "fly_kick", "jump", "roll"]:
+		if not overlay.play_clip(clip_name, 0.8):
+			push_error("Could not play Exo Mixamo " + clip_name)
+			continue
+		var animation := animator.get_animation(StringName("exo_mixamo/" + clip_name))
+		for fraction in [0.22, 0.55, 0.80]:
+			animator.seek(animation.length * float(fraction), true)
+			await _save("exo_%s_%02d" % [clip_name, roundi(float(fraction) * 100.0)])
+			count += 1
+		overlay.stop_clip()
+	print("CAPTURED_EXO_POSES=%d" % count)
 
 func FoundationPlayerPosition(game: Variant) -> Vector3:
 	return game.PLAYER_BASE_POSITION
