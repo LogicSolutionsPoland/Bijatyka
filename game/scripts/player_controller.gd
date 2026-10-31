@@ -459,15 +459,15 @@ func _begin_strike() -> void:
 func _play_exo_attack_visual() -> void:
 	if _exo_overlay == null:
 		return
-	if attack_kind != "kick" or attack_side != "right":
+	if attack_kind != "kick":
 		_exo_overlay.stop_clip()
 		return
 	# A compact visual strike reaches extension on the 0.12s damage marker,
 	# even when queued melee input repeats at 5 attacks per second.
 	var airborne := not is_on_floor() and velocity.y > 0.1
-	var uses_roundhouse := posmod(int(_ring_attack_counts.get("kick_right", 1)) - 1, 3) == 1
+	var uses_roundhouse := posmod(int(_ring_attack_counts.get("kick_" + attack_side, 1)) - 1, 3) == 1
 	var clip := "fly_kick" if airborne else ("roundhouse" if uses_roundhouse else "mma_kick")
-	_exo_overlay.play_strike(clip)
+	_exo_overlay.play_strike(clip, attack_side)
 
 func _start_queued_attack() -> bool:
 	if _queued_attack_kind.is_empty():

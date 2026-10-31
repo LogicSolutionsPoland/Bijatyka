@@ -110,27 +110,76 @@ func _check_exo_mixamo_clips(player: FoundationPlayer) -> void:
 		overlay.stop_clip()
 		_check(player._exo_retarget.is_processing(), "retargeter resumes after clip: " + clip_name)
 
-	# Strike overlays must hit their authored peak at exactly the damage boundary,
-	# while the original source clips remain available for uncropped review.
+	# Each visible leg must be an independent mirrored/rest-correct clip.
+	# Compare the *entire* 20-bone contact pose, not only the pelvis.
 	for clip_name in ["mma_kick", "roundhouse", "fly_kick"]:
-		var combat_path := StringName("exo_mixamo/" + clip_name + "_combat")
-		_check(animator.has_animation(combat_path), "compressed attack exists: " + clip_name)
-		if not animator.has_animation(combat_path):
-			continue
-		var compact := animator.get_animation(combat_path)
-		var full := animator.get_animation(StringName("exo_mixamo/" + clip_name))
-		_check(is_equal_approx(compact.length, PlayerExoMixamoOverlay.STRIKE_LENGTH),
-			"short strike does not exceed intended cadence: " + clip_name)
-		_check(compact.get_track_count() == 20, "short clip retains all 20 bones: " + clip_name)
-		var pelvis_index := 0
-		var actual := compact.rotation_track_interpolate(pelvis_index, PlayerExoMixamoOverlay.STRIKE_CONTACT)
-		var expected := full.rotation_track_interpolate(pelvis_index,
-			full.length * float(PlayerExoMixamoOverlay.PEAK_FRACTIONS[clip_name]))
-		_check(actual.angle_to(expected) < 0.02, "kick extension matches damage instant: " + clip_name)
-		_check(overlay.play_strike(clip_name), "short strike plays: " + clip_name)
-		_check(not player._exo_retarget.is_processing(), "short strike owns rendered rig: " + clip_name)
-		overlay.stop_clip()
-		_check(player._exo_retarget.is_processing(), "normal animation resumes after strike: " + clip_name)
+		var peak := overlay.impact_fraction(clip_name)
+		var authored := overlay.authored_side(clip_name)
+		_check(peak > 0.08 and peak < 0.93, "measured impact is inside source movement: " + clip_name)
+		_check(authored in ["left", "right"], "source strike leg identified: " + clip_name)
+		for side in ["left", "right"]:
+			var combat_path := StringName("exo_mixamo/" + clip_name + "_" + side + "_combat")
+			_check(animator.has_animation(combat_path), "strike has real " + side + " pose: " + clip_name)
+			if not animator.has_animation(combat_path):
+				continue
+			var compact := animator.get_animation(combat_path)
+			var source_name: String = clip_name if side == authored else clip_name + "_mirrored"
+			var full := animator.get_animation(StringName("exo_mixamo/" + source_name))
+			_check(is_equal_approx(compact.length, PlayerExoMixamoOverlay.STRIKE_LENGTH),
+				"combat clip preserves the five-hit cadence: " + clip_name + " " + side)
+			_check(compact.get_track_count() == ExoMixamoData.BONES.size(),
+				"short clip preserves full body: " + clip_name + " " + side)
+			var max_difference := 0.0
+			for i in range(ExoMixamoData.BONES.size()):
+				# Only the Spine pitch is repaired; the original Mixamo legs,
+				# hips, arms and head tracks must remain untouched at contact.
+				if String(ExoMixamoData.BONES[i]) == "Spine":
+					continue
+				var actual := compact.rotation_track_interpolate(i, PlayerExoMixamoOverlay.STRIKE_CONTACT)
+				var expected := full.rotation_track_interpolate(i, full.length * peak)
+				max_difference = maxf(max_difference, actual.angle_to(expected))
+			_check(max_difference < 0.02,
+				"19 Mixamo bone rotations preserved at 0.12s: " + clip_name + " " + side)
+			_check(overlay.play_strike(clip_name, side), "visible " + side + " kick starts: " + clip_name)
+			_check(not player._exo_retarget.is_processing(), "retargeter pauses while Exo owns the skeleton")
+			animator.seek(PlayerExoMixamoOverlay.STRIKE_CONTACT, true)
+			target.force_update_all_bone_transforms()
+			var kick_foot := "LeftFoot" if side == "left" else "RightFoot"
+			var other_foot := "RightFoot" if side == "left" else "LeftFoot"
+			var strike_pos := target.to_global(target.get_bone_global_pose(target.find_bone(kick_foot)).origin)
+			var plant_pos := target.to_global(target.get_bone_global_pose(target.find_bone(other_foot)).origin)
+			var forward := -player.global_transform.basis.z
+			_check((strike_pos - plant_pos).dot(forward) > 0.20,
+				"visible " + side + " kick extends toward the target: " + clip_name)
+			_check(strike_pos.y - plant_pos.y > 0.16,
+				"visible " + side + " kick raises the striking foot: " + clip_name)
+			var head_pos := target.to_global(target.get_bone_global_pose(target.find_bone("Head")).origin)
+			var hips_pos := target.to_global(target.get_bone_global_pose(target.find_bone("Hips")).origin)
+			var torso_up := (head_pos - hips_pos).normalized().dot(Vector3.UP)
+			_check(torso_up > 0.50,
+				"contact torso is balanced rather than folded forward: " + clip_name + " " + side)
+			overlay.stop_clip()
+			_check(player._exo_retarget.is_processing(), "normal rig resumes after " + side + " kick")
+	# Interrupted and restarted clips must never write to the actor root.
+	var start_transform := player.global_transform
+	var repeat_foot := target.find_bone("RightFoot")
+	var repeat_planted := target.find_bone("LeftFoot")
+	for hit in range(5):
+		_check(overlay.play_strike("mma_kick", "right"), "strike restart " + str(hit))
+		_check(is_zero_approx(animator.current_animation_position),
+			"repeated input rewinds actual visual clip to zero: " + str(hit))
+		animator.advance(0.12)
+		target.force_update_all_bone_transforms()
+		var foot := target.to_global(target.get_bone_global_pose(repeat_foot).origin)
+		var planted := target.to_global(target.get_bone_global_pose(repeat_planted).origin)
+		_check((foot - planted).dot(-player.global_transform.basis.z) > 0.20,
+			"every repeated attack visibly extends foot at damage time: " + str(hit))
+		_check(foot.y - planted.y > 0.16,
+			"every repeated attack raises kick above supporting foot: " + str(hit))
+		animator.advance(0.08)
+	_check(player.global_transform.is_equal_approx(start_transform),
+		"five consecutive attacks cannot displace the gameplay actor")
+	overlay.stop_clip()
 	_check(PlayerExoMixamoOverlay.ROLL_VISUAL_DURATION > Player.DASH_DURATION,
 		"ground roll remains visible after physical dash without changing dash timing")
 	_check(not overlay.play_ground_roll(), "roll is rejected without established floor contact")

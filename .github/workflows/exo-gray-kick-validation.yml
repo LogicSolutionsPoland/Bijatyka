@@ -1,0 +1,70 @@
+name: Exo Gray kick correction - Godot and visual validation (NO APK)
+
+on:
+  push:
+    branches:
+      - fix/exo-gray-kick-contact-20261031
+  pull_request:
+    branches:
+      - codex/exo-mixamo-arm64-build-20261031
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  exo-kick-validation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Godot 4.7.2
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+      - name: Import assets and compile scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --editor --path game --import --quit 2>&1 | tee import.log
+          if grep -E 'SCRIPT ERROR:|Parse Error:|ERROR: Failed to load' import.log; then exit 1; fi
+      - name: Existing player hit timing and input regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path game --script res://tests/player_animation_test.gd 2>&1 | tee player.log
+          grep -q 'PASS: player martial animation' player.log
+          if grep -E 'SCRIPT ERROR:|Parse Error:' player.log; then exit 1; fi
+      - name: Exo Gray kinematics, mirroring, source rig and rapid attacks
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path game --script res://tests/player_character_quality_test.gd 2>&1 | tee exo-quality.log
+          grep -q 'PASS: Exo Gray player model' exo-quality.log
+          grep 'EXO_KICK_ANALYSIS' exo-quality.log
+          if grep -E 'SCRIPT ERROR:|Parse Error:' exo-quality.log; then exit 1; fi
+      - name: Create before/after rear and side screenshots (software OpenGL)
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb libgl1-mesa-dri
+          LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a godot --path game --rendering-method gl_compatibility --script res://tests/exo_kick_visual_capture.gd 2>&1 | tee exo-visual.log
+          grep -q 'EXO_KICK_CAPTURED=71 ERRORS=0' exo-visual.log
+          test "$(find build/exo_kick_comparison -type f -name '*.png' | wc -l)" -eq 71
+          if grep -E 'SCRIPT ERROR:|Parse Error:' exo-visual.log; then exit 1; fi
+      - name: Save captures and logs for mandatory human visual review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: exo-kick-before-after-review
+          path: |
+            build/exo_kick_comparison/*.png
+            import.log
+            player.log
+            exo-quality.log
+            exo-visual.log
+          retention-days: 14
+          if-no-files-found: warn
