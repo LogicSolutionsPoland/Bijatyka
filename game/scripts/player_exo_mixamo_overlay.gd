@@ -301,7 +301,53 @@ func _bake_strike(source: Animation, peak_fraction: float) -> Animation:
 		for i in range(times.size()):
 			var pose := source.rotation_track_interpolate(source_track, source.length * float(fractions[i]))
 			clip.rotation_track_insert_key(track, float(times[i]), pose)
+	_stabilize_upper_body(clip)
 	return clip
+
+
+# Mixamo's long kick takes are not authored for a 0.32-second game strike.
+# Repair only the excessive *Spine* pitch; original hips, kicking leg,
+# planted leg and all 19 other tracks remain sourced from the FBX.
+# A single Spine adjustment rotates its upper-body descendants together,
+# preserving their original counterbalancing movement.
+func _stabilize_upper_body(clip: Animation) -> void:
+	var spine := _skeleton.find_bone("Spine")
+	var head := _skeleton.find_bone("Head")
+	var hips := _skeleton.find_bone("Hips")
+	var parent := _skeleton.get_bone_parent(spine)
+	if spine < 0 or head < 0 or hips < 0 or parent < 0:
+		return
+	var spine_track := DATA.BONES.find("Spine")
+	if spine_track < 0 or spine_track >= clip.get_track_count():
+		return
+	var saved := _save_pose()
+	for key in range(clip.track_get_key_count(spine_track)):
+		var time := clip.track_get_key_time(spine_track, key)
+		# No correction at the combat stance, and a smooth falloff at exit.
+		var weight := 0.0
+		if time <= STRIKE_CONTACT:
+			weight = clampf((time - 0.015) / (STRIKE_CONTACT - 0.015), 0.0, 1.0)
+		else:
+			weight = clampf((STRIKE_LENGTH - time) / (STRIKE_LENGTH - STRIKE_CONTACT), 0.0, 1.0)
+		if weight < 0.01:
+			continue
+		_apply_source_pose(clip, time)
+		var torso := _skeleton.get_bone_global_pose(head).origin - _skeleton.get_bone_global_pose(hips).origin
+		if torso.length_squared() < 0.0001:
+			continue
+		torso = torso.normalized()
+		var angle := torso.angle_to(Vector3.UP)
+		var correction_angle := minf(deg_to_rad(80.0), maxf(0.0, angle - deg_to_rad(33.0))) * weight
+		var axis := torso.cross(Vector3.UP)
+		if axis.length_squared() < 0.0001 or correction_angle < 0.001:
+			continue
+		var correction := Quaternion(axis.normalized(), correction_angle)
+		var parent_rotation := _skeleton.get_bone_global_pose(parent).basis.get_rotation_quaternion()
+		var old_global := _skeleton.get_bone_global_pose(spine).basis.get_rotation_quaternion()
+		var corrected_local := (parent_rotation.inverse() * correction * old_global).normalized()
+		clip.track_set_key_value(spine_track, key, corrected_local)
+	_restore_pose(saved)
+
 
 func play_strike(name: String, side: String = "right") -> bool:
 	if name not in STRIKE_NAMES or side not in ["left", "right"]:
