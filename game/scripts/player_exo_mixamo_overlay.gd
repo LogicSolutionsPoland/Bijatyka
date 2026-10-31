@@ -6,6 +6,7 @@ class_name PlayerExoMixamoOverlay
 ## Animations are pre-retargeted and quantized offline from the user's FBX files.
 const DATA := preload("res://scripts/exo_mixamo_data.gd")
 const FINGER_GUN := preload("res://scripts/exo_finger_gun.gd")
+const FINGER_GUN_FIRE_TIME := 0.30
 const LIBRARY_NAME := &"exo_mixamo"
 const BLEND_SECONDS := 0.045
 const ROLL_VISUAL_DURATION := 0.50
@@ -332,6 +333,22 @@ func _stabilize_upper_body(clip: Animation, contact_time: float) -> void:
 		clip.track_set_key_value(spine_track, key, corrected_local)
 	_restore_pose(saved)
 
+
+## Use the independent Exo animation for accepted offensive spell casts.
+## Multiple casts during windup share the pending fire marker; after that
+## marker a new accepted cast restarts the clip at its unchanged 1x speed.
+func play_finger_gun() -> bool:
+	if not _ready_to_play or not is_instance_valid(_animator) or not _animator.has_animation(FINGER_GUN.CLIP):
+		return false
+	if _animator.is_playing() and _animator.current_animation == FINGER_GUN.CLIP \
+			and _animator.current_animation_position < FINGER_GUN_FIRE_TIME:
+		return true
+	_stop_roll_lift()
+	_driver.set_process(false)
+	_animator.play(FINGER_GUN.CLIP, 0.0, 1.0)
+	_animator.seek(0.0, true)
+	_animator.advance(0.0)
+	return true
 
 func play_strike(name: String, side: String = "right") -> bool:
 	if name not in STRIKE_NAMES or side not in ["left", "right"]:

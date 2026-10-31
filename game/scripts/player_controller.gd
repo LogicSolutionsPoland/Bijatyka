@@ -8,6 +8,7 @@ signal health_changed(current: int, maximum: int)
 signal magic_changed(current: float, maximum: float, school: String)
 signal interrupted(duration: float)
 signal jump_impact(target: Node)
+signal finger_gun_visual_shot(origin: Vector3, destination: Vector3, school: String)
 signal respawned
 
 const RAGE_SCRIPT := preload("res://scripts/rage_progression.gd")
@@ -19,6 +20,7 @@ const PLAYER_MODEL_PATH := "res://assets/characters/universal_base/Universal_Bas
 const EXO_MODEL_PATH := "res://assets/characters/exo_gray/Exo_Gray_Player.glb"
 const EXO_RETARGET := preload("res://scripts/player_exo_gray_retarget.gd")
 const EXO_MIXAMO_OVERLAY_SCRIPT := preload("res://scripts/player_exo_mixamo_overlay.gd")
+const FINGER_GUN_VISUAL_MAX := 5
 const GRAVITY := 24.0
 const MAX_HEALTH := 100
 const MAX_MAGIC := 100.0
@@ -69,6 +71,9 @@ var _skeleton: Skeleton3D
 var _exo_visual_model: Node3D
 var _exo_retarget: PlayerExoGrayRetarget
 var _exo_overlay: PlayerExoMixamoOverlay
+var _finger_gun_visuals: Array[Dictionary] = []
+var _finger_gun_projectile_mesh: SphereMesh
+var _finger_gun_projectile_materials: Dictionary = {}
 # Long Mixamo kicks use their native source timing; punch cadence is unchanged.
 var _exo_kick_active := false
 var _exo_kick_duration := 0.0
@@ -179,6 +184,9 @@ func _attach_exo_gray_player_model(source_model: Node3D) -> void:
 	model.add_child(overlay)
 	if overlay.configure(model, target, retarget):
 		_exo_overlay = overlay
+		var relay := model.get_node_or_null("FingerGunFireEvent") as FingerGunFireEvent
+		if relay != null:
+			relay.fired.connect(_on_finger_gun_fired)
 	else:
 		overlay.queue_free()
 
@@ -472,8 +480,10 @@ func _play_exo_attack_visual() -> void:
 	if _exo_overlay == null:
 		return
 	if attack_kind != "kick":
+		_finger_gun_visuals.clear()
 		_exo_overlay.stop_clip()
 		return
+	_finger_gun_visuals.clear()
 	# Full-speed source animation: delay damage until its measured kick frame.
 	# New inputs wait until the whole clip finishes rather than cutting it off.
 	var airborne := not is_on_floor() and velocity.y > 0.1
@@ -725,8 +735,64 @@ func _cast_spell(school: String) -> bool:
 		_spawn_spell_burst(target.global_position + Vector3(0.0, 1.0, 0.0), school)
 	var action_name := "Magic_" + school.capitalize()
 	_play_character_action(action_name, float(CHARACTER_MOTION.ACTIONS.get(action_name, 0.62)))
+	if target != null:
+		_queue_finger_gun_visual(school, target.global_position + Vector3(0.0, 1.0, 0.0))
 	magic_changed.emit(magic_energy, MAX_MAGIC, current_spell)
 	return true
+
+## The spell has already resolved through the original combat system.
+## Only the Exo visual pose and a low-poly projectile are new.
+func _queue_finger_gun_visual(school: String, at: Vector3) -> void:
+	if _exo_overlay == null or attack_phase != "ready" or _exo_kick_active:
+		return
+	if not _exo_overlay.play_finger_gun():
+		return
+	if _finger_gun_visuals.size() < FINGER_GUN_VISUAL_MAX:
+		_finger_gun_visuals.append({"school": school, "at": at})
+
+
+func _on_finger_gun_fired(muzzle: Transform3D) -> void:
+	# One firing event may represent several accepted casts in the same
+	# 0.3-second windup. Never change the existing mana or hit timings.
+	var shots := _finger_gun_visuals.duplicate()
+	_finger_gun_visuals.clear()
+	for shot in shots:
+		_spawn_finger_gun_projectile(muzzle.origin, shot["at"] as Vector3, String(shot["school"]))
+
+
+func _spawn_finger_gun_projectile(from: Vector3, to: Vector3, school: String) -> void:
+	if not SPELLS.has(school) or from.distance_squared_to(to) < 0.00001:
+		return
+	if _finger_gun_projectile_mesh == null:
+		_finger_gun_projectile_mesh = SphereMesh.new()
+		_finger_gun_projectile_mesh.radius = 0.055
+		_finger_gun_projectile_mesh.height = 0.11
+		_finger_gun_projectile_mesh.radial_segments = 6
+		_finger_gun_projectile_mesh.rings = 4
+	if not _finger_gun_projectile_materials.has(school):
+		var material := StandardMaterial3D.new()
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		material.albedo_color = SPELLS[school].color
+		material.emission_enabled = true
+		material.emission = SPELLS[school].color
+		_finger_gun_projectile_materials[school] = material
+	var projectile := MeshInstance3D.new()
+	projectile.name = "FingerGunProjectile"
+	projectile.add_to_group("finger_gun_projectiles")
+	projectile.mesh = _finger_gun_projectile_mesh
+	projectile.material_override = _finger_gun_projectile_materials[school]
+	projectile.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var scene_root: Node = get_tree().current_scene
+	if scene_root == null:
+		scene_root = get_tree().root
+	scene_root.add_child(projectile)
+	projectile.global_position = from
+	finger_gun_visual_shot.emit(from, to, school)
+	var travel_time := clampf(from.distance_to(to) / 45.0, 0.07, 0.22)
+	var tween := projectile.create_tween()
+	tween.tween_property(projectile, "global_position", to, travel_time)
+	tween.tween_callback(projectile.queue_free)
+
 
 func cast_spell_slot(slot: int) -> bool:
 	if slot < 0 or slot >= rage.unlocked_spells.size() or rage.current_soul_condemned:
@@ -970,9 +1036,11 @@ func _play_character_action(action_name: String, duration: float) -> void:
 		# The Exo skin rolls over the same collision-safe 15m dash path.
 		# Airborne dash keeps the existing source animation.
 		if action_name == "Dash":
+			_finger_gun_visuals.clear()
 			if not _exo_overlay.play_ground_roll():
 				_exo_overlay.stop_clip()
 		elif action_name in ["Landing", "Hit", "Defeat"]:
+			_finger_gun_visuals.clear()
 			_exo_overlay.stop_clip()
 
 func _on_selection_resolved(_milestone: int, aura_id: String) -> void:
@@ -982,6 +1050,7 @@ func _on_condemned(_threshold: float, _maximum: float) -> void:
 	call_deferred("_reset_at_safe_base")
 
 func _reset_at_safe_base() -> void:
+	_finger_gun_visuals.clear()
 	if _exo_overlay != null:
 		_exo_overlay.stop_clip()
 	_finish_attack()
