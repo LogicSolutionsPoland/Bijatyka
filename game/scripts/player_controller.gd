@@ -462,11 +462,12 @@ func _play_exo_attack_visual() -> void:
 	if attack_kind != "kick" or attack_side != "right":
 		_exo_overlay.stop_clip()
 		return
-	var duration := float(ATTACKS["kick"].windup) + float(ATTACKS["kick"].active) + float(ATTACKS["kick"].recovery)
+	# A compact visual strike reaches extension on the 0.12s damage marker,
+	# even when queued melee input repeats at 5 attacks per second.
 	var airborne := not is_on_floor() and velocity.y > 0.1
 	var uses_roundhouse := posmod(int(_ring_attack_counts.get("kick_right", 1)) - 1, 3) == 1
 	var clip := "fly_kick" if airborne else ("roundhouse" if uses_roundhouse else "mma_kick")
-	_exo_overlay.play_clip(clip, duration)
+	_exo_overlay.play_strike(clip)
 
 func _start_queued_attack() -> bool:
 	if _queued_attack_kind.is_empty():
@@ -941,9 +942,12 @@ func _play_character_action(action_name: String, duration: float) -> void:
 	_character_action_time = maxf(0.0, duration)
 	_animation_player.play(clip, ATTACK_ANIMATION_BLEND_SECONDS)
 	if _exo_overlay != null:
-		# Keep the trusted dash visual until the imported rolling clip can play
-		# with correct ground/root movement. Retiming 2.42s into 0.30s is unsafe.
-		if action_name in ["Dash", "Landing", "Hit", "Defeat"]:
+		# The Exo skin rolls over the same collision-safe 15m dash path.
+		# Airborne dash keeps the existing source animation.
+		if action_name == "Dash":
+			if not _exo_overlay.play_ground_roll():
+				_exo_overlay.stop_clip()
+		elif action_name in ["Landing", "Hit", "Defeat"]:
 			_exo_overlay.stop_clip()
 
 func _on_selection_resolved(_milestone: int, aura_id: String) -> void:
