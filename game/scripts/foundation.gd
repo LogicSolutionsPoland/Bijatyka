@@ -87,8 +87,6 @@ var _key_light: DirectionalLight3D
 var _high_detail_zombie_sample_assigned := false
 var _ground_wave_started := false
 var _ground_map_visuals: Array[GeometryInstance3D] = []
-var _ground_map_visual_index := 0
-var _ground_map_profile_step := 0
 var _ground_map_preparing := false
 var _ground_map_ready := false
 var _ground_loading_coordinator: GroundLoadingCoordinator
@@ -346,39 +344,10 @@ func _set_rooftop_render_profile(on_roof: bool) -> void:
 		style_manager.set_gameplay_pencil_enabled(not on_roof)
 
 
-func _advance_ground_map_preparation() -> void:
-	if not _ground_map_preparing:
-		return
-	# One already-created MultiMesh batch per frame. No scene instantiation,
-	# geometry rebuilding, enemy AI or zombie spawning happens in this phase.
-	if _ground_map_visual_index < _ground_map_visuals.size():
-		_ground_map_visuals[_ground_map_visual_index].visible = true
-		_ground_map_visual_index += 1
-		return
-	if _ground_map_profile_step == 0:
-		_environment.sky = _ground_sky
-	elif _ground_map_profile_step == 1:
-		burning_horizon.visible = true
-	elif _ground_map_profile_step == 2:
-		# Switch both pipelines inside the closed lift, not on arrival.
-		_set_rooftop_render_profile(false)
-	else:
-		var style_manager := get_tree().root.get_node_or_null("PencilSketchStyle")
-		if style_manager != null and not style_manager.is_gameplay_style_ready():
-			return
-		_ground_map_preparing = false
-		_ground_map_ready = true
-		starting_tower.elevator.set_ground_floor_ready(true)
-		return
-	_ground_map_profile_step += 1
-
-
 func _restore_rooftop_map() -> void:
 	# Cancels any partial descent, including a respawn while the car is moving.
 	_ground_map_preparing = false
 	_ground_map_ready = false
-	_ground_map_visual_index = 0
-	_ground_map_profile_step = 0
 	for visual in _ground_map_visuals:
 		visual.visible = false
 	_set_rooftop_render_profile(true)
