@@ -86,6 +86,10 @@ func configure(exo_model: Node3D, skeleton: Skeleton3D, driver: PlayerExoGrayRet
 		print("EXO_KICK_ANALYSIS %s source=%s frame=%d impact=%.3fs score=%.3f" % [
 			strike_name, source_side, int(analysis["frame"]),
 			float(analysis["fraction"]) * original.length, float(analysis["score"])])
+		print("EXO_KICK_HEIGHT %s left=%.3f (max %.3f) right=%.3f (max %.3f) selected=%.3f" % [
+			strike_name, float(left["clearance"]), float(left["max_clearance"]),
+			float(right["clearance"]), float(right["max_clearance"]),
+			float(analysis["clearance"])])
 		var reflected := _mirror_animation(original)
 		if reflected == null or library.add_animation(StringName(strike_name + "_mirrored"), reflected) != OK:
 			return false
@@ -133,6 +137,9 @@ func _find_contact(source: Animation, side: String) -> Dictionary:
 	var start_forward := (start_foot - start_support).dot(forward)
 	var best_score := -INF
 	var best_frame := 0
+	var best_clearance := -INF
+	var max_clearance := -INF
+	var max_clearance_frame := -1
 	var steps := maxi(2, ceili(source.length * float(DATA.FPS)))
 	for frame in range(steps):
 		var time := minf(source.length, float(frame) / float(DATA.FPS))
@@ -150,18 +157,27 @@ func _find_contact(source: Animation, side: String) -> Dictionary:
 		var reach := (foot - planted).dot(forward) - start_forward
 		var travel := (foot - start_foot).dot(forward)
 		var clearance := foot.y - planted.y
+		if clearance > max_clearance:
+			max_clearance = clearance
+			max_clearance_frame = frame
 		var foot_ahead_of_knee := (foot - knee).dot(forward)
 		var support_drift := planted.distance_to(start_support)
 		var upright := torso.normalized().dot(Vector3.UP)
 		var score := 1.8 * reach + 0.9 * travel + 0.6 * maxf(0.0, clearance) \
 			+ 0.55 * straightness + 0.40 * foot_ahead_of_knee \
 			- 0.8 * support_drift - 1.0 * maxf(0.0, 0.40 - upright)
+		# A convincing strike must also leave the floor; forward reach alone
+		# would select low sweeping/crouching poses.
+		score -= 4.0 * maxf(0.0, 0.18 - clearance)
 		if score > best_score:
 			best_score = score
 			best_frame = frame
+			best_clearance = clearance
 	_restore_pose(saved)
 	return {"fraction": minf(1.0, float(best_frame) / float(DATA.FPS) / source.length),
-		"frame": best_frame, "score": best_score}
+		"frame": best_frame, "score": best_score,
+		"clearance": best_clearance, "max_clearance": max_clearance,
+		"max_clearance_frame": max_clearance_frame}
 
 
 func _save_pose() -> Array[Quaternion]:
