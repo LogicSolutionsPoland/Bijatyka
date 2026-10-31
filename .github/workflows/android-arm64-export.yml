@@ -32,6 +32,7 @@ on:
       - codex/player-mma-kick-20261030
       - codex/exo-gray-player-model-20261031
       - codex/exo-mixamo-arm64-build-20261031
+      - codex/exo-gray-kick-arm64-apk-20261031
 
 permissions:
   contents: read
@@ -69,7 +70,7 @@ jobs:
       - name: Validate enemy and player animation and controls
         run: |
           set -euo pipefail
-          for suite in environment_render_test burning_horizon_test enemy_attack_animation_test zombie_animation_test player_animation_test test_runner concealed_spawn_test; do
+          for suite in environment_render_test burning_horizon_test enemy_attack_animation_test zombie_animation_test player_animation_test player_character_quality_test test_runner concealed_spawn_test; do
             godot --headless --path game --script "res://tests/$suite.gd" 2>&1 | tee "$RUNNER_TEMP/$suite.log"
             grep -q 'PASS:' "$RUNNER_TEMP/$suite.log"
             if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/$suite.log"; then exit 1; fi
