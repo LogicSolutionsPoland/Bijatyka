@@ -146,7 +146,7 @@ func _bake() -> void:
 	clip.add_marker(&"fire", CONTACT)
 	var event_track := clip.add_track(Animation.TYPE_METHOD)
 	clip.track_set_path(event_track, NodePath("FingerGunFireEvent"))
-	clip.method_track_insert_key(event_track, CONTACT, &"emit_fire", [])
+	clip.track_insert_key(event_track, CONTACT, {"method": "emit_fire", "args": []})
 	if original.length != initial_length or original.get_track_count() != initial_track_count:
 		_fail("Source punch was unexpectedly changed", player)
 		return

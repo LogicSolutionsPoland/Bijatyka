@@ -60,7 +60,7 @@ func _run() -> void:
 	_check(method_track >= 0 and clip.track_get_key_count(method_track) == 1, "single fire method event")
 	if method_track >= 0:
 		_check(is_equal_approx(clip.track_get_key_time(method_track, 0), EVENT), "event occurs at authored fire time")
-		_check(String(clip.method_track_get_name(method_track, 0)) == "emit_fire", "event method is named correctly")
+		_check(String((clip.track_get_key_value(method_track, 0) as Dictionary).get("method", "")) == "emit_fire", "event method is named correctly")
 	var marker := target.get_node_or_null("FingerGunIndexTip/FingerGunMuzzle") as Marker3D
 	var attachment := target.get_node_or_null("FingerGunIndexTip") as BoneAttachment3D
 	_check(marker != null and attachment != null and attachment.bone_name == "RightHandIndex3",
