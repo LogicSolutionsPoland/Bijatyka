@@ -162,9 +162,20 @@ func _check_exo_mixamo_clips(player: FoundationPlayer) -> void:
 			_check(player._exo_retarget.is_processing(), "normal rig resumes after " + side + " kick")
 	# Interrupted and restarted clips must never write to the actor root.
 	var start_transform := player.global_transform
+	var repeat_foot := target.find_bone("RightFoot")
+	var repeat_planted := target.find_bone("LeftFoot")
 	for hit in range(5):
 		_check(overlay.play_strike("mma_kick", "right"), "strike restart " + str(hit))
+		_check(is_zero_approx(animator.current_animation_position),
+			"repeated input rewinds actual visual clip to zero: " + str(hit))
 		animator.advance(0.12)
+		target.force_update_all_bone_transforms()
+		var foot := target.to_global(target.get_bone_global_pose(repeat_foot).origin)
+		var planted := target.to_global(target.get_bone_global_pose(repeat_planted).origin)
+		_check((foot - planted).dot(-player.global_transform.basis.z) > 0.20,
+			"every repeated attack visibly extends foot at damage time: " + str(hit))
+		_check(foot.y - planted.y > 0.16,
+			"every repeated attack raises kick above supporting foot: " + str(hit))
 		animator.advance(0.08)
 	_check(player.global_transform.is_equal_approx(start_transform),
 		"five consecutive attacks cannot displace the gameplay actor")
