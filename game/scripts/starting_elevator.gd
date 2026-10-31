@@ -3,6 +3,8 @@ class_name StartingElevator
 
 signal rider_arrived(floor: StringName)
 signal rider_ride_started(destination_floor: StringName)
+signal lift_called(destination_floor: StringName)
+signal lift_call_arrived(destination_floor: StringName)
 
 ## Compact two-stop lift for the starting tower. The car is a moving platform;
 ## a safety hatch closes the roof opening whenever the car is below the roof.
@@ -69,6 +71,8 @@ func _physics_process(delta: float) -> void:
 	_rider = null
 	if is_instance_valid(arrived_rider):
 		rider_arrived.emit(&"roof" if _target_y == TOP_CAR_Y else &"ground")
+	else:
+		lift_call_arrived.emit(&"roof" if _target_y == TOP_CAR_Y else &"ground")
 	_set_car_enclosed(false)
 	if is_instance_valid(arrived_rider):
 		arrived_rider.set_physics_process(true)
@@ -140,6 +144,8 @@ func _start_trip(destination_y: float, rider: CharacterBody3D = null) -> void:
 		# This signal is emitted only for a boarded rider, after the car closes;
 		# calling the lift to the player's floor cannot start map preparation.
 		rider_ride_started.emit(&"roof" if destination_y == TOP_CAR_Y else &"ground")
+	else:
+		lift_called.emit(&"roof" if destination_y == TOP_CAR_Y else &"ground")
 
 
 func _position_rider() -> void:
