@@ -33,6 +33,7 @@ on:
       - codex/exo-gray-player-model-20261031
       - codex/exo-mixamo-arm64-build-20261031
       - codex/exo-gray-kick-arm64-apk-20261031
+      - codex/exo-native-kicks-apk-20261031
 
 permissions:
   contents: read
