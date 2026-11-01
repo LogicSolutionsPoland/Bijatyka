@@ -21,7 +21,7 @@ const ARENA_MAP_SCRIPT := preload("res://scripts/arena_map_upgrade.gd")
 const STARTING_TOWER := preload("res://scripts/starting_tower.gd")
 const GROUND_LOADING_COORDINATOR := preload("res://scripts/ground_loading_coordinator.gd")
 const ZOMBIE_HORDE_SIZE := 4
-const GROUND_ZOMBIE_HORDE_SIZE := 13
+const GROUND_ZOMBIE_HORDE_SIZE := 30
 const ZOMBIE_PERFORMANCE_CAPACITY := 200
 const ZOMBIE_SPAWN_DISTANCE := 50.0
 const VISIBILITY_RADIUS := 30.0
@@ -724,6 +724,7 @@ func _spawn_enemies() -> void:
 	spawn_director.visibility_radius = VISIBILITY_RADIUS
 	spawn_director.blocked_boxes = _spawn_blockers
 	spawn_director.spawn_requested.connect(_spawn_assault_zombie)
+	spawn_director.dormant_enemy_wake_requested.connect(_wake_dormant_zombie)
 	add_child(spawn_director)
 	# The four upstairs entries are data only; no ordinary enemy actors exist.
 	spawn_director.store_upstairs_population(ZOMBIE_HORDE_SIZE)
@@ -742,6 +743,17 @@ func _spawn_assault_zombie(at: Vector3) -> void:
 	spawn_director.register_enemy(enemy)
 	horde_far_visuals.register_enemy(enemy)
 	enemy.begin_spawn_assault(player)
+
+func _wake_dormant_zombie(at: Vector3, health: int, kind: String) -> void:
+	# Restore the existing population member at its last invisible position,
+	# not at a new random spawn point and without a replacement reservation.
+	var enemy := _spawn_enemy(kind, at)
+	enemy.hp = clampi(health, 1, enemy.starting_health)
+	enemy._update_health_display()
+	spawn_director.register_enemy(enemy)
+	horde_far_visuals.register_enemy(enemy)
+	enemy.begin_spawn_assault(player)
+
 
 func _spawn_enemy(kind: String, at: Vector3, boss_target: bool = false, high_detail_visual_sample: bool = false) -> FoundationEnemy:
 	var enemy := ENEMY_SCRIPT.new() as FoundationEnemy
@@ -1020,7 +1032,7 @@ func _set_debug_map_visible(is_visible: bool) -> void:
 		arena_map.visible = is_visible
 
 func start_performance_scenario(population: int, mode: String) -> bool:
-	if not [15, 20, 69, 100, 200].has(population) or not ["concentrated", "approach"].has(mode):
+	if not [15, 20, 30, 69, 100, 200].has(population) or not ["concentrated", "approach"].has(mode):
 		return false
 	if not is_instance_valid(spawn_director) or not is_instance_valid(player):
 		return false
