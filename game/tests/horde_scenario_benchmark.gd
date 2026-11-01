@@ -74,7 +74,7 @@ func _run() -> void:
 					memory_peak = maxf(float(memory_peak), float(memory_now))
 				resident_peak = maxi(resident_peak, game.horde_far_visuals.get_resident_rig_count())
 				if resident_peak > FoundationEnemy.FULL_ANIMATION_BUDGET:
-					_fail("%d/%s exceeded the 20-resident-rig cap" % [population, mode])
+					_fail("%d/%s exceeded the seven-resident-rig cap" % [population, mode])
 					break
 			counts = _horde_counts(game)
 			if int(counts.active) != population:
