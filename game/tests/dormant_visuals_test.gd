@@ -124,6 +124,7 @@ func run() -> void:
 	check(not world_gate.is_world_position_visible(Vector3(0.0, 0.05, -40.0)), "shared classifier rejects record outside 30 m range")
 	world_gate.enabled = false
 	check(world_gate.is_world_position_visible(Vector3(0.0, 0.05, 10.0)), "disabling flashlight mask restores in-range visibility")
+	world_gate.free()
 
 	director.store_upstairs_population(4)
 	check(director.get_dormant_visual_records().is_empty() and director.ordinary_population_count() == 4, "roof stores four invisible population entries")
