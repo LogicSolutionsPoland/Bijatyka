@@ -83,7 +83,9 @@ func run() -> void:
 	check(records.size() == 1 and records[0].has("visual_id") and records[0].has("facing_y"), "record retains stable proxy identity and orientation")
 	batch._process(0.04)
 	check(batch.get_visible_dormant_count() == 1 and batch.multimesh.visible_instance_count == 1, "data-only proxy draws in existing MultiMesh without duplicate actor")
-	check(batch.multimesh.get_instance_transform(0).origin.distance_to(Vector3(0.0, 0.05, -11.0)) < 0.01, "proxy renders at original world position")
+	var proxy_at := batch.multimesh.get_instance_transform(0).origin
+	print("DORMANT_PROXY_POSITION record=", str(records[0]["position"]), " instance=", str(proxy_at), " original=", str(zombie.global_position))
+	check(proxy_at.distance_to(Vector3(0.0, 0.05, -11.0)) < 0.01, "proxy renders at original world position")
 	check(batch.get_resident_rig_count() == 0, "data-only proxy requires no full zombie rig")
 
 	gate.allowed = false
