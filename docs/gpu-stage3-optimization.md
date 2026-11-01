@@ -40,3 +40,11 @@ combat FPS on the final Android APK, and compare screenshots of beam,
 Pencil and local light cases before merging to the release branch.
 
 No APK exported at this stage. `main` remains untouched.
+
+## Additional full-scene smoke validation
+The dedicated `full_gameplay_smoke_test.gd` creates the real Foundation scene,
+asserts player/boss/4 rooftop records, checks the shared 3D flashlight and
+Pencil screen mask are OFF on the roof, ON after switching to ground profile,
+and OFF again after restoring the roof. Merely switching camera graphics
+must not start the downstairs 30-zombie wave. It runs in GitHub CI.
+This does not replace on-device image/FPS tests.
