@@ -15,8 +15,8 @@ const RETRY_SECONDS := 0.25
 const REPLACEMENT_SECONDS := 1.0
 const MAX_PLAYER_ATTACKERS := 4
 # Only unalerted, invisible actors can be stored as data (boss excluded).
-const DORMANT_SLEEP_DISTANCE_SQUARED := 44.0 * 44.0
-const DORMANT_WAKE_DISTANCE_SQUARED := 36.0 * 36.0
+const DORMANT_SLEEP_DISTANCE_SQUARED := 10.0 * 10.0
+const DORMANT_WAKE_DISTANCE_SQUARED := 5.0 * 5.0
 const DORMANT_SCAN_INTERVAL := 0.20
 const MAX_DORMANT_CHANGES_PER_SCAN := 2
 const FORWARD_HALF_ANGLE := deg_to_rad(80.0)
@@ -181,10 +181,12 @@ func _update_dormant_population(delta: float) -> void:
 			continue
 		if enemy._valid_target() or enemy.state in ["windup", "hit", "recovery"]:
 			continue
-		if enemy._model != null or enemy._full_animation_selected:
-			continue
 		if enemy.global_position.distance_squared_to(player.global_position) <= DORMANT_SLEEP_DISTANCE_SQUARED:
 			continue
+		# Return unused animation rigs to the shared pool before sleep.
+		# Pursuers, active attacks and enemies with valid targets are exempt.
+		if enemy._model != null or enemy._full_animation_selected:
+			enemy._set_full_animation_selected(false)
 		var id := enemy.get_instance_id()
 		_dormant_population.append({
 			"position": enemy.global_position,
