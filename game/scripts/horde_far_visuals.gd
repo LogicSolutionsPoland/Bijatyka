@@ -12,6 +12,7 @@ const CROWD_TRANSFORM_INTERVAL := 0.033
 # at 6.722 ms average frame processing on the CI runner. This is a conservative
 # initial animation envelope, not a claim about Android capacity.
 const FULL_RIG_BUDGET := FoundationEnemy.FULL_ANIMATION_BUDGET
+const MOBILE_FULL_RIG_BUDGET := 10
 
 var player: Node3D
 var visibility_manager: Node
@@ -20,12 +21,14 @@ var _slot_enemy_ids: Array[int] = []
 var _refresh_time := 0.0
 var _scheduler_time := 0.0
 var _full_rig_count := 0
+var rig_budget := FULL_RIG_BUDGET
 var _spare_rigs: Array[Node3D] = []
 var _rig_creations := 0
 var _rig_reuses := 0
 var _rig_overflow := 0
 
 func configure(capacity: int) -> void:
+	rig_budget = mini(FULL_RIG_BUDGET, MOBILE_FULL_RIG_BUDGET) if OS.has_feature("mobile") else FULL_RIG_BUDGET
 	name = "FogHordeSilhouettes"
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var silhouette := _make_silhouette()
@@ -83,7 +86,7 @@ func register_enemy(enemy: FoundationEnemy) -> void:
 	var id := enemy.get_instance_id()
 	if _enemies.has(id):
 		return
-	if enemy._model != null and get_resident_rig_count() >= FULL_RIG_BUDGET:
+	if enemy._model != null and get_resident_rig_count() >= rig_budget:
 		# A preconfigured actor can be registered by a caller outside the normal
 		# spawn path. Demote it before adopting it into the horde budget.
 		enemy._release_detailed_model()
@@ -112,7 +115,7 @@ func _acquire_rig(enemy: FoundationEnemy) -> bool:
 		model = _spare_rigs.pop_back()
 		remove_child(model)
 		_rig_reuses += 1
-	elif get_resident_rig_count() < FULL_RIG_BUDGET:
+	elif get_resident_rig_count() < rig_budget:
 		model = enemy._instantiate_detailed_model()
 		if model != null:
 			_rig_creations += 1
@@ -220,7 +223,7 @@ func _update_full_rig_selection() -> void:
 	var selected_ids: Dictionary = {}
 	# Dying detailed actors keep their rigs until the authored clip completes.
 	# They consume resident slots even though they are no longer selectable.
-	var limit := mini(maxi(0, FULL_RIG_BUDGET - get_dying_rig_count()), candidates.size())
+	var limit := mini(maxi(0, rig_budget - get_dying_rig_count()), candidates.size())
 	for index in range(limit):
 		var enemy := candidates[index].enemy as FoundationEnemy
 		selected_ids[enemy.get_instance_id()] = true
