@@ -1,0 +1,41 @@
+name: Bijatyka zombie 30 validation
+
+on:
+  push:
+    branches:
+      - feat/zombie-30-dormancy-20261101
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Godot 4.7.2 import, zombie 30 and regression checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+      - name: Import resources and scripts
+        run: |
+          set -o pipefail
+          godot --headless --editor --path game --import --quit 2>&1 | tee import.log
+          if grep -E 'SCRIPT ERROR:|ERROR: Failed to load' import.log; then exit 1; fi
+      - name: Dormancy + 30-zombie cap
+        run: |
+          set -o pipefail
+          godot --headless --path game --script res://tests/zombie_30_optimization_test.gd 2>&1 | tee zombie-30.log
+          grep -q 'PASS: zombie 30 dormant population' zombie-30.log
+          if grep -E 'SCRIPT ERROR:|ERROR:' zombie-30.log; then exit 1; fi
+      - name: Existing concealed spawn and elevator integration
+        run: |
+          set -euo pipefail
+          for test in concealed_spawn_test.gd horde_performance_test.gd elevator_loading_test.gd; do
+            godot --headless --path game --script "res://tests/$test" 2>&1 | tee "$test.log"
+            grep -q 'PASS:' "$test.log"
+            if grep -E 'SCRIPT ERROR:|ERROR:' "$test.log"; then exit 1; fi
+          done
