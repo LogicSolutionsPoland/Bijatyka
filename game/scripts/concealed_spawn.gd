@@ -179,7 +179,7 @@ func _update_dormant_population(delta: float) -> void:
 			continue
 		if enemy._spawn_assault_time > 0.0 or enemy._player_grapple_time > 0.0:
 			continue
-		if enemy.combat_target == player or enemy.state in ["windup", "hit", "recovery"]:
+		if enemy._valid_target() or enemy.state in ["windup", "hit", "recovery"]:
 			continue
 		if enemy._model != null or enemy._full_animation_selected:
 			continue
