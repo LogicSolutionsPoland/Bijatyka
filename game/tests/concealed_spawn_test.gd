@@ -348,9 +348,9 @@ func _test_elevator_ground_wave() -> void:
 	check(elevator._travelling and director.ordinary_population_count() == 4
 		and director._live.is_empty() and positions.is_empty(),
 		"camera and elevator movement cannot activate the four stored zombies")
-	# Freeze map preparation to simulate a slow device: the car must stop at
-	# the bottom with the rider enclosed until preparation resumes.
-	arena.set_process(false)
+	# Pause the dedicated coordinator, not Foundation._process: PR #53
+	# moved preparation into GroundLoadingCoordinator.
+	arena._ground_loading_coordinator.set_process(false)
 	for frame in range(360):
 		await physics_frame
 		if is_equal_approx(elevator._car_root.position.y, elevator.BOTTOM_CAR_Y):
@@ -359,7 +359,7 @@ func _test_elevator_ground_wave() -> void:
 		and elevator._car_enclosure.visible and not arena._ground_wave_started
 		and director.ordinary_population_count() == 4,
 		"bottom doors stay closed and four zombies stay stored while map preparation is incomplete")
-	arena.set_process(true)
+	arena._ground_loading_coordinator.set_process(true)
 	for frame in range(180):
 		await physics_frame
 		if not elevator._travelling:
