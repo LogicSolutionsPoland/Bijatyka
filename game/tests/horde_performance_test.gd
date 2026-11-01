@@ -115,8 +115,8 @@ func run() -> void:
 	active_attacker.state = "windup"
 	active_attacker.combat_target = player
 	batch._update_full_rig_selection()
-	check(batch.get_full_rig_count() == batch.FULL_RIG_BUDGET, "200 active close zombies stay independent from the 20 full-rig animation cap")
-	check(batch.get_resident_rig_count() == batch.FULL_RIG_BUDGET, "200 close zombies never allocate more than 20 resident detailed rigs")
+	check(batch.get_full_rig_count() == batch.FULL_RIG_BUDGET, "200 close zombies stay independent from the seven-rig animation cap")
+	check(batch.get_resident_rig_count() == batch.FULL_RIG_BUDGET, "200 close zombies never allocate more than seven resident detailed rigs")
 	check(active_attacker._full_animation_selected, "active attacker receives full-quality priority")
 	check(player.get_parent() == fixture and player.is_in_group("player"), "player remains outside zombie visual-tier scheduling")
 	fixture.queue_free()
