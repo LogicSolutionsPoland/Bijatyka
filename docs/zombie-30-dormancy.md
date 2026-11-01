@@ -52,3 +52,17 @@ Before merging, verify on the Redmi Android 16 and Samsung Android 7:
 30 population cap, visible 5 m reappearance, wall/collision behavior, boss,
 return-to-roof reset, memory, heat and steady-state FPS. No performance
 improvement is asserted until measured on devices.
+
+## Stage 2: bounded AI neighbor broad-phase (2026-11-01)
+- A shared 10 m spatial grid is rebuilt at **10 Hz**, not once per physics
+  frame. Every zombie still queries its surrounding nine cells and validates
+  live, non-queued enemies. New spawns invalidate the cache immediately.
+- Ordinary zombies still use **10 Hz physics beyond 7 m**; their first far
+  step is spread over ten phase slots to reduce simultaneous collision spikes.
+- LOD updates no longer reassign mesh visibility when the distance tier is
+  unchanged. Rig selection, flashlight changes, death and tier crossings still
+  update visibility as before.
+- The existing **10 m record / 5 m wake / 7 rigs / 30 population** thresholds
+  remain unchanged. The boss, player and active combat behavior are untouched.
+- Tests assert the 10 Hz grid buckets at 60 and 30 physics ticks per second.
+  Hardware FPS and heat improvements still require a device A/B test.

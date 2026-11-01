@@ -18,6 +18,7 @@ const RENDER_RADIUS := 30.0
 const DETAILED_RADIUS := 18.0
 const FAR_PHYSICS_INTERVAL := 0.10
 const FAR_PHYSICS_DISTANCE := 7.0
+const SPATIAL_GRID_REFRESH_HZ := 10
 const FULL_ANIMATION_BUDGET := 7
 const SPAWN_ASSAULT_DURATION := 4.5
 const SPAWN_ASSAULT_SPEED_MULTIPLIER := 3.2
@@ -41,6 +42,7 @@ var knockback := Vector3.ZERO
 var _ai_accumulator := 0.0
 var _ai_interval := 0.0
 var _far_physics_time := 0.0
+var _far_physics_active := false
 var _player: FoundationPlayer
 var combat_fx_pool: Node
 var _model: Node3D
@@ -81,10 +83,17 @@ var _low_poly_death_scale := 1.0
 var _player_grapple_owner: FoundationPlayer
 var _player_grapple_time := 0.0
 
+# Sharing this ten-Hz broad-phase cache across all enemies prevents a full
+# scene-group scan for every physics frame. The 10 m cells and 3x3 query remain
+# unchanged; target acquisition is already staggered separately.
+static func _spatial_bucket(physics_frame: int, physics_hz: int) -> int:
+	var stride := maxi(1, ceili(float(physics_hz) / float(SPATIAL_GRID_REFRESH_HZ)))
+	return floori(float(physics_frame) / float(stride))
+
 func _nearby() -> Array[FoundationEnemy]:
-	var frame := Engine.get_physics_frames()
-	if _grid_frame != frame:
-		_grid_frame = frame
+	var bucket := _spatial_bucket(Engine.get_physics_frames(), Engine.physics_ticks_per_second)
+	if _grid_frame != bucket:
+		_grid_frame = bucket
 		_grid.clear()
 		for node in get_tree().get_nodes_in_group("enemies"):
 			if node is FoundationEnemy and node.hp > 0:
@@ -97,7 +106,7 @@ func _nearby() -> Array[FoundationEnemy]:
 	for x in range(-1, 2):
 		for z in range(-1, 2):
 			for node in _grid.get(cell + Vector2i(x, z), []):
-				if is_instance_valid(node) and node != self and node.hp > 0:
+				if is_instance_valid(node) and not node.is_queued_for_deletion() and node != self and node.hp > 0:
 					result.append(node)
 	return result
 
@@ -205,6 +214,8 @@ func _update_spawn_assault(delta: float) -> bool:
 
 func _ready() -> void:
 	add_to_group("enemies")
+	# A freshly spawned actor must enter the shared broad-phase immediately.
+	_grid_frame = -1
 	collision_layer = 2
 	# Also collide with the player-base boundary (physics layer 3 / bit 4).
 	collision_mask = 1 | 4
@@ -551,6 +562,11 @@ func _physics_process(delta: float) -> void:
 	# Beyond 7 m, ordinary collision/AI runs at 10 Hz, including
 	# opening assaults. Near-player contact remains full-rate.
 	if not is_boss and distance > FAR_PHYSICS_DISTANCE:
+		if not _far_physics_active:
+			# Offset the first distant tick by a stable per-actor phase so a
+			# crowd crossing the 7 m boundary does not collide on one frame.
+			_far_physics_time = float(get_instance_id() % 10) * (FAR_PHYSICS_INTERVAL / 10.0)
+			_far_physics_active = true
 		_far_physics_time += delta
 		if _far_physics_time < FAR_PHYSICS_INTERVAL:
 			return
@@ -558,6 +574,7 @@ func _physics_process(delta: float) -> void:
 		_far_physics_time = 0.0
 	else:
 		_far_physics_time = 0.0
+		_far_physics_active = false
 	if not is_on_floor():
 		velocity.y -= GRAVITY * delta
 	else:
@@ -608,7 +625,7 @@ func _set_distance_detail(distance: float) -> void:
 		return
 	var band := 2 if distance > RENDER_RADIUS else (0 if distance <= DETAILED_RADIUS else 1)
 	if band == _lod_band:
-		_update_visual_visibility()
+		# Rendering state is already synchronized by rig/flashlight changes.
 		return
 	_lod_band = band
 	_update_visual_visibility()

@@ -65,7 +65,7 @@ func _run() -> void:
 			director._pending.pop_back()
 			_add_enemy(fixture, batch, director, 200 + index)
 		batch._update_full_rig_selection()
-		_check(director._live.size() == batch.rig_budget0 and batch.get_resident_rig_count() == batch.rig_budget, "population and rig budget restore after mixed death tiers")
+		_check(director._live.size() == 200 and batch.get_resident_rig_count() == batch.rig_budget, "population and rig budget restore after mixed death tiers")
 
 	# Repeated combat/respawn cycles must reuse the same 7 imported models.
 	for cycle in range(25):
@@ -85,7 +85,7 @@ func _run() -> void:
 		director._pending.pop_back()
 		_add_enemy(fixture, batch, director, 202 + cycle)
 		batch._update_full_rig_selection()
-		_check(director._live.size() == batch.rig_budget0 and batch.get_resident_rig_count() <= batch.rig_budget, "respawn cycle %d restores 200 without rig growth" % cycle)
+		_check(director._live.size() == 200 and batch.get_resident_rig_count() <= batch.rig_budget, "respawn cycle %d restores 200 without rig growth" % cycle)
 	_check(int(batch.get_rig_pool_stats().created) == batch.rig_budget, "repeated respawns create no additional detailed models")
 	_check(int(batch.get_rig_pool_stats().reused) > 0, "demotions and deaths actually reuse detailed rigs")
 	_check(int(batch.get_rig_pool_stats().overflow) == 0, "scheduler reserves dying rigs without overflow")

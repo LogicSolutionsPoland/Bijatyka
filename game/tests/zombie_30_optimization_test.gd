@@ -46,6 +46,10 @@ func run() -> void:
 	check(Director.DORMANT_WAKE_DISTANCE_SQUARED == 25.0, "wake starts at 5m")
 	check(Enemy.FAR_PHYSICS_DISTANCE == 7.0 and Enemy.FAR_PHYSICS_INTERVAL == 0.10, "physics switches to 10Hz beyond 7m")
 	check(Enemy.FULL_ANIMATION_BUDGET == 7, "full rig budget is exactly seven")
+	check(Enemy.SPATIAL_GRID_REFRESH_HZ == 10, "shared zombie neighbor grid refreshes at 10 Hz")
+	check(Enemy._spatial_bucket(0, 60) == Enemy._spatial_bucket(5, 60), "neighbor grid remains cached for six 60 Hz ticks")
+	check(Enemy._spatial_bucket(6, 60) == Enemy._spatial_bucket(0, 60) + 1, "neighbor grid advances on the seventh tick")
+	check(Enemy._spatial_bucket(0, 30) == Enemy._spatial_bucket(2, 30) and Enemy._spatial_bucket(3, 30) == 1, "shared grid cadence adapts to 30 Hz physics")
 
 	var enemy := Enemy.new() as FoundationEnemy
 	enemy.position = Vector3(0.0, 0.05, -11.0)
