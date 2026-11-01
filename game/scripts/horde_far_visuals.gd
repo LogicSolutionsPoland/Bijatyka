@@ -248,7 +248,7 @@ func _update_full_rig_selection() -> void:
 		return
 	var candidates: Array[Dictionary] = []
 	for enemy_variant in _enemies.values():
-		if not is_instance_valid(enemy_variant):
+		if not is_instance_valid(enemy_variant) or enemy_variant.is_queued_for_deletion():
 			continue
 		var enemy := enemy_variant as FoundationEnemy
 		if enemy.hp <= 0 or enemy.is_boss:
@@ -278,7 +278,7 @@ func _update_full_rig_selection() -> void:
 	# Return every deselected rig before promoting candidates. A spare is moved
 	# directly between actors, so a priority change cannot transiently exceed 7.
 	for enemy_variant in _enemies.values():
-		if not is_instance_valid(enemy_variant):
+		if not is_instance_valid(enemy_variant) or enemy_variant.is_queued_for_deletion():
 			continue
 		var enemy := enemy_variant as FoundationEnemy
 		if enemy.hp <= 0 or enemy.is_boss:
@@ -287,7 +287,7 @@ func _update_full_rig_selection() -> void:
 			enemy._set_full_animation_selected(false)
 	_full_rig_count = 0
 	for enemy_variant in _enemies.values():
-		if not is_instance_valid(enemy_variant):
+		if not is_instance_valid(enemy_variant) or enemy_variant.is_queued_for_deletion():
 			continue
 		var enemy := enemy_variant as FoundationEnemy
 		if enemy.hp > 0 and selected_ids.has(enemy.get_instance_id()):

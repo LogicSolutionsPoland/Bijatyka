@@ -36,7 +36,7 @@ jobs:
       - name: Existing concealed spawn and elevator integration
         run: |
           set -euo pipefail
-          for test in concealed_spawn_test.gd horde_performance_test.gd rig_budget_lifecycle_test.gd elevator_loading_test.gd; do
+          for test in dormant_visuals_test.gd concealed_spawn_test.gd horde_performance_test.gd rig_budget_lifecycle_test.gd elevator_loading_test.gd; do
             godot --headless --path game --script "res://tests/$test" 2>&1 | tee "$test.log"
             grep -q 'PASS:' "$test.log"
             if grep -E 'SCRIPT ERROR:|ERROR:' "$test.log"; then exit 1; fi
