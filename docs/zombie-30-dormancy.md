@@ -53,6 +53,20 @@ Before merging, verify on the Redmi Android 16 and Samsung Android 7:
 return-to-roof reset, memory, heat and steady-state FPS. No performance
 improvement is asserted until measured on devices.
 
+## Stage 2b: render data-only zombies as batched silhouettes (2026-11-01)
+- The existing enemy MultiMesh also draws stationary records from the dormancy
+  director in its 5–30 m visual range, **without materializing physics actors**.
+- Records store the original world position, HP, kind, facing angle, and a
+  stable visual ID. The full actor still wakes only at <=5m.
+- Dormant proxy visibility uses the same flashlight sector and screen-oval
+  intersection as ordinary active silhouettes, classified at most every 0.12s.
+  GPU depth testing hides covered fragments behind walls, preserving darkness.
+- The shared mesh/shader remains one draw call, with static record transforms
+  only uploaded when their compacted MultiMesh slot changes.
+- The upstairs record-only population is never passed to the draw queue.
+- Device checks must validate visual continuity on wake, motionless distant
+  proxies, and flashlight occlusion from different camera angles.
+
 ## Stage 2: bounded AI neighbor broad-phase (2026-11-01)
 - A shared 10 m spatial grid is rebuilt at **10 Hz**, not once per physics
   frame. Every zombie still queries its surrounding nine cells and validates

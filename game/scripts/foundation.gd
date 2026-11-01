@@ -726,6 +726,7 @@ func _spawn_enemies() -> void:
 	spawn_director.spawn_requested.connect(_spawn_assault_zombie)
 	spawn_director.dormant_enemy_wake_requested.connect(_wake_dormant_zombie)
 	add_child(spawn_director)
+	horde_far_visuals.dormant_source = spawn_director
 	# The four upstairs entries are data only; no ordinary enemy actors exist.
 	spawn_director.store_upstairs_population(ZOMBIE_HORDE_SIZE)
 	horde_far_visuals.visible = false

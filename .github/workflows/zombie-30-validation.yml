@@ -5,6 +5,7 @@ on:
     branches:
       - feat/zombie-30-dormancy-20261101
       - feat/zombie-stage2-cpu-scheduler-20261101
+      - feat/zombie-dormant-multimesh-20261101
   workflow_dispatch:
 
 permissions:

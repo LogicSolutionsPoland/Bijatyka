@@ -121,6 +121,21 @@ func is_visible_to_flashlight(enemy: Node3D) -> bool:
 	var band := int(_bands.get(enemy.get_instance_id(), Band.BEYOND_RENDER))
 	return band == Band.VISIBLE_CLOSE or band == Band.VISIBLE_DISTANT
 
+func is_world_position_visible(world_position: Vector3) -> bool:
+	# Dormant record equivalent of the live-actor classifier. Use the same
+	# beam geometry; world depth still hides silhouettes behind obstacles.
+	if not is_instance_valid(player):
+		return false
+	var offset := world_position - player.global_position
+	offset.y = 0.0
+	if offset.length_squared() > MAX_RADIUS * MAX_RADIUS:
+		return false
+	if not enabled:
+		return true
+	if offset.dot(aim_direction) < -SECTOR_HYSTERESIS_METERS:
+		return false
+	return _body_position_intersects_beam(world_position, false)
+
 func get_band(enemy: Node3D) -> int:
 	return int(_bands.get(enemy.get_instance_id(), Band.BEYOND_RENDER)) if is_instance_valid(enemy) else Band.BEYOND_RENDER
 
@@ -390,12 +405,15 @@ func _classify_enemies() -> void:
 			Band.BEYOND_RENDER: _counts.beyond_render += 1
 
 func _body_intersects_beam(enemy: Node3D) -> bool:
+	var boss := enemy is FoundationEnemy and (enemy as FoundationEnemy).is_boss
+	return _body_position_intersects_beam(enemy.global_position, boss)
+
+func _body_position_intersects_beam(world_position: Vector3, boss: bool) -> bool:
 	if not is_instance_valid(camera) or not camera.is_current():
 		return true
 	var viewport_size := camera.get_viewport().get_visible_rect().size
 	if viewport_size.x < 1.0 or viewport_size.y < 1.0:
 		return false
-	var boss := enemy is FoundationEnemy and (enemy as FoundationEnemy).is_boss
 	var height := 2.85 if boss else 2.1
 	var half_width := 0.80 if boss else 0.55
 	var side := camera.global_basis.x * half_width
@@ -405,7 +423,7 @@ func _body_intersects_beam(enemy: Node3D) -> bool:
 	# Head, torso, feet and both sides allow a partially lit body to qualify.
 	for level in [0.52, 0.92, 0.08]:
 		for lateral in [0.0, -1.0, 1.0]:
-			var point: Vector3 = enemy.global_position + Vector3.UP * height * level + side * lateral
+			var point: Vector3 = world_position + Vector3.UP * height * level + side * lateral
 			if camera.is_position_behind(point):
 				continue
 			var uv := camera.unproject_position(point) / viewport_size

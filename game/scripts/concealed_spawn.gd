@@ -113,6 +113,11 @@ func ordinary_population_count() -> int:
 func dormant_population_count() -> int:
 	return _dormant_population.size() if _ground_active else 0
 
+func get_dormant_visual_records() -> Array[Dictionary]:
+	# Read-only reference for the existing MultiMesh render queue. No zombie
+	# actor, AI, animation player or collision is created for these records.
+	return _dormant_population if _ground_active and dormancy_enabled else []
+
 func request_initial_population() -> void:
 	if not _ground_active:
 		return
@@ -192,6 +197,8 @@ func _update_dormant_population(delta: float) -> void:
 			"position": enemy.global_position,
 			"hp": enemy.hp,
 			"kind": enemy.enemy_variant,
+			"facing_y": enemy.rotation.y,
+			"visual_id": enemy.get_instance_id(),
 		})
 		_live.erase(id)
 		_attackers.erase(id)

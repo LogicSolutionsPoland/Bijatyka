@@ -8,6 +8,7 @@ const FULL_RIG_ENTRY_DISTANCE_SQUARED := 16.0 * 16.0
 const FULL_RIG_EXIT_DISTANCE_SQUARED := 18.5 * 18.5
 const SCHEDULER_INTERVAL := 0.20
 const CROWD_TRANSFORM_INTERVAL := 0.033
+const DORMANT_VISIBILITY_INTERVAL := 0.12
 # Phase 2's smallest concentrated-horde sample exercised 20 nearby zombies
 # at 6.722 ms average frame processing on the CI runner. This is a conservative
 # initial animation envelope, not a claim about Android capacity.
@@ -16,6 +17,10 @@ const MOBILE_FULL_RIG_BUDGET := 7
 
 var player: Node3D
 var visibility_manager: Node
+var dormant_source: Node
+var _dormant_lit: Dictionary = {}
+var _dormant_visibility_time := DORMANT_VISIBILITY_INTERVAL
+var _rendered_dormant_count := 0
 var _enemies: Dictionary = {}
 var _slot_enemy_ids: Array[int] = []
 var _refresh_time := 0.0
@@ -168,16 +173,19 @@ func _process(delta: float) -> void:
 	_refresh_time = 0.0
 	if not is_instance_valid(player):
 		multimesh.visible_instance_count = 0
+		_rendered_dormant_count = 0
 		return
 	var count := 0
 	for enemy in _enemies.values():
-		if not is_instance_valid(enemy) or (enemy.hp <= 0 and (not enemy._death_started or enemy._death_completed)):
+		if not is_instance_valid(enemy) or enemy.is_queued_for_deletion() or (enemy.hp <= 0 and (not enemy._death_started or enemy._death_completed)):
 			continue
 		var distance_squared: float = enemy.global_position.distance_squared_to(player.global_position)
 		if enemy._full_animation_selected or distance_squared > VIEW_DISTANCE_SQUARED:
 			continue
 		if is_instance_valid(visibility_manager) and not visibility_manager.is_visible_to_flashlight(enemy):
 			continue
+		if count >= multimesh.instance_count:
+			break
 		var facing := Basis(Vector3.UP, enemy.rotation.y)
 		if enemy._death_started:
 			facing = facing.scaled(Vector3(1.0, enemy._low_poly_death_scale, 1.0))
@@ -192,7 +200,47 @@ func _process(delta: float) -> void:
 			multimesh.set_instance_color(count, Color(tint, tint * 0.94, tint * 0.88, phase / TAU))
 			_slot_enemy_ids[count] = id
 		count += 1
+	# Dormant zombies are data records, not scene actors. Reuse the SAME
+	# MultiMesh batch and shader, so they add no draw calls, AI or physics.
+	_rendered_dormant_count = 0
+	_dormant_visibility_time += delta
+	if _dormant_visibility_time >= DORMANT_VISIBILITY_INTERVAL:
+		_dormant_visibility_time = 0.0
+		_dormant_lit.clear()
+	if is_instance_valid(dormant_source) and dormant_source.has_method("get_dormant_visual_records"):
+		var records: Array[Dictionary] = dormant_source.call("get_dormant_visual_records")
+		for index in range(records.size()):
+			if count >= multimesh.instance_count:
+				break
+			var record: Dictionary = records[index]
+			var at: Vector3 = record["position"]
+			if at.distance_squared_to(player.global_position) > VIEW_DISTANCE_SQUARED:
+				continue
+			# Negative keys cannot collide with live actor instance IDs.
+			var slot_id := -int(record.get("visual_id", index + 1)) - 1
+			if not _dormant_lit.has(slot_id):
+				_dormant_lit[slot_id] = not is_instance_valid(visibility_manager) or (
+					visibility_manager.has_method("is_world_position_visible") and
+					bool(visibility_manager.call("is_world_position_visible", at))
+				)
+			if not bool(_dormant_lit[slot_id]):
+				continue
+			# Stationary entries upload a transform only when their compacted
+			# slot changes. Active enemies above still move at their normal rate.
+			if _slot_enemy_ids[count] != slot_id:
+				var facing := Basis(Vector3.UP, float(record.get("facing_y", 0.0)))
+				multimesh.set_instance_transform(count, Transform3D(facing, at))
+				var source_id := absi(slot_id)
+				var tint := 0.80 + float(source_id % 5) * 0.055
+				var phase := float(source_id % 97) * 0.065
+				multimesh.set_instance_color(count, Color(tint, tint * 0.94, tint * 0.88, phase / TAU))
+				_slot_enemy_ids[count] = slot_id
+			count += 1
+			_rendered_dormant_count += 1
 	multimesh.visible_instance_count = count
+
+func get_visible_dormant_count() -> int:
+	return _rendered_dormant_count
 
 func _update_full_rig_selection() -> void:
 	if not is_instance_valid(player):
