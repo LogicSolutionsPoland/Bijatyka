@@ -2,6 +2,7 @@ extends Node3D
 ## Only new zombies enter this director. Living zombies are never repositioned.
 
 signal spawn_requested(at: Vector3)
+signal dormant_enemy_wake_requested(at: Vector3, health: int, kind: String)
 
 const MAX_CANDIDATES_PER_TICK := 8
 const MAX_SPAWNS_PER_TICK := 2
@@ -13,6 +14,11 @@ const MOBILE_SPAWN_INTERVAL := 0.12
 const RETRY_SECONDS := 0.25
 const REPLACEMENT_SECONDS := 1.0
 const MAX_PLAYER_ATTACKERS := 4
+# Only unalerted, invisible actors can be stored as data (boss excluded).
+const DORMANT_SLEEP_DISTANCE_SQUARED := 44.0 * 44.0
+const DORMANT_WAKE_DISTANCE_SQUARED := 36.0 * 36.0
+const DORMANT_SCAN_INTERVAL := 0.20
+const MAX_DORMANT_CHANGES_PER_SCAN := 2
 const FORWARD_HALF_ANGLE := deg_to_rad(80.0)
 const RADIAL_SPREAD := 4.0
 const WORLD_LIMIT := 94.0
@@ -37,6 +43,9 @@ var last_candidate_count := 0
 var last_spawn_count := 0
 var _live: Dictionary = {}
 var _stored_population: Array[Dictionary] = []
+var _dormant_population: Array[Dictionary] = []
+var dormancy_enabled := true
+var _dormant_scan_time := 0.0
 var _ground_active := true
 var _attackers: Dictionary = {}
 var _pending: Array[float] = []
@@ -65,6 +74,9 @@ func store_upstairs_population(count: int) -> void:
 	_retry_time = 0.0
 	_mobile_spawn_cooldown = 0.0
 	_stored_population.clear()
+	_dormant_population.clear()
+	_dormant_scan_time = 0.0
+	dormancy_enabled = true
 	population_limit = count
 	for index in range(count):
 		_stored_population.append({"kind": "shambler"})
@@ -77,11 +89,14 @@ func activate_ground_population(cap: int) -> void:
 	_stored_population.clear()
 	population_limit = cap
 	_initial_population_pending = opening_count
+	dormancy_enabled = true
 	_ground_active = true
 	set_physics_process(true)
 
 func activate_profiling_population(cap: int) -> void:
 	_stored_population.clear()
+	_dormant_population.clear()
+	dormancy_enabled = false # Profiling still measures the full active load.
 	population_limit = cap
 	_ground_active = true
 	set_physics_process(true)
@@ -93,22 +108,25 @@ func ordinary_population_count() -> int:
 	for enemy in _live.values():
 		if is_instance_valid(enemy) and enemy.hp > 0:
 			living += 1
-	return living
+	return living + _dormant_population.size()
+
+func dormant_population_count() -> int:
+	return _dormant_population.size() if _ground_active else 0
 
 func request_initial_population() -> void:
 	if not _ground_active:
 		return
-	while _live.size() + _pending.size() + _initial_population_pending < population_limit:
+	while _live.size() + _dormant_population.size() + _pending.size() + _initial_population_pending < population_limit:
 		_initial_population_pending += 1
 
 func request_population() -> void:
 	if not _ground_active:
 		return
-	while _live.size() + _pending.size() + _initial_population_pending < population_limit:
+	while _live.size() + _dormant_population.size() + _pending.size() + _initial_population_pending < population_limit:
 		_pending.append(_clock)
 
 func register_enemy(enemy: FoundationEnemy) -> void:
-	if not _ground_active or enemy.is_boss or _live.has(enemy.get_instance_id()) or _live.size() >= population_limit:
+	if not _ground_active or enemy.is_boss or _live.has(enemy.get_instance_id()) or _live.size() + _dormant_population.size() >= population_limit:
 		return
 	var id := enemy.get_instance_id()
 	_live[id] = enemy
@@ -130,9 +148,62 @@ func _on_removed(id: int, replacements: int = 1) -> void:
 	if _ground_active:
 		# Pending births reserve slots. A death at thirteen therefore adds one;
 		# a death in the opening group can add both requested replacements.
-		var available := maxi(0, population_limit - _live.size() - _pending.size() - _initial_population_pending)
+		var available := maxi(0, population_limit - _live.size() - _dormant_population.size() - _pending.size() - _initial_population_pending)
 		for index in range(mini(replacements, available)):
 			_pending.append(_clock + REPLACEMENT_SECONDS)
+
+# No scene node, animator, AI or physics is retained for a dormant entry.
+# A living zombie returns to the SAME previously occupied offscreen position.
+func _update_dormant_population(delta: float) -> void:
+	_dormant_scan_time += delta
+	if _dormant_scan_time < DORMANT_SCAN_INTERVAL:
+		return
+	_dormant_scan_time = 0.0
+	if not _ground_active or not dormancy_enabled or not is_instance_valid(player):
+		return
+	var changes := 0
+	for index in range(_dormant_population.size() - 1, -1, -1):
+		var entry := _dormant_population[index]
+		var previous_position: Vector3 = entry["position"]
+		if previous_position.distance_squared_to(player.global_position) > DORMANT_WAKE_DISTANCE_SQUARED:
+			continue
+		_dormant_population.remove_at(index)
+		# The gameplay callback must register the restored node synchronously.
+		dormant_enemy_wake_requested.emit(previous_position, int(entry["hp"]), String(entry["kind"]))
+		changes += 1
+		if changes >= MAX_DORMANT_CHANGES_PER_SCAN:
+			return
+	for item in _live.values():
+		var enemy := item as FoundationEnemy
+		if not is_instance_valid(enemy) or enemy.is_queued_for_deletion() or enemy.hp <= 0 or enemy.is_boss:
+			continue
+		if enemy._spawn_assault_time > 0.0 or enemy._player_grapple_time > 0.0:
+			continue
+		if enemy.combat_target == player or enemy.state in ["windup", "hit", "recovery"]:
+			continue
+		if enemy._model != null or enemy._full_animation_selected:
+			continue
+		if enemy.global_position.distance_squared_to(player.global_position) <= DORMANT_SLEEP_DISTANCE_SQUARED:
+			continue
+		var id := enemy.get_instance_id()
+		_dormant_population.append({
+			"position": enemy.global_position,
+			"hp": enemy.hp,
+			"kind": enemy.enemy_variant,
+		})
+		_live.erase(id)
+		_attackers.erase(id)
+		enemy.attack_director = null
+		enemy.visible = false
+		enemy.set_physics_process(false)
+		enemy.collision_layer = 0
+		enemy.collision_mask = 0
+		# Queue-free is not a death; exiting cannot request replacements.
+		enemy.queue_free()
+		changes += 1
+		if changes >= MAX_DORMANT_CHANGES_PER_SCAN:
+			break
+
 
 func try_acquire_attacker(enemy: FoundationEnemy) -> bool:
 	var id := enemy.get_instance_id()
@@ -152,6 +223,7 @@ func _physics_process(delta: float) -> void:
 	if not _ground_active:
 		return
 	_clock += delta
+	_update_dormant_population(delta)
 	_retry_time = maxf(0.0, _retry_time - delta)
 	last_candidate_count = 0
 	last_spawn_count = 0
@@ -160,7 +232,7 @@ func _physics_process(delta: float) -> void:
 		_mobile_spawn_cooldown = maxf(0.0, _mobile_spawn_cooldown - delta)
 	if not is_instance_valid(player) or not is_instance_valid(camera):
 		return
-	if _retry_time > 0.0 or (_pending.is_empty() and _initial_population_pending <= 0) or _live.size() >= population_limit:
+	if _retry_time > 0.0 or (_pending.is_empty() and _initial_population_pending <= 0) or _live.size() + _dormant_population.size() >= population_limit:
 		return
 	if mobile_budget_enabled and _mobile_spawn_cooldown > 0.0:
 		return
@@ -173,7 +245,7 @@ func _physics_process(delta: float) -> void:
 		var initial_spawn := _initial_population_pending > 0
 		if not initial_spawn and (_pending.is_empty() or _pending.front() > _clock):
 			break
-		if _live.size() >= population_limit:
+		if _live.size() + _dormant_population.size() >= population_limit:
 			break
 		last_candidate_count += 1
 		var candidate := _sample_initial_candidate() if initial_spawn else _sample_candidate()
