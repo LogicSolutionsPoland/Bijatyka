@@ -373,9 +373,9 @@ func _test_elevator_ground_wave() -> void:
 		and not elevator._car_enclosure.visible and arena._environment.sky == arena._ground_sky
 		and arena.arena_map.get_instance_id() == map_instance_id,
 		"ground map and render profile finish before doors open without a second map instance")
-	check(director.population_limit == 13 and director._initial_population_pending + director._live.size() == 4
+	check(director.population_limit == 30 and director._initial_population_pending + director._live.size() == 4
 		and director._stored_population.is_empty() and director._pending.is_empty(),
-		"ground arrival activates exactly four stored entries with a thirteen-zombie cap")
+		"ground arrival activates exactly four stored entries with a thirty-zombie cap")
 	director.set_physics_process(false)
 	for frame in range(180):
 		await physics_frame
@@ -416,8 +416,8 @@ func _test_elevator_ground_wave() -> void:
 	var capped_victim: FoundationEnemy = director._live.values()[0]
 	capped_victim.receive_hit(10000)
 	capped_victim._complete_death()
-	check(director._live.size() == 12 and director._pending.size() == 1,
-		"a death at thirteen reserves only one free slot")
+	check(director._live.size() == 12 and director._pending.size() == 2,
+		"at thirteen, one death still queues two until reaching 30")
 	check(arena._interact_with_starting_elevator() and elevator.is_player_riding(player),
 		"ground-floor lift can start its return trip")
 	check(director.ordinary_population_count() == 4 and director._live.is_empty()
