@@ -930,7 +930,7 @@ func _apply_distance_visibility(node: Node) -> void:
 	# Do not resend an unchanged visibility state to the RenderingServer every
 	# 120 ms. This applies to no-shadow local lights and ordinary map meshes;
 	# it does not touch player, boss, zombie rigs, or flashlight beam culling.
-	var desired_visibility := node.visible
+	var desired_visibility: bool = node.visible
 	if node.is_in_group("radial_floor"):
 		desired_visibility = true
 	elif node is GeometryInstance3D or node is Label3D:
