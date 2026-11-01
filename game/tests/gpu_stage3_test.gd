@@ -8,6 +8,13 @@ const Foundation := preload("res://scripts/foundation.gd")
 const PENCIL_SHADER := preload("res://shaders/pencil_screen.gdshader")
 const VOLUME_SHADER := preload("res://shaders/flashlight_beam_volume.gdshader")
 
+# Exercise inherited visibility logic in a live SceneTree without starting
+# the entire tower, player combat and elevator during this micro-test.
+class LightOnlyWorld:
+	extends "res://scripts/foundation.gd"
+	func _ready() -> void:
+		pass
+
 var failures: Array[String] = []
 var checks := 0
 
@@ -62,7 +69,8 @@ func _run() -> void:
 
 	# No-op visibility updates leave both local light and map mesh states
 	# unchanged and still respond to explicit profiler light toggles.
-	var world := Foundation.new()
+	var world := LightOnlyWorld.new()
+	fixture.add_child(world)
 	var actor := preload("res://scripts/player_controller.gd").new() as FoundationPlayer
 	world.player = actor
 	world._local_lights_enabled = true
