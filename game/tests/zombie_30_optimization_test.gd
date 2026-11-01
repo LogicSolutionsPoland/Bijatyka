@@ -42,9 +42,13 @@ func run() -> void:
 	fixture.add_child(director)
 	director.set_physics_process(false)
 	director.dormant_enemy_wake_requested.connect(_on_wake)
+	check(Director.DORMANT_SLEEP_DISTANCE_SQUARED == 100.0, "dormancy starts beyond 10m")
+	check(Director.DORMANT_WAKE_DISTANCE_SQUARED == 25.0, "wake starts at 5m")
+	check(Enemy.FAR_PHYSICS_DISTANCE == 7.0 and Enemy.FAR_PHYSICS_INTERVAL == 0.10, "physics switches to 10Hz beyond 7m")
+	check(Enemy.FULL_ANIMATION_BUDGET == 7, "full rig budget is exactly seven")
 
 	var enemy := Enemy.new() as FoundationEnemy
-	enemy.position = Vector3(0.0, 0.05, -55.0)
+	enemy.position = Vector3(0.0, 0.05, -11.0)
 	enemy._player = player
 	fixture.add_child(enemy)
 	enemy.hp = 37
@@ -56,14 +60,17 @@ func run() -> void:
 	await process_frame
 	check(director.ordinary_population_count() == 1 and director._pending.is_empty(), "tree exit does not queue replacement")
 
-	player.position.z = -20.0
+	player.position.z = -5.75 # 5.25 m, still outside the wake radius
+	director._update_dormant_population(Director.DORMANT_SCAN_INTERVAL)
+	check(restored.is_empty() and director._dormant_population.size() == 1, "no wake until within five meters")
+	player.position.z = -6.1 # 4.9 m, wake threshold crossed
 	director._update_dormant_population(Director.DORMANT_SCAN_INTERVAL)
 	check(restored.size() == 1 and director._dormant_population.is_empty(), "player approach wakes dormant record")
 	if restored.size() == 1:
 		check(restored[0].hp == 37, "health survives dormancy")
-		check(is_equal_approx(restored[0].global_position.z, -55.0), "original position survives dormancy")
+		check(is_equal_approx(restored[0].global_position.z, -11.0), "original position survives dormancy")
 		check(director.ordinary_population_count() == 1, "wake never doubles count")
-		check(restored[0].global_position.distance_to(player.global_position) > 30.0, "actor wakes outside visual range")
+		check(restored[0].global_position.distance_to(player.global_position) <= 5.0, "actor wakes at requested five meter radius")
 
 	for index in range(29):
 		director._dormant_population.append({"position": Vector3(80.0 + float(index), 0.05, 0.0), "hp": 90, "kind": "shambler"})
