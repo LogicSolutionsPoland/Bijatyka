@@ -17,7 +17,8 @@ const GRAVITY := 24.0
 const RENDER_RADIUS := 30.0
 const DETAILED_RADIUS := 18.0
 const FAR_PHYSICS_INTERVAL := 0.10
-const FULL_ANIMATION_BUDGET := 20
+const FAR_PHYSICS_DISTANCE := 7.0
+const FULL_ANIMATION_BUDGET := 7
 const SPAWN_ASSAULT_DURATION := 4.5
 const SPAWN_ASSAULT_SPEED_MULTIPLIER := 3.2
 const SPAWN_ASSAULT_HANDOFF_DISTANCE := 6.0
@@ -547,9 +548,9 @@ func _physics_process(delta: float) -> void:
 		return
 	var distance := global_position.distance_to(_player.global_position)
 	_set_distance_detail(distance)
-	# Beyond 30 m, ordinary collision/AI runs at 10 Hz, also during
-	# opening assaults. On-screen handoff stays full-rate; collision is retained.
-	if not is_boss and distance > RENDER_RADIUS:
+	# Beyond 7 m, ordinary collision/AI runs at 10 Hz, including
+	# opening assaults. Near-player contact remains full-rate.
+	if not is_boss and distance > FAR_PHYSICS_DISTANCE:
 		_far_physics_time += delta
 		if _far_physics_time < FAR_PHYSICS_INTERVAL:
 			return
