@@ -8,7 +8,7 @@ var failures: Array[String] = []
 var checks := 0
 var fixture: Node3D
 var player: FoundationPlayer
-var director: Node3D
+var director
 var restored: Array[FoundationEnemy] = []
 
 func _initialize() -> void:
