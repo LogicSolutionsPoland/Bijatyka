@@ -32,8 +32,8 @@ func _run() -> void:
 		var enemy := _add_enemy(fixture, batch, director, index)
 		crowd.append(enemy)
 	batch._update_full_rig_selection()
-	_check(batch.get_full_rig_count() == 20, "200 close zombies select exactly 20 detailed rigs")
-	_check(batch.get_resident_rig_count() == 20 and int(batch.get_rig_pool_stats().created) == 20, "resident and created model counts are strictly capped")
+	_check(batch.get_full_rig_count() == batch.rig_budget, "200 close zombies select exactly 7 detailed rigs")
+	_check(batch.get_resident_rig_count() == batch.rig_budget and int(batch.get_rig_pool_stats().created) == batch.rig_budget, "resident and created model counts are strictly capped")
 
 	var dying: FoundationEnemy
 	var reduced: FoundationEnemy
@@ -48,12 +48,12 @@ func _run() -> void:
 		_check(dying._animation_player != null and dying._animation_player.current_animation.begins_with("Death_"), "selected zombie finishes on its authored death rig")
 		_check(dying._model != null and batch.get_dying_rig_count() == 1, "dying rig remains resident until animation completion")
 		batch._update_full_rig_selection()
-		_check(batch.get_full_rig_count() == 19 and batch.get_resident_rig_count() == 20, "death reserves a slot before replacement selection")
+		_check(batch.get_full_rig_count() == batch.rig_budget - 1 and batch.get_resident_rig_count() == batch.rig_budget, "death reserves a slot before replacement selection")
 		var before_reduced := batch.get_rig_pool_stats()
 		reduced.receive_hit(1000, Vector3.FORWARD)
 		batch._process(0.04)
 		_check(reduced._model == null and reduced._death_started and not reduced._death_completed, "reduced zombie remains a dying shared silhouette")
-		_check(batch.get_rig_pool_stats().created == before_reduced.created and batch.get_resident_rig_count() == 20, "unselected death never creates a detailed rig")
+		_check(batch.get_rig_pool_stats().created == before_reduced.created and batch.get_resident_rig_count() == batch.rig_budget, "unselected death never creates a detailed rig")
 		reduced._complete_death()
 		reduced._complete_death()
 		dying._complete_death()
@@ -65,9 +65,9 @@ func _run() -> void:
 			director._pending.pop_back()
 			_add_enemy(fixture, batch, director, 200 + index)
 		batch._update_full_rig_selection()
-		_check(director._live.size() == 200 and batch.get_resident_rig_count() == 20, "population and rig budget restore after mixed death tiers")
+		_check(director._live.size() == batch.rig_budget0 and batch.get_resident_rig_count() == batch.rig_budget, "population and rig budget restore after mixed death tiers")
 
-	# Repeated combat/respawn cycles must reuse the same 20 imported models.
+	# Repeated combat/respawn cycles must reuse the same 7 imported models.
 	for cycle in range(25):
 		var victim: FoundationEnemy
 		for member in crowd:
@@ -80,13 +80,13 @@ func _run() -> void:
 		victim.receive_hit(1000, Vector3.BACK)
 		victim._complete_death()
 		victim._complete_death()
-		_check(batch.get_resident_rig_count() <= 20, "death cycle %d respects resident cap" % cycle)
+		_check(batch.get_resident_rig_count() <= batch.rig_budget, "death cycle %d respects resident cap" % cycle)
 		await process_frame
 		director._pending.pop_back()
 		_add_enemy(fixture, batch, director, 202 + cycle)
 		batch._update_full_rig_selection()
-		_check(director._live.size() == 200 and batch.get_resident_rig_count() <= 20, "respawn cycle %d restores 200 without rig growth" % cycle)
-	_check(int(batch.get_rig_pool_stats().created) == 20, "repeated respawns create no additional detailed models")
+		_check(director._live.size() == batch.rig_budget0 and batch.get_resident_rig_count() <= batch.rig_budget, "respawn cycle %d restores 200 without rig growth" % cycle)
+	_check(int(batch.get_rig_pool_stats().created) == batch.rig_budget, "repeated respawns create no additional detailed models")
 	_check(int(batch.get_rig_pool_stats().reused) > 0, "demotions and deaths actually reuse detailed rigs")
 	_check(int(batch.get_rig_pool_stats().overflow) == 0, "scheduler reserves dying rigs without overflow")
 	_check(defeats == 27, "repeated deaths emit one defeat per victim")
