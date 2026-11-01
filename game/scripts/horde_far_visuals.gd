@@ -12,7 +12,7 @@ const CROWD_TRANSFORM_INTERVAL := 0.033
 # at 6.722 ms average frame processing on the CI runner. This is a conservative
 # initial animation envelope, not a claim about Android capacity.
 const FULL_RIG_BUDGET := FoundationEnemy.FULL_ANIMATION_BUDGET
-const MOBILE_FULL_RIG_BUDGET := 10
+const MOBILE_FULL_RIG_BUDGET := 7
 
 var player: Node3D
 var visibility_manager: Node
@@ -228,7 +228,7 @@ func _update_full_rig_selection() -> void:
 		var enemy := candidates[index].enemy as FoundationEnemy
 		selected_ids[enemy.get_instance_id()] = true
 	# Return every deselected rig before promoting candidates. A spare is moved
-	# directly between actors, so a priority change cannot transiently exceed 20.
+	# directly between actors, so a priority change cannot transiently exceed 7.
 	for enemy_variant in _enemies.values():
 		if not is_instance_valid(enemy_variant):
 			continue
