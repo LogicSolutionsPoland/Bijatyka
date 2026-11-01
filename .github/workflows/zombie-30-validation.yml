@@ -6,6 +6,7 @@ on:
       - feat/zombie-30-dormancy-20261101
       - feat/zombie-stage2-cpu-scheduler-20261101
       - feat/zombie-dormant-multimesh-20261101
+      - feat/gpu-stage3-light-pencil-20261101
   workflow_dispatch:
 
 permissions:
@@ -36,7 +37,7 @@ jobs:
       - name: Existing concealed spawn and elevator integration
         run: |
           set -euo pipefail
-          for test in dormant_visuals_test.gd concealed_spawn_test.gd horde_performance_test.gd rig_budget_lifecycle_test.gd elevator_loading_test.gd; do
+          for test in gpu_stage3_test.gd dormant_visuals_test.gd concealed_spawn_test.gd horde_performance_test.gd rig_budget_lifecycle_test.gd elevator_loading_test.gd; do
             godot --headless --path game --script "res://tests/$test" 2>&1 | tee "$test.log"
             grep -q 'PASS:' "$test.log"
             if grep -E 'SCRIPT ERROR:|ERROR:' "$test.log"; then exit 1; fi

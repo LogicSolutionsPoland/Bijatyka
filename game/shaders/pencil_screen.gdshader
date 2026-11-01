@@ -96,19 +96,27 @@ void fragment() {
 	mat4 ip = INV_PROJECTION_MATRIX;
 	vec3 p0 = view_pos(uv, ip);
 	float d0 = -p0.z;
-	float dx = -view_pos(uv + vec2(px.x, 0.0), ip).z;
-	float dy = -view_pos(uv + vec2(0.0, px.y), ip).z;
-	float silhouette = step(depth_threshold * d0, abs(dx - d0) + abs(dy - d0));
-	float crease = 0.0;
-	if (creases > 0.0) {
-		vec3 n0 = view_normal(uv, px, ip);
-		vec3 n1 = view_normal(uv + vec2(px.x, 0.0), px, ip);
-		vec3 n2 = view_normal(uv + vec2(0.0, px.y), px, ip);
-		crease = step(crease_threshold, (1.0 - dot(n0, n1)) + (1.0 - dot(n0, n2))) * creases;
-	}
 	float fade = fade_end > fade_start ? 1.0 - smoothstep(fade_start, fade_end, d0) : 1.0;
-	float skip = mix(1.0, smoothstep(0.25, 0.65, value_noise(frag * 0.5)), line_roughness);
-	float line = max(silhouette, crease) * fade * line_color.a * skip;
+	float line = 0.0;
+	// The graphite line is identically zero after its fade cutoff. Avoid
+	// 2 silhouette depth taps and up to 15 crease depth taps in those pixels,
+	// while still drawing the original paper grain and colour everywhere.
+	if (fade > 0.0) {
+		float dx = -view_pos(uv + vec2(px.x, 0.0), ip).z;
+		float dy = -view_pos(uv + vec2(0.0, px.y), ip).z;
+		float silhouette = step(depth_threshold * d0, abs(dx - d0) + abs(dy - d0));
+		float crease = 0.0;
+		// Once a silhouette is fully inked, max(silhouette, crease) is 1.0
+		// regardless of the crease result. Preserve the exact visible line.
+		if (creases > 0.0 && silhouette < 1.0) {
+			vec3 n0 = view_normal(uv, px, ip);
+			vec3 n1 = view_normal(uv + vec2(px.x, 0.0), px, ip);
+			vec3 n2 = view_normal(uv + vec2(0.0, px.y), px, ip);
+			crease = step(crease_threshold, (1.0 - dot(n0, n1)) + (1.0 - dot(n0, n2))) * creases;
+		}
+		float skip = mix(1.0, smoothstep(0.25, 0.65, value_noise(frag * 0.5)), line_roughness);
+		line = max(silhouette, crease) * fade * line_color.a * skip;
+	}
 
 	vec3 c = SCREEN_RGB(SCREEN_UV);
 	c = mix(vec3(dot(c, vec3(0.299, 0.587, 0.114))), c, saturation);

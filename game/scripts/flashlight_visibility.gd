@@ -264,26 +264,33 @@ func _build_visible_beam_volume() -> void:
 	material.set_shader_parameter("beam_opacity", 0.12)
 	material.set_shader_parameter("core_opacity", 0.11)
 
-	var maximum_width := maxf(0.32, MAX_RADIUS * BEAM_TANGENT)
+	# Render the identical three crossing, depth-tested sheets in ONE
+	# MultiMesh draw instead of three transparent MeshInstance3D draws.
+	# Vertex expansion still happens in the unchanged beam shader.
+	var quad := QuadMesh.new()
+	quad.size = Vector2(2.0, MAX_RADIUS)
+	var instances := MultiMesh.new()
+	instances.transform_format = MultiMesh.TRANSFORM_3D
+	instances.mesh = quad
+	instances.instance_count = 3
 	for index in range(3):
-		var sheet := MeshInstance3D.new()
-		sheet.name = "PlayerFlashlightBeamSheet%d" % index
-		var quad := QuadMesh.new()
-		quad.size = Vector2(2.0, MAX_RADIUS)
-		sheet.mesh = quad
-		sheet.material_override = material
-		sheet.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		# The vertex shader widens the quad to the full cone radius. Tell CPU
-		# culling about that expanded bound instead of the original 2 m quad.
-		sheet.custom_aabb = AABB(
-			Vector3(-maximum_width, -MAX_RADIUS * 0.5, -0.05),
-			Vector3(maximum_width * 2.0, MAX_RADIUS, 0.1)
-		)
 		var azimuth := TAU * float(index) / 3.0
 		var sheet_basis := Basis(Vector3.BACK, azimuth) * Basis(Vector3.RIGHT, PI * 0.5)
-		sheet.transform = Transform3D(sheet_basis, Vector3(0.0, 0.0, -MAX_RADIUS * 0.5))
-		spotlight.add_child(sheet)
-
+		instances.set_instance_transform(index,
+			Transform3D(sheet_basis, Vector3(0.0, 0.0, -MAX_RADIUS * 0.5)))
+	var sheets := MultiMeshInstance3D.new()
+	sheets.name = "PlayerFlashlightBeamSheets"
+	sheets.multimesh = instances
+	sheets.material_override = material
+	sheets.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# All three sheets occupy a cone from z=0 to z=-30 in spotlight space.
+	# Include the shader-expanded radii for conservative whole-batch culling.
+	var maximum_width := maxf(0.32, MAX_RADIUS * BEAM_TANGENT)
+	sheets.custom_aabb = AABB(
+		Vector3(-maximum_width, -maximum_width, -MAX_RADIUS),
+		Vector3(maximum_width * 2.0, maximum_width * 2.0, MAX_RADIUS)
+	)
+	spotlight.add_child(sheets)
 
 func _build_visible_beam_sections() -> void:
 	var material := ShaderMaterial.new()
