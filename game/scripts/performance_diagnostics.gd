@@ -13,7 +13,7 @@ signal local_lights_comparison_requested(is_enabled: bool)
 signal character_shadows_comparison_requested(is_enabled: bool)
 
 const SAMPLE_INTERVAL := 0.5
-const POPULATIONS := [15, 20, 69, 100, 200]
+const POPULATIONS := [15, 20, 30, 69, 100, 200]
 const MODES := ["concentrated", "approach"]
 
 var _panel: PanelContainer
@@ -223,6 +223,15 @@ func _update_readout() -> void:
 	var fx_stats := _collect_effect_pool_stats()
 	var rig_stats := _collect_rig_pool_stats()
 	var flashlight_counts := _collect_flashlight_counts()
+	var rig_cap := FoundationEnemy.FULL_ANIMATION_BUDGET
+	var dormant_count := 0
+	if is_instance_valid(get_parent()):
+		var horde: Node = get_parent().get("horde_far_visuals") as Node
+		var director: Node = get_parent().get("spawn_director") as Node
+		if is_instance_valid(horde):
+			rig_cap = int(horde.get("rig_budget"))
+		if is_instance_valid(director) and director.has_method("dormant_population_count"):
+			dormant_count = int(director.call("dormant_population_count"))
 	var rendered := Engine.get_frames_drawn() > 0
 	var fps := "N/A (headless/no rendered frame)"
 	var draw_calls := "N/A (headless/no rendered frame)"
@@ -243,7 +252,7 @@ func _update_readout() -> void:
 	_readout.text = (
 		"FPS: %s   3D: %.2fx (%d × %d viewport)\n"
 		+ "Frame processing: %s   Physics: %s\n"
-		+ "Active zombies: %d\n"
+		+ "Living zombies: %d (data-only dormant: %d)\n"
 		+ "Detailed 0–18 m: %d   Low-poly 18–30 m: %d\n"
 		+ "Outside 30 m: %d   Selected zombie rigs: %d / %d (+ boss: %d)\n"
 		+ "Flashlight visible close/distant: %d / %d\n"
@@ -255,8 +264,8 @@ func _update_readout() -> void:
 		+ "Zombie rigs: %d reused / %d created   overflow: %d\n"
 		+ "Engine static memory: %s"
 	) % [
-		fps, render_scale, int(viewport_size.x), int(viewport_size.y), process_ms, physics_ms, counts.active, counts.detailed,
-		counts.low_poly, counts.outside, counts.full_rigs, FoundationEnemy.FULL_ANIMATION_BUDGET, counts.boss_rigs,
+		fps, render_scale, int(viewport_size.x), int(viewport_size.y), process_ms, physics_ms, counts.active + dormant_count, dormant_count, counts.detailed,
+		counts.low_poly, counts.outside, counts.full_rigs, rig_cap, counts.boss_rigs,
 		flashlight_counts.visible_close, flashlight_counts.visible_distant,
 		flashlight_counts.dark_close_combat, flashlight_counts.dark_distant, flashlight_counts.beyond_render,
 		rig_stats.resident, rig_stats.dying, rig_stats.spare,
