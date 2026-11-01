@@ -547,9 +547,9 @@ func _physics_process(delta: float) -> void:
 		return
 	var distance := global_position.distance_to(_player.global_position)
 	_set_distance_detail(distance)
-	# Outside the visible ring, sample collision and motion at 10 Hz. Spawn
-	# assaults stay at full rate so the initial dash and wall handoff are exact.
-	if not is_boss and distance > RENDER_RADIUS and _spawn_assault_time <= 0.0:
+	# Beyond 30 m, ordinary collision/AI runs at 10 Hz, also during
+	# opening assaults. On-screen handoff stays full-rate; collision is retained.
+	if not is_boss and distance > RENDER_RADIUS:
 		_far_physics_time += delta
 		if _far_physics_time < FAR_PHYSICS_INTERVAL:
 			return
