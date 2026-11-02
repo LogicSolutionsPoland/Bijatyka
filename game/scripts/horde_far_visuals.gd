@@ -208,7 +208,7 @@ func _process(delta: float) -> void:
 		_dormant_visibility_time = 0.0
 		_dormant_lit.clear()
 	if is_instance_valid(dormant_source) and dormant_source.has_method("get_dormant_visual_records"):
-		var records: Array[Dictionary] = dormant_source.call("get_dormant_visual_records")
+		var records: Array = dormant_source.call("get_dormant_visual_records")
 		for index in range(records.size()):
 			if count >= multimesh.instance_count:
 				break

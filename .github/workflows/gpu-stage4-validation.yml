@@ -1,0 +1,45 @@
+name: Bijatyka GPU stage 4 validation
+
+on:
+  push:
+    branches:
+      - feat/gpu-stage4-android-resources-20261102
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+      - name: Import resources in Godot 4.7.2
+        run: |
+          set -euo pipefail
+          mkdir -p stage4-ci
+          godot --headless --editor --path game --import --quit 2>&1 | tee stage4-ci/import.log
+          if grep -E 'SCRIPT ERROR:|ERROR: Failed to load' stage4-ci/import.log; then exit 1; fi
+      - name: Fixed 30-zombie baseline or comparison, headless CPU
+        run: |
+          set -euo pipefail
+          godot --headless --path game --script res://tests/gpu_stage4_benchmark.gd 2>&1 | tee stage4-ci/headless-30.log
+          grep -q 'PASS: Stage 4 fixed 30-zombie benchmark' stage4-ci/headless-30.log
+          if grep -E 'SCRIPT ERROR:|ERROR:' stage4-ci/headless-30.log; then exit 1; fi
+      - name: Fixed 30-zombie baseline or comparison, desktop software OpenGL
+        run: |
+          set -euo pipefail
+          xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/gpu_stage4_benchmark.gd 2>&1 | tee stage4-ci/software-30.log
+          grep -q 'PASS: Stage 4 fixed 30-zombie benchmark' stage4-ci/software-30.log
+          if grep -E 'SCRIPT ERROR:|ERROR:' stage4-ci/software-30.log; then exit 1; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gpu-stage4-validation-logs
+          path: stage4-ci/*.log
+          if-no-files-found: warn
