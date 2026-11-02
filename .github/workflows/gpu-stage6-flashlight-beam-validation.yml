@@ -33,11 +33,19 @@ jobs:
         run: |
           set -euo pipefail
           for test in gpu_stage3_test.gd gpu_stage4_test.gd zombie_30_optimization_test.gd \
-            flashlight_visibility_test.gd flashlight_volume_test.gd flashlight_beam_volume_test.gd \
-            flashlight_enemy_reveal_test.gd elevator_loading_test.gd; do
+            flashlight_visibility_test.gd flashlight_enemy_reveal_test.gd elevator_loading_test.gd; do
             godot --headless --path game --script "res://tests/$test" 2>&1 | tee "stage6-ci/check-$test.log"
             grep -q 'PASS:' "stage6-ci/check-$test.log"
             if grep -E 'SCRIPT ERROR:|ERROR:' "stage6-ci/check-$test.log"; then exit 1; fi
+          done
+      - name: Rendered 3D flashlight shader probes
+        run: |
+          set -euo pipefail
+          for test in flashlight_volume_test.gd flashlight_beam_volume_test.gd; do
+            xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game \
+              --script "res://tests/$test" 2>&1 | tee "stage6-ci/render-$test.log"
+            grep -q 'PASS:' "stage6-ci/render-$test.log"
+            if grep -E 'SCRIPT ERROR:|ERROR:' "stage6-ci/render-$test.log"; then exit 1; fi
           done
       - name: Download validated Stage 5 visual baseline
         uses: actions/download-artifact@v4
