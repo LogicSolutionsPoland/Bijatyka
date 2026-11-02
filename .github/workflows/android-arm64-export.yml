@@ -12,6 +12,7 @@ on:
       - .github/workflows/android-arm64-export.yml
   push:
     branches:
+      - build/stage6-android-arm64-20261102
       - codex/arena-map-apk-export-20261025
       - codex/fix-mobile-5fps-20261025
       - codex/mobile-performance-apk-export-20261026
