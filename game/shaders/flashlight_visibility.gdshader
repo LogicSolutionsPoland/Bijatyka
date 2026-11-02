@@ -65,6 +65,11 @@ void fragment() {
 	// This pass only applies the existing surface visibility footprint. The
 	// air beam is made by a handful of depth-tested quads, without marching
 	// eight samples for every screen pixel on a hot mobile GPU.
+	// A fully illuminated fragment has exactly zero blackout alpha. Skip its
+	// blend without changing the soft boundary or the player exemption.
+	if (illuminated_weight >= 1.0) {
+		discard;
+	}
 	ALBEDO = vec3(0.0);
 	ALPHA = 1.0 - illuminated_weight;
 }

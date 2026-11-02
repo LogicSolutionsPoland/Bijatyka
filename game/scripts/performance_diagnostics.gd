@@ -6,6 +6,7 @@ signal scenario_requested(population: int, mode: String)
 signal stop_requested
 signal render_scale_requested(scale: float)
 signal mask_comparison_requested(is_visible: bool)
+signal pencil_comparison_requested(is_visible: bool)
 signal map_comparison_requested(is_visible: bool)
 signal floor_skip_comparison_requested(is_enabled: bool)
 signal floor_detail_comparison_requested(is_fast: bool)
@@ -24,6 +25,8 @@ var _corner_hold := false
 var _corner_hold_elapsed := 0.0
 var _mask_visible := true
 var _mask_button: Button
+var _pencil_visible := true
+var _pencil_button: Button
 var _map_visible := true
 var _map_button: Button
 var _floor_skip_enabled := true
@@ -99,6 +102,10 @@ func _build_ui() -> void:
 	_mask_button.text = "Mask ON"
 	_mask_button.pressed.connect(_toggle_mask_comparison)
 	graphics_row.add_child(_mask_button)
+	_pencil_button = Button.new()
+	_pencil_button.text = "Pencil ON"
+	_pencil_button.pressed.connect(_toggle_pencil_comparison)
+	graphics_row.add_child(_pencil_button)
 	_map_button = Button.new()
 	_map_button.text = "Map ON"
 	_map_button.pressed.connect(_toggle_map_comparison)
@@ -186,6 +193,12 @@ func _toggle_mask_comparison() -> void:
 	_mask_visible = not _mask_visible
 	_mask_button.text = "Mask ON" if _mask_visible else "Mask OFF"
 	mask_comparison_requested.emit(_mask_visible)
+	_update_readout()
+
+func _toggle_pencil_comparison() -> void:
+	_pencil_visible = not _pencil_visible
+	_pencil_button.text = "Pencil ON" if _pencil_visible else "Pencil OFF"
+	pencil_comparison_requested.emit(_pencil_visible)
 	_update_readout()
 
 func _toggle_map_comparison() -> void:

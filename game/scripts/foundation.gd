@@ -77,7 +77,7 @@ var _pending_notice := ""
 var _visibility_timer := 0.0
 var _floor_material: ShaderMaterial
 var _floor_skip_enabled := true
-var _mask_comparison_visible := true
+var _pencil_comparison_visible := true
 var _floor_fast_detail_enabled := false
 var _local_lights_enabled := true
 var _character_shadows_enabled := false
@@ -184,7 +184,7 @@ func _ready() -> void:
 	pencil_screen.set_shader_parameter(&"edge_fade", 0.0)
 	_pencil_screen_pass = camera.get_node_or_null("PencilScreenPass") as MeshInstance3D
 	if is_instance_valid(_pencil_screen_pass):
-		_pencil_screen_pass.visible = not _rooftop_sky_active
+		_pencil_screen_pass.visible = not _rooftop_sky_active and _pencil_comparison_visible
 	_floor_material.set_shader_parameter("player_position", player.global_position)
 	_floor_material.set_shader_parameter("flashlight_forward", flashlight_visibility_manager.aim_direction)
 	SHADOW_POLICY.disable_in_tree(self)
@@ -340,7 +340,7 @@ func _set_rooftop_render_profile(on_roof: bool) -> void:
 	burning_horizon.visible = not on_roof
 	flashlight_visibility_manager.set_rooftop_sky_visible(on_roof)
 	if is_instance_valid(_pencil_screen_pass):
-		_pencil_screen_pass.visible = not on_roof
+		_pencil_screen_pass.visible = not on_roof and _pencil_comparison_visible
 	var style_manager := get_tree().root.get_node_or_null("PencilSketchStyle")
 	if style_manager != null:
 		style_manager.set_gameplay_pencil_enabled(not on_roof)
@@ -1048,6 +1048,7 @@ func _setup_performance_diagnostics() -> void:
 	performance_diagnostics.stop_requested.connect(stop_performance_scenario)
 	performance_diagnostics.render_scale_requested.connect(_set_debug_render_scale)
 	performance_diagnostics.mask_comparison_requested.connect(_set_debug_mask_visible)
+	performance_diagnostics.pencil_comparison_requested.connect(_set_debug_pencil_visible)
 	performance_diagnostics.map_comparison_requested.connect(_set_debug_map_visible)
 	performance_diagnostics.floor_skip_comparison_requested.connect(_set_debug_floor_skip_enabled)
 	performance_diagnostics.floor_detail_comparison_requested.connect(_set_debug_floor_fast_detail_enabled)
@@ -1064,9 +1065,14 @@ func _set_debug_render_scale(scale: float) -> void:
 
 func _set_debug_mask_visible(is_visible: bool) -> void:
 	if OS.is_debug_build() and flashlight_visibility_manager != null:
-		_mask_comparison_visible = is_visible
+		# Leave the floor shader fixed for a one-pass A/B measurement.
 		flashlight_visibility_manager.set_composite_visible_for_comparison(is_visible)
-		_update_floor_skip_enabled()
+
+func _set_debug_pencil_visible(is_visible: bool) -> void:
+	if OS.is_debug_build():
+		_pencil_comparison_visible = is_visible
+		if is_instance_valid(_pencil_screen_pass):
+			_pencil_screen_pass.visible = is_visible and not _rooftop_sky_active
 
 func _set_debug_floor_skip_enabled(is_enabled: bool) -> void:
 	if OS.is_debug_build():
@@ -1098,9 +1104,10 @@ func _set_character_shadow_state(is_enabled: bool) -> void:
 
 func _update_floor_skip_enabled() -> void:
 	if _floor_material != null:
-		# The mask A/B control restores the unmasked ground as well.
+		# Debug mask comparisons change only the fullscreen pass. The separate
+		# Floor skip button still profiles this ground shader independently.
 		_floor_material.set_shader_parameter("floor_skip_enabled",
-			flashlight_visibility_enabled and _mask_comparison_visible and _floor_skip_enabled)
+			flashlight_visibility_enabled and _floor_skip_enabled)
 
 func _set_debug_map_visible(is_visible: bool) -> void:
 	if OS.is_debug_build() and is_instance_valid(arena_map):

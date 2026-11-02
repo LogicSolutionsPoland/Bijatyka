@@ -10,6 +10,20 @@ func _initialize() -> void:
 	call_deferred("_run")
 
 func _run() -> void:
+	# Stage 5 reuses the fixed scene in separate processes for each screen
+	# effect. The optional flag is for comparisons only; Stage 4's default
+	# benchmark remains unchanged.
+	var effect_mode := ""
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--effects="):
+			effect_mode = arg.trim_prefix("--effects=")
+	if not effect_mode.is_empty() and effect_mode not in ["both", "mask", "pencil", "neither"]:
+		push_error("Unknown effect benchmark mode: " + effect_mode)
+		quit(1)
+		return
+	if not effect_mode.is_empty():
+		root.scaling_3d_scale = 0.40
+		Engine.max_fps = 60
 	var world := SCENE.instantiate()
 	root.add_child(world)
 	await process_frame
@@ -17,6 +31,13 @@ func _run() -> void:
 	for visual in world._ground_map_visuals:
 		visual.visible = true
 	world._set_rooftop_render_profile(false)
+	if not effect_mode.is_empty():
+		# Keep the beam, floor shader, lighting, camera, AI, and other graphics
+		# fixed. The profiler's mask button also changes floor skipping, so use
+		# the pass visibility directly for this isolated screen-pass comparison.
+		world._pencil_screen_pass.visible = effect_mode in ["both", "pencil"]
+		world.flashlight_visibility_manager.set_composite_visible_for_comparison(
+			effect_mode in ["both", "mask"])
 	world._ground_map_ready = true
 	world._ground_wave_started = true
 	if not world.start_performance_scenario(30, "concentrated"):
@@ -68,6 +89,12 @@ func _run() -> void:
 		"android_gpu_time": "N/A (device required)",
 	}
 	print("STAGE4_PERFORMANCE_SAMPLE " + JSON.stringify(report))
+	if not effect_mode.is_empty():
+		report["effect_mode"] = effect_mode
+		report["render_scale"] = root.scaling_3d_scale
+		report["fps_cap"] = Engine.max_fps
+		report["floor_skip_enabled"] = world._floor_material.get_shader_parameter("floor_skip_enabled")
+		print("STAGE5_EFFECT_SAMPLE " + JSON.stringify(report))
 	if initial_population != 30 or slots != 30 or ordinary > 30 or \
 		world.horde_far_visuals.get_resident_rig_count() > 7:
 		push_error("Population or rig budget changed during the benchmark")
