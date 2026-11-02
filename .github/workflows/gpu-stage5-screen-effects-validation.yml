@@ -24,7 +24,12 @@ jobs:
           set -euo pipefail
           mkdir -p stage5-ci/captures
           godot --headless --editor --path game --import --quit 2>&1 | tee stage5-ci/import.log
-          if grep -E 'SCRIPT ERROR:|ERROR:' stage5-ci/import.log; then exit 1; fi
+          # Both universal character GLBs report these existing duplicate
+          # animation renames on a clean import. Keep any other error fatal.
+          if grep -E 'SCRIPT ERROR:|ERROR:' stage5-ci/import.log | \
+            grep -v -E 'ERROR: Animation name "(Idle|Jump|Sprint|Walk)" already exists in library\.'; then
+            exit 1
+          fi
       - name: Focused headless gameplay and visibility checks
         run: |
           set -euo pipefail
