@@ -67,7 +67,12 @@ func _run() -> void:
 	world.player.global_position = world.PLAYER_BASE_POSITION
 	check(not world._pencil_screen_pass.visible and not world.flashlight_visibility_manager.spotlight.visible,
 		"roof has neither Pencil Sketch nor flashlight")
+	# Match the profile to the player's floor. Otherwise the normal rooftop
+	# height check reverses the setting on the next frame and this short test
+	# repeatedly creates and releases the GL sky resources during teardown.
+	world.player.global_position = Vector3(0.0, 0.05, -5.2)
 	world._set_rooftop_render_profile(false)
+	await process_frame
 	check(world._pencil_screen_pass.visible and world.flashlight_visibility_manager.spotlight.visible,
 		"ground restores both Pencil Sketch and the full 3D flashlight")
 	var sheets := world.flashlight_visibility_manager.spotlight.get_node_or_null("PlayerFlashlightBeamSheets") as MultiMeshInstance3D
@@ -93,6 +98,7 @@ func _run() -> void:
 	# The autoload intentionally keeps reusable Pencil materials during play.
 	# Restore the roof and release that test-only cache before exiting the
 	# standalone rendered probe, so the OpenGL driver can free its textures.
+	world.player.global_position = world.PLAYER_BASE_POSITION
 	world._set_rooftop_render_profile(true)
 	var style := root.get_node_or_null("PencilSketchStyle")
 	if style != null:
