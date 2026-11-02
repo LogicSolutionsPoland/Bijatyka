@@ -36,6 +36,8 @@ func _run() -> void:
 			shared_mesh = visual.multimesh.mesh
 		check(visual.multimesh.mesh == shared_mesh, "cells reuse one unit box mesh")
 		check(visual.material_override in world._ruin_materials.values(), "cells reuse original ruin materials")
+		check(visual.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF,
+			"courtyard cells retain the static no-shadow policy")
 		if (visual.global_transform * visual.custom_aabb).has_point(Vector3(-12.5, 7.0, -37.0)):
 			skyline_bounds_found = true
 		# The headless dummy RenderingServer does not read back MultiMesh

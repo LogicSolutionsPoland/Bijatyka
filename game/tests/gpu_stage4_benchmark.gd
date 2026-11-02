@@ -23,6 +23,7 @@ func _run() -> void:
 		push_error("Cannot start the fixed 30-zombie scenario")
 		quit(1)
 		return
+	var initial_population: int = world.spawn_director.ordinary_population_count()
 	for frame in range(WARMUP_FRAMES):
 		await process_frame
 	var wall_samples: Array[float] = []
@@ -48,9 +49,15 @@ func _run() -> void:
 	for actor in get_nodes_in_group("enemies"):
 		if actor is FoundationEnemy and not actor.is_boss and actor.hp > 0:
 			ordinary += 1
+	# A zombie killed during the sample can spend a few frames in its death
+	# animation or the concealed replacement queue. Both retain a reserved
+	# population slot, even though the count of living scene actors is 29.
+	var slots: int = world.spawn_director._live.size() + world.spawn_director._dormant_population.size() + \
+		world.spawn_director._pending.size() + world.spawn_director._initial_population_pending
 	var report := {
 		"scenario": "ground_concentrated_30", "samples": SAMPLE_FRAMES,
-		"ordinary_zombies": ordinary,
+		"ordinary_zombies": ordinary, "initial_zombies": initial_population,
+		"reserved_population_slots": slots,
 		"headless_wall_ms_avg": _avg(wall_samples), "headless_wall_ms_p95": _p95(wall_samples),
 		"process_ms_avg": _avg(process_samples), "physics_ms_avg": _avg(physics_samples),
 		"static_memory_mib": snappedf(memory_peak / 1048576.0, 0.1),
@@ -61,7 +68,8 @@ func _run() -> void:
 		"android_gpu_time": "N/A (device required)",
 	}
 	print("STAGE4_PERFORMANCE_SAMPLE " + JSON.stringify(report))
-	if ordinary != 30 or world.horde_far_visuals.get_resident_rig_count() > 7:
+	if initial_population != 30 or slots != 30 or ordinary > 30 or \
+		world.horde_far_visuals.get_resident_rig_count() > 7:
 		push_error("Population or rig budget changed during the benchmark")
 		quit(1)
 		return

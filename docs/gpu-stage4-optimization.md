@@ -23,7 +23,7 @@ Godot 4.7.2 command after `godot --headless --editor --path game --import --quit
 godot --headless --path game --script res://tests/gpu_stage4_benchmark.gd
 ```
 
-The benchmark uses a fixed 30-zombie concentrated ground scene, 90 warmup frames and 180 samples. It prints `STAGE4_PERFORMANCE_SAMPLE`. Desktop software OpenGL uses the same script under `xvfb-run` with `LIBGL_ALWAYS_SOFTWARE=1`, `--rendering-driver opengl3` and dummy audio in GitHub Actions. These are host CPU and software-renderer samples, not Android FPS or GPU time.
+The benchmark starts a fixed 30-zombie concentrated ground scene, warms up for 90 frames and samples 180 frames. It prints `STAGE4_PERFORMANCE_SAMPLE`, including both living actors and reserved population slots: an actor may die during a sample while its animation or concealed replacement reserves its slot. Desktop software OpenGL uses the same script under `xvfb-run` with `LIBGL_ALWAYS_SOFTWARE=1`, `--rendering-driver opengl3` and dummy audio in GitHub Actions. These are host CPU and software-renderer samples, not Android FPS or GPU time.
 
 | Local headless host, one sample | Pre-geometry baseline (array error repaired) | Stage 4 working tree |
 | --- | ---: | ---: |
