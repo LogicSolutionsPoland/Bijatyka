@@ -79,7 +79,13 @@ func _run() -> void:
 		var texture := load(texture_path) as Texture2D
 		var config := ConfigFile.new()
 		check(config.load(texture_path + ".import") == OK, name + " has tracked import settings")
-		check(texture != null and texture.get_image().has_mipmaps(), name + " has distance mipmaps")
+		var has_mipmaps := false
+		if texture != null:
+			# The headless dummy renderer reports no live texture mipmaps;
+			# only read back its CPU image where no GPU exists. The rendered
+			# probe uses the direct property to avoid a GPU synchronization.
+			has_mipmaps = texture.has_mipmaps() if Engine.get_frames_drawn() > 0 else texture.get_image().has_mipmaps()
+		check(has_mipmaps, name + " has distance mipmaps")
 		check(int(config.get_value("params", "compress/mode", -1)) == 2, name + " has VRAM compression")
 	# The autoload intentionally keeps reusable Pencil materials during play.
 	# Restore the roof and release that test-only cache before exiting the
