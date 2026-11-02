@@ -81,8 +81,16 @@ func _run() -> void:
 		check(config.load(texture_path + ".import") == OK, name + " has tracked import settings")
 		check(texture != null and texture.get_image().has_mipmaps(), name + " has distance mipmaps")
 		check(int(config.get_value("params", "compress/mode", -1)) == 2, name + " has VRAM compression")
+	# The autoload intentionally keeps reusable Pencil materials during play.
+	# Restore the roof and release that test-only cache before exiting the
+	# standalone rendered probe, so the OpenGL driver can free its textures.
+	world._set_rooftop_render_profile(true)
+	var style := root.get_node_or_null("PencilSketchStyle")
+	if style != null:
+		style._material_cache.clear()
 	world.queue_free()
-	await process_frame
+	for frame in range(4):
+		await process_frame
 	if failures.is_empty():
 		print("PASS: GPU stage 4 resources and geometry (%d checks; %d boxes in %d cells)" % [checks, instances, batches.size()])
 	else:

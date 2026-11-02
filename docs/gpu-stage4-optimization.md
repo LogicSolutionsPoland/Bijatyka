@@ -36,7 +36,19 @@ The benchmark uses a fixed 30-zombie concentrated ground scene, 90 warmup frames
 | Rendered draw calls / rendered objects | N/A (headless) | N/A (headless) |
 | GPU frame time / Android FPS / Android VRAM | N/A | N/A |
 
-The first uncorrected run at PR #57 logged repeated `SCRIPT ERROR` messages and is **not** a valid performance baseline. The corrected one-run CPU timing differences are small and noisy; they do not establish an Android FPS improvement. The 29-node reduction is deterministic. Software-renderer draw counts and memory are recorded in the Stage 4 workflow logs, and phone GPU measurements remain outstanding.
+The first uncorrected run at PR #57 logged repeated `SCRIPT ERROR` messages and is **not** a valid performance baseline. The corrected one-run CPU timing differences are small and noisy; they do not establish an Android FPS improvement. The 29-node reduction is deterministic.
+
+| GitHub Actions, 180 samples | Corrected baseline `dc321a4` | Stage 4 `2c78b9e` |
+| --- | ---: | ---: |
+| Headless wall interval average / P95, ms | 6.922 / 8.068 | 6.934 / 8.292 |
+| Headless static memory monitor peak, MiB | 144.3 | 139.6 |
+| Desktop software OpenGL wall interval average / P95, ms | 173.840 / 188.549 | 176.172 / 185.696 |
+| Desktop software OpenGL draw calls average | 191.1 | 179.8 |
+| Desktop software OpenGL rendered objects average | 399.0 | 389.7 |
+| Desktop software OpenGL static memory monitor peak, MiB | 70.6 | 70.3 |
+| Android GPU frame time / VRAM / FPS | N/A | N/A |
+
+The baseline [Actions run](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/41374742180) passed. The implementation [Actions run](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/41375075797) passed import, all headless tests and both benchmarks; its final rendered-probe step then reported textures retained by the standalone test's Pencil autoload during process shutdown. Stage 4 test teardown now restores the roof profile and releases its test-only material cache before quitting. A rerun must pass before PR #58 is ready for mobile review. The draw-call reduction is observed on the desktop software renderer; the small timing shifts run in opposite directions and cannot establish Android throughput or thermal gains. Phone GPU measurements remain outstanding.
 
 ## Validation and device checklist
 
