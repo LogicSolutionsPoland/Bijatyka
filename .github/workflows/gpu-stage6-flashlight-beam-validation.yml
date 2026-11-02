@@ -67,6 +67,19 @@ jobs:
           test "$(grep -c 'STAGE6_SPOTLIGHT_SUMMARY' stage6-ci/beam-profile.log)" -eq 1
           grep -q 'PASS: Stage 6 frozen 30-zombie flashlight beam profile' stage6-ci/beam-profile.log
           if grep -E 'SCRIPT ERROR:|ERROR:' stage6-ci/beam-profile.log; then exit 1; fi
+      - name: Paired reference vs zero-alpha beam shader trial
+        env:
+          BIJATYKA_CAPTURE_DIR: ${{ github.workspace }}/stage6-ci/captures
+        run: |
+          set -euo pipefail
+          xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 LP_NUM_THREADS=1 godot --audio-driver Dummy \
+            --rendering-driver opengl3 --path game --script res://tests/gpu_stage6_beam_shader_pair.gd \
+            2>&1 | tee stage6-ci/beam-shader-pair.log
+          test "$(grep -c 'STAGE6_BEAM_SHADER_SAMPLE' stage6-ci/beam-shader-pair.log)" -eq 12
+          test "$(grep -c 'STAGE6_BEAM_SHADER_PAIR' stage6-ci/beam-shader-pair.log)" -eq 3
+          test "$(grep -c 'STAGE6_BEAM_SHADER_SUMMARY' stage6-ci/beam-shader-pair.log)" -eq 1
+          grep -q 'PASS: Stage 6 paired zero-alpha flashlight shader trial' stage6-ci/beam-shader-pair.log
+          if grep -E 'SCRIPT ERROR:|ERROR:' stage6-ci/beam-shader-pair.log; then exit 1; fi
       - name: Compare Stage 5 roof and ground plus beam wall occlusion
         env:
           BIJATYKA_CAPTURE_DIR: ${{ github.workspace }}/stage6-ci/captures

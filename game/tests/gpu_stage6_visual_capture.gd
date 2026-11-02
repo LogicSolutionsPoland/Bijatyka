@@ -68,7 +68,7 @@ func _run() -> void:
 		quit(1)
 		return
 	var camera := game.camera as Camera3D
-	var axis_world := manager.beam_origin + manager.beam_direction * 14.0
+	var axis_world: Vector3 = manager.beam_origin + manager.beam_direction * 14.0
 	var viewport_size := camera.get_viewport().get_visible_rect().size
 	var expected_before := camera.unproject_position(axis_world) * Vector2(root.size) / viewport_size
 	var before_image := root.get_texture().get_image()
