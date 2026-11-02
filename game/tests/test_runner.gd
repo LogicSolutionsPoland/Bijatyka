@@ -184,10 +184,10 @@ func _test_manual_attack_and_hit_window() -> void:
 	_check(player.rage.rage == 3.0, "only a confirmed positive hit increases RAGE")
 	player._update_attack(float(Player.ATTACKS["punch"].active))
 	_check(player.attack_kind == "kick" and player.attack_count == 2 and player.attack_phase == "windup", "buffered kick begins after half a second of fighting")
-	for _frame in range(100):
+	for _frame in range(350):
 		player._update_attack(0.01)
 	await process_frame
-	_check(player.attack_phase == "ready" and player.request_attack("kick") and player.attack_count == 3, "a fresh kick starts immediately after the previous action finishes")
+	_check(player.attack_phase == "ready" and player.request_attack("kick") and player.attack_count == 3, "a fresh kick starts after the complete native-speed previous kick")
 	var rage_before_miss := player.rage.rage
 	target.hp = target.starting_health
 	player._finish_attack()
@@ -700,7 +700,8 @@ func _test_gamepad_controls() -> void:
 		for frame in range(20):
 			hud._process(0.01)
 			player._update_attack(0.01)
-	_check(routed.size() == before_trigger + 11 and player.attack_count == attacks_before_trigger + 11, "held R2 permits ten repeats at the five-per-second cadence")
+	_check(routed.size() == before_trigger + 11 and player.attack_count < attacks_before_trigger + 11 and player._queued_attack_kind == "kick",
+		"held R2 delivers ten repeat inputs while completed kicks retain their native durations")
 	_send_trigger(0.0)
 	hud._process(0.4)
 	_check(routed.size() == before_trigger + 11, "releasing R2 stops repeats")

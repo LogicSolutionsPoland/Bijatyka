@@ -154,7 +154,6 @@ func _check_hit_timing(player: FoundationPlayer, kind: String, side: String) -> 
 	if not player.attack_connected.is_connected(_on_attack_connected):
 		player.attack_connected.connect(_on_attack_connected)
 	var starting_health := enemy.hp
-	var hit_time := float(Player.ATTACKS[kind].windup)
 	player._finish_attack()
 	_check(player.request_attack(kind, side), "%s %s attack starts through its existing input path" % [side, kind])
 	if player.attack_phase == "grapple":
@@ -162,25 +161,41 @@ func _check_hit_timing(player: FoundationPlayer, kind: String, side: String) -> 
 		_check(enemy._player_grapple_owner == player, "victim is held while player reaches for a grab")
 		animator.advance(Player.CHAIN_GRAB_SECONDS)
 		player._update_attack(Player.CHAIN_GRAB_SECONDS)
+	var hit_time := player._exo_kick_impact if kind == "kick" and player._exo_kick_active else float(Player.ATTACKS[kind].windup)
+	var exo_animator := player._exo_overlay._animator as AnimationPlayer
+	exo_animator.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
 	var active_clip := player._active_attack_clip
 	_check(String(active_clip).begins_with("player_ring_reference/") and player._animation_player.current_animation == active_clip, "%s %s selects a player-only ring clip" % [side, kind])
-	_check(is_equal_approx(player._animation_player.get_animation(active_clip).get_marker_time(&"contact"), hit_time), "%s %s variant retains gameplay contact marker" % [side, kind])
-	player._animation_player.advance(hit_time - 0.01)
+	if kind == "kick":
+		_check(hit_time > 0.5 and hit_time < player._exo_kick_duration, "real Exo kick uses original source impact frame")
+	else:
+		_check(is_equal_approx(player._animation_player.get_animation(active_clip).get_marker_time(&"contact"), hit_time), "%s %s variant retains gameplay contact marker" % [side, kind])
+	if kind == "kick":
+		exo_animator.advance(hit_time - 0.01)
+	else:
+		player._animation_player.advance(hit_time - 0.01)
 	player._update_attack(hit_time - 0.01)
 	_check(enemy.hp == starting_health, "%s %s cannot damage before visual contact" % [side, kind])
-	player._animation_player.advance(0.01)
+	if kind == "kick":
+		exo_animator.advance(0.01)
+	else:
+		player._animation_player.advance(0.01)
 	player._update_attack(0.01)
 	_check(player.attack_phase == "active", "%s %s enters active state on the existing windup boundary" % [side, kind])
 	_check(enemy.hp == starting_health - int(Player.ATTACKS[kind].damage), "%s %s gameplay damage resolves on that boundary" % [side, kind])
 	_check(connected_hits.has(kind), "%s %s hit event is emitted on the visual contact marker" % [side, kind])
-	_check(is_equal_approx(player._animation_player.current_animation_position, hit_time), "%s %s playback reaches contact with damage" % [side, kind])
-	player._update_attack(float(Player.ATTACKS[kind].active))
+	var displayed_time := exo_animator.current_animation_position if kind == "kick" else player._animation_player.current_animation_position
+	_check(is_equal_approx(displayed_time, hit_time), "%s %s displayed playback reaches contact with damage" % [side, kind])
+	player._update_attack(Player.EXO_KICK_ACTIVE_SECONDS if kind == "kick" else float(Player.ATTACKS[kind].active))
 	_check(connected_hits.size() == 1, "%s %s applies damage only once" % [side, kind])
 	player._finish_attack()
 	enemy.queue_free()
 	await process_frame
 
 func _check_repeated_strikes(player: FoundationPlayer, kind: String, side: String) -> void:
+	if kind == "kick" and player._exo_overlay != null:
+		_check_native_kick_repeats(player, side)
+		return
 	var animator := player._animation_player
 	var count_before := player.attack_count
 	var observed: Dictionary = {}
@@ -204,6 +219,36 @@ func _check_repeated_strikes(player: FoundationPlayer, kind: String, side: Strin
 	player._update_attack(float(Player.ATTACKS[kind].active))
 	_check(player.attack_phase == "windup" and is_zero_approx(animator.current_animation_position), "%s %s buffered repeat restarts visibly" % [side, kind])
 	player._finish_attack()
+
+# Long original kicks cannot remain compatible with 5 hits/second.
+# Verify five complete native-length animations without impacting fast punches.
+func _check_native_kick_repeats(player: FoundationPlayer, side: String) -> void:
+	var count_before := player.attack_count
+	var seen_variants: Dictionary = {}
+	var overlay := player._exo_overlay as PlayerExoMixamoOverlay
+	var visual := overlay._animator as AnimationPlayer
+	visual.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
+	for strike in range(5):
+		_check(player.request_attack("kick", side), "native %s kick repeat %d accepted" % [side, strike])
+		_check(player.attack_phase == "windup", "each full-speed kick starts at source beginning")
+		var clip_name := String(visual.current_animation).trim_prefix("exo_mixamo/").trim_suffix("_" + side + "_combat")
+		seen_variants[clip_name] = true
+		var native_duration := overlay.strike_duration(clip_name)
+		var impact := overlay.impact_time(clip_name)
+		_check(is_equal_approx(player._exo_kick_duration, native_duration),
+			"gameplay duration equals source clip duration: " + clip_name)
+		_check(is_equal_approx(visual.get_animation(visual.current_animation).length, native_duration),
+			"visual playback retains source length: " + clip_name)
+		_check(is_zero_approx(visual.current_animation_position), "new native kick rewinds to start")
+		player._update_attack(impact)
+		_check(player.attack_phase == "active", "native kick contact at actual source frame")
+		player._update_attack(Player.EXO_KICK_ACTIVE_SECONDS)
+		_check(player.attack_phase == "recovery", "kick waits for natural follow-through")
+		player._update_attack(player.attack_phase_time)
+		_check(player.attack_phase == "ready", "complete kick ends before the next one")
+	_check(player.attack_count == count_before + 5, "five complete kicks are still accepted in sequence")
+	_check(seen_variants.size() >= 2, "native attacks preserve the MMA / roundhouse rotation")
+
 
 func _check_attack_priority(player: FoundationPlayer) -> void:
 	player._play_character_action("Landing", 0.55)

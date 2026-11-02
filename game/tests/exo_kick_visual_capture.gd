@@ -2,19 +2,13 @@ extends SceneTree
 
 ## Visual review of the actual visible Exo Gray 112-bone mesh.
 ## Old contact screenshots reproduce the exact source frame used by the
-## previous percent-based cutter; new ones use the corrected compact clips.
+## previous percent-based cutter; new ones show uncompressed source clips.
 ## No game map, enemy AI or APK export is required.
 
 const PLAYER := preload("res://scripts/player_controller.gd")
 const OUT := "res://../build/exo_kick_comparison"
 const LEGACY_FRACTIONS := {"mma_kick": 0.37, "roundhouse": 0.65, "fly_kick": 0.50}
-const PHASES := {
-	"start": 0.0,
-	"chamber": 0.065,
-	"contact": 0.12,
-	"follow": 0.20,
-	"recovery": 0.32,
-}
+const PHASES := ["start", "chamber", "contact", "follow", "recovery"]
 
 var camera: Camera3D
 var captures := 0
@@ -79,18 +73,26 @@ func _run() -> void:
 					if not overlay.play_strike(clip_name, side):
 						errors += 1
 						continue
-					animator.seek(float(PHASES[phase]), true)
+					var impact := overlay.impact_time(clip_name)
+					var duration := overlay.strike_duration(clip_name)
+					var time := 0.0
+					match phase:
+						"chamber": time = impact * 0.65
+						"contact": time = impact
+						"follow": time = lerpf(impact, duration, 0.25)
+						"recovery": time = duration
+					animator.seek(time, true)
 					await _save("after_%s_%s_%s_%s" % [clip_name, side, view, phase])
 					overlay.stop_clip()
-	# Rapid repeats at 0.2s spacing with a real 0.12s contact pose.
+	# Five complete native-length repeats with the actual source contact pose.
 	_aim("side")
 	for i in range(5):
 		if not overlay.play_strike("mma_kick", "right"):
 			errors += 1
 			continue
-		animator.advance(0.12)
+		animator.advance(overlay.impact_time("mma_kick"))
 		await _save("repeat_%02d_contact" % i)
-		animator.advance(0.08)
+		animator.advance(overlay.strike_duration("mma_kick") - overlay.impact_time("mma_kick"))
 	overlay.stop_clip()
 	player.queue_free()
 	stage.queue_free()

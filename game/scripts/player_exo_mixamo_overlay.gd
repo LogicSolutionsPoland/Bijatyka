@@ -7,8 +7,6 @@ class_name PlayerExoMixamoOverlay
 const DATA := preload("res://scripts/exo_mixamo_data.gd")
 const LIBRARY_NAME := &"exo_mixamo"
 const BLEND_SECONDS := 0.045
-const STRIKE_LENGTH := 0.32
-const STRIKE_CONTACT := 0.12
 const ROLL_VISUAL_DURATION := 0.50
 # Impact frames are selected from actual Exo Gray foot/knee geometry, not guessed
 # percentages of the source animation. Computed once at model initialization.
@@ -27,6 +25,7 @@ var _roll_lift := 0.0
 var _impact_fractions: Dictionary = {}
 var _original_sides: Dictionary = {}
 var _contact_scores: Dictionary = {}
+var _strike_durations: Dictionary = {}
 
 func configure(exo_model: Node3D, skeleton: Skeleton3D, driver: PlayerExoGrayRetarget) -> bool:
 	if exo_model == null or skeleton == null or driver == null or DATA.CLIPS.is_empty():
@@ -83,6 +82,7 @@ func configure(exo_model: Node3D, skeleton: Skeleton3D, driver: PlayerExoGrayRet
 		_original_sides[strike_name] = source_side
 		_impact_fractions[strike_name] = float(analysis["fraction"])
 		_contact_scores[strike_name] = float(analysis["score"])
+		_strike_durations[strike_name] = original.length
 		print("EXO_KICK_ANALYSIS %s source=%s frame=%d impact=%.3fs score=%.3f" % [
 			strike_name, source_side, int(analysis["frame"]),
 			float(analysis["fraction"]) * original.length, float(analysis["score"])])
@@ -95,8 +95,13 @@ func configure(exo_model: Node3D, skeleton: Skeleton3D, driver: PlayerExoGrayRet
 			return false
 		for side in ["left", "right"]:
 			var selected := original if side == source_side else reflected
-			var compact := _bake_strike(selected, float(analysis["fraction"]))
-			if compact == null or library.add_animation(StringName(strike_name + "_" + side + "_combat"), compact) != OK:
+			# Retain the complete, unretimed FBX timeline and all source joint
+			# rotations except a small upper-body balance correction.
+			var full_speed := selected.duplicate(true) as Animation
+			if full_speed == null:
+				return false
+			_stabilize_upper_body(full_speed, float(analysis["fraction"]) * original.length)
+			if library.add_animation(StringName(strike_name + "_" + side + "_combat"), full_speed) != OK:
 				return false
 		# Compatibility alias for existing preview/tests; explicit gameplay
 		# calls always select the anatomically correct left/right variant.
@@ -277,58 +282,34 @@ func authored_side(name: String) -> String:
 	return String(_original_sides.get(name, ""))
 
 
-func _bake_strike(source: Animation, peak_fraction: float) -> Animation:
-	if source == null:
-		return null
-	var clip := Animation.new()
-	clip.length = STRIKE_LENGTH
-	clip.step = 1.0 / 60.0
-	clip.loop_mode = Animation.LOOP_NONE
-	# Impact is at the *actual* damage boundary, not at a late source-frame.
-	# Fast follow-up attacks at 5 Hz still show the kick at t=0.12 s.
-	# Chamber -> extension -> hit -> brief follow-through -> planted recovery.
-	# Do not seek across the entire remaining 2-second spin in 0.15 seconds.
-	var times := [0.0, 0.04, 0.08, STRIKE_CONTACT, 0.16, 0.20, 0.27, STRIKE_LENGTH]
-	var fractions := [0.0, peak_fraction * 0.42, peak_fraction * 0.76, peak_fraction,
-		minf(1.0, peak_fraction + 0.045), minf(1.0, peak_fraction + 0.09),
-		minf(1.0, peak_fraction + 0.15), 0.0]
-	for source_track in range(source.get_track_count()):
-		if source.track_get_type(source_track) != Animation.TYPE_ROTATION_3D:
-			continue
-		var track := clip.add_track(Animation.TYPE_ROTATION_3D)
-		clip.track_set_path(track, source.track_get_path(source_track))
-		clip.track_set_interpolation_type(track, Animation.INTERPOLATION_LINEAR)
-		for i in range(times.size()):
-			var pose := source.rotation_track_interpolate(source_track, source.length * float(fractions[i]))
-			clip.rotation_track_insert_key(track, float(times[i]), pose)
-	_stabilize_upper_body(clip)
-	return clip
+# Full original clip duration and measured contact time; no time compression.
+func impact_time(name: String) -> float:
+	return strike_duration(name) * impact_fraction(name)
+
+func strike_duration(name: String) -> float:
+	return float(_strike_durations.get(name, 0.0))
 
 
-# Mixamo's long kick takes are not authored for a 0.32-second game strike.
-# Repair only the excessive *Spine* pitch; original hips, kicking leg,
-# planted leg and all 19 other tracks remain sourced from the FBX.
-# A single Spine adjustment rotates its upper-body descendants together,
-# preserving their original counterbalancing movement.
-func _stabilize_upper_body(clip: Animation) -> void:
+# Source FBX pitching can fold Exo's upper torso. Keep full clip length,
+# exact 1x source frame times and all 19 other bone rotations unchanged.
+func _stabilize_upper_body(clip: Animation, contact_time: float) -> void:
 	var spine := _skeleton.find_bone("Spine")
 	var head := _skeleton.find_bone("Head")
 	var hips := _skeleton.find_bone("Hips")
-	var parent := _skeleton.get_bone_parent(spine)
-	if spine < 0 or head < 0 or hips < 0 or parent < 0:
+	if spine < 0 or head < 0 or hips < 0:
 		return
+	var parent := _skeleton.get_bone_parent(spine)
 	var spine_track := DATA.BONES.find("Spine")
-	if spine_track < 0 or spine_track >= clip.get_track_count():
+	if parent < 0 or spine_track < 0 or spine_track >= clip.get_track_count():
 		return
 	var saved := _save_pose()
 	for key in range(clip.track_get_key_count(spine_track)):
 		var time := clip.track_get_key_time(spine_track, key)
-		# No correction at the combat stance, and a smooth falloff at exit.
 		var weight := 0.0
-		if time <= STRIKE_CONTACT:
-			weight = clampf((time - 0.015) / (STRIKE_CONTACT - 0.015), 0.0, 1.0)
+		if time <= contact_time:
+			weight = clampf((time - 0.08) / maxf(0.08, contact_time - 0.08), 0.0, 1.0)
 		else:
-			weight = clampf((STRIKE_LENGTH - time) / (STRIKE_LENGTH - STRIKE_CONTACT), 0.0, 1.0)
+			weight = clampf((clip.length - time) / maxf(0.1, clip.length - contact_time), 0.0, 1.0)
 		if weight < 0.01:
 			continue
 		_apply_source_pose(clip, time)
@@ -352,7 +333,7 @@ func _stabilize_upper_body(clip: Animation) -> void:
 func play_strike(name: String, side: String = "right") -> bool:
 	if name not in STRIKE_NAMES or side not in ["left", "right"]:
 		return false
-	return play_clip(name + "_" + side + "_combat", STRIKE_LENGTH)
+	return play_clip(name + "_" + side + "_combat")
 
 func play_ground_roll() -> bool:
 	if not is_instance_valid(_roll_actor) or not _roll_actor.is_on_floor():
@@ -377,7 +358,10 @@ func play_clip(name: String, requested_duration: float = 0.0) -> bool:
 	# still-running clip. At 5 hits/sec the old 0.32s strike would remain in
 	# its recovery phase; force the first frame on every accepted input.
 	var restart_same := _animator.is_playing() and _animator.current_animation == key
-	_animator.play(key, 0.0 if restart_same else BLEND_SECONDS, playback_speed)
+	# A completed full-length strike must restart without a leftover blend
+	# from the rig's previous pose or the previous completed clip.
+	var blend := 0.0 if restart_same or name.ends_with("_combat") else BLEND_SECONDS
+	_animator.play(key, blend, playback_speed)
 	_animator.seek(0.0, true)
 	_animator.advance(0.0)
 	return true

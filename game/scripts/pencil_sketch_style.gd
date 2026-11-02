@@ -38,6 +38,10 @@ func is_gameplay_style_ready() -> bool:
 	return not _gameplay_pencil_enabled or _pending_mesh_queue.is_empty()
 
 
+func get_pending_mesh_count() -> int:
+	return _pending_mesh_queue.size()
+
+
 func _process(_delta: float) -> void:
 	var count := mini(MAX_MESHES_PER_FRAME, _pending_mesh_queue.size())
 	for index in range(count):
