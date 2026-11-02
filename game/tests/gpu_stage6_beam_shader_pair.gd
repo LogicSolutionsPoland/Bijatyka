@@ -4,6 +4,7 @@ extends SceneTree
 
 const SCENE := preload("res://scenes/foundation.tscn")
 const STAGE5_BEAM := preload("res://tests/flashlight_beam_volume_stage5_reference.gdshader")
+const ZERO_ALPHA_TRIAL := preload("res://tests/flashlight_beam_volume_zero_alpha_trial.gdshader")
 const WARMUP_FRAMES := 90
 const SETTLE_FRAMES := 10
 const SAMPLE_FRAMES := 50
@@ -51,6 +52,7 @@ func _run() -> void:
 	var reference_material := live_material.duplicate(true) as ShaderMaterial
 	reference_material.shader = STAGE5_BEAM
 	var trial_material := live_material.duplicate(true) as ShaderMaterial
+	trial_material.shader = ZERO_ALPHA_TRIAL
 	var slots: int = game.spawn_director._live.size() + game.spawn_director._dormant_population.size() + \
 		game.spawn_director._pending.size() + game.spawn_director._initial_population_pending
 	_check(slots == 30, "fixed scene has exactly 30 reserved zombie slots")

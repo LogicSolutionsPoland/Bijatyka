@@ -30,10 +30,6 @@ void fragment() {
 	float core_fade = 1.0 - smoothstep(0.0, 0.42, across_fraction);
 	float shaft = (beam_opacity * side_fade + core_opacity * core_fade)
 		* start_fade * end_fade;
-	// Preserve the output exactly while skipping zero-alpha transparent blends.
-	if (shaft <= 0.0) {
-		discard;
-	}
 	ALBEDO = beam_color;
 	ALPHA = clamp(shaft, 0.0, 0.85);
 }
