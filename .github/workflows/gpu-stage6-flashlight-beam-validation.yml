@@ -39,6 +39,8 @@ jobs:
             if grep -E 'SCRIPT ERROR:|ERROR:' "stage6-ci/check-$test.log"; then exit 1; fi
           done
       - name: Rendered 3D flashlight shader probes
+        env:
+          BIJATYKA_CAPTURE_DIR: ${{ github.workspace }}/stage6-ci/captures
         run: |
           set -euo pipefail
           for test in flashlight_volume_test.gd flashlight_beam_volume_test.gd; do
@@ -46,6 +48,7 @@ jobs:
               --script "res://tests/$test" 2>&1 | tee "stage6-ci/render-$test.log"
             grep -q 'PASS:' "stage6-ci/render-$test.log"
             if grep -E 'SCRIPT ERROR:|ERROR:' "stage6-ci/render-$test.log"; then exit 1; fi
+            if [ "$test" = "flashlight_beam_volume_test.gd" ]; then test "$(grep -c 'STAGE6_BEAM_CAPTURE' "stage6-ci/render-$test.log")" -eq 2; fi
           done
       - name: Download validated Stage 5 visual baseline
         uses: actions/download-artifact@v4

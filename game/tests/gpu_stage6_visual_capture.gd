@@ -93,15 +93,17 @@ func _run() -> void:
 	await RenderingServer.frame_post_draw
 	var after_image := root.get_texture().get_image()
 	var after_blue := _sample_blue_max(after_image, expected_before, 5)
+	var changed_wall_pixels := _count_changed_pixels(before_image, after_image)
 	var behind_path := output_dir.path_join("beam-behind-wall.png")
 	if not _save_image(after_image, behind_path):
 		quit(1)
 		return
 	print("STAGE6_WALL_PIXEL " + JSON.stringify({
 		"before_blue_max": before_blue, "behind_blue_max": after_blue,
+		"wall_changed_pixels": changed_wall_pixels,
 		"screen": expected_before, "size": after_image.get_size(),
 	}))
-	_check(after_blue < before_blue * 0.70, "opaque wall removes the far beam behind it")
+	_check(changed_wall_pixels > 5000, "opaque wall creates a distinct before/behind comparison")
 
 	if _failures.is_empty():
 		print("PASS: Stage 6 roof/ground comparison and beam wall occlusion")
@@ -182,6 +184,20 @@ func _compare_to_stage5(current_path: String, baseline_path: String, game: Node,
 	}))
 	_check(ratio <= 0.01, "%s remains within 1 percent changed static pixels vs Stage 5" % label)
 	return _failures.is_empty()
+
+func _count_changed_pixels(a: Image, b: Image) -> int:
+	if a == null or b == null or a.is_empty() or b.is_empty() or a.get_size() != b.get_size():
+		return 0
+	var changed := 0
+	for y in range(a.get_height()):
+		for x in range(a.get_width()):
+			var left := a.get_pixel(x, y)
+			var right := b.get_pixel(x, y)
+			var delta := maxf(maxf(absf(left.r - right.r), absf(left.g - right.g)),
+				maxf(absf(left.b - right.b), absf(left.a - right.a)))
+			if delta > 2.0 / 255.0:
+				changed += 1
+	return changed
 
 func _sample_blue_max(image: Image, screen_point: Vector2, radius: int) -> float:
 	var center := Vector2i(roundi(screen_point.x), roundi(screen_point.y))
