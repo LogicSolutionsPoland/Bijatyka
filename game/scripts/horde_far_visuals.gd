@@ -172,7 +172,8 @@ func _process(delta: float) -> void:
 		return
 	_refresh_time = 0.0
 	if not is_instance_valid(player):
-		multimesh.visible_instance_count = 0
+		if multimesh.visible_instance_count != 0:
+			multimesh.visible_instance_count = 0
 		_rendered_dormant_count = 0
 		return
 	var count := 0
@@ -208,6 +209,9 @@ func _process(delta: float) -> void:
 		_dormant_visibility_time = 0.0
 		_dormant_lit.clear()
 	if is_instance_valid(dormant_source) and dormant_source.has_method("get_dormant_visual_records"):
+		# Node.call() returns an untyped Array even when the source method has a
+		# typed return value. Assigning it to Array[Dictionary] fails at runtime
+		# every crowd refresh and prevents dormant silhouettes from rendering.
 		var records: Array = dormant_source.call("get_dormant_visual_records")
 		for index in range(records.size()):
 			if count >= multimesh.instance_count:
@@ -237,7 +241,8 @@ func _process(delta: float) -> void:
 				_slot_enemy_ids[count] = slot_id
 			count += 1
 			_rendered_dormant_count += 1
-	multimesh.visible_instance_count = count
+	if multimesh.visible_instance_count != count:
+		multimesh.visible_instance_count = count
 
 func get_visible_dormant_count() -> int:
 	return _rendered_dormant_count

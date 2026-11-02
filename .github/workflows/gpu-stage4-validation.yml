@@ -31,12 +31,34 @@ jobs:
           godot --headless --path game --script res://tests/gpu_stage4_benchmark.gd 2>&1 | tee stage4-ci/headless-30.log
           grep -q 'PASS: Stage 4 fixed 30-zombie benchmark' stage4-ci/headless-30.log
           if grep -E 'SCRIPT ERROR:|ERROR:' stage4-ci/headless-30.log; then exit 1; fi
+      - name: Gameplay, zombie, elevator and GPU invariants
+        run: |
+          set -euo pipefail
+          for test in \
+            gpu_stage4_test.gd gpu_stage3_test.gd full_gameplay_smoke_test.gd \
+            zombie_30_optimization_test.gd dormant_visuals_test.gd \
+            rig_budget_lifecycle_test.gd horde_performance_test.gd \
+            concealed_spawn_test.gd elevator_loading_test.gd \
+            flashlight_visibility_test.gd environment_render_test.gd \
+            burning_horizon_test.gd runtime_creation_test.gd \
+            enemy_attack_animation_test.gd player_animation_test.gd test_runner.gd; do
+            godot --headless --path game --script "res://tests/$test" 2>&1 | tee "stage4-ci/$test.log"
+            grep -q 'PASS:' "stage4-ci/$test.log"
+            if grep -E 'SCRIPT ERROR:|ERROR:' "stage4-ci/$test.log"; then exit 1; fi
+          done
       - name: Fixed 30-zombie baseline or comparison, desktop software OpenGL
         run: |
           set -euo pipefail
           xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/gpu_stage4_benchmark.gd 2>&1 | tee stage4-ci/software-30.log
           grep -q 'PASS: Stage 4 fixed 30-zombie benchmark' stage4-ci/software-30.log
           if grep -E 'SCRIPT ERROR:|ERROR:' stage4-ci/software-30.log; then exit 1; fi
+      - name: Compatibility shader and pixel regressions, desktop software OpenGL
+        run: |
+          set -euo pipefail
+          for test in gpu_stage4_test.gd environment_render_probe.gd flashlight_render_probe.gd flashlight_beam_volume_test.gd flashlight_boss_render_probe.gd; do
+            xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script "res://tests/$test" 2>&1 | tee "stage4-ci/render-$test.log"
+            if grep -E 'SCRIPT ERROR:|ERROR:' "stage4-ci/render-$test.log"; then exit 1; fi
+          done
       - uses: actions/upload-artifact@v4
         if: always()
         with:

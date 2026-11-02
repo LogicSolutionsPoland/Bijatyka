@@ -18,6 +18,11 @@ void vertex() {
 
 void fragment() {
 	float radial = length(radial_uv);
+	// Outside the original circular fade ALPHA was exactly zero. Skip the
+	// remaining shading and transparent blend for the square's empty corners.
+	if (radial >= 1.0) {
+		discard;
+	}
 	float edge = 1.0 - smoothstep(0.78, 1.0, radial);
 	float core = 1.0 - smoothstep(0.0, 0.65, radial);
 	float radial_weight = edge * (0.35 + 0.65 * core);

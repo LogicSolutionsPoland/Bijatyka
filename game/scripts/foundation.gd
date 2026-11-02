@@ -25,6 +25,7 @@ const GROUND_ZOMBIE_HORDE_SIZE := 30
 const ZOMBIE_PERFORMANCE_CAPACITY := 200
 const ZOMBIE_SPAWN_DISTANCE := 50.0
 const VISIBILITY_RADIUS := 30.0
+const COURTYARD_BATCH_CELL_SIZE := 12.0
 # Preserve the 1280x720 Android viewport and native-resolution touch HUD, but
 # render the 3D scene at 40% linear resolution to reduce mobile GPU workload.
 # The debug profiler retains 67% and full 100% comparison presets.
@@ -82,6 +83,7 @@ var _local_lights_enabled := true
 var _character_shadows_enabled := false
 var _ruin_materials: Dictionary = {}
 var _emissive_materials: Dictionary = {}
+var _courtyard_box_batches: Dictionary = {}
 var _boss_enemy: FoundationEnemy
 var _key_light: DirectionalLight3D
 var _high_detail_zombie_sample_assigned := false
@@ -445,6 +447,7 @@ func _build_arena() -> void:
 		var size := Vector3(0.35 + float(index % 3) * 0.12, 0.22 + float(index % 2) * 0.15, 0.48 + float(index % 4) * 0.08)
 		var at := Vector3(cos(angle) * radius, size.y * 0.5, sin(angle) * radius - 5.2)
 		_add_arena_box("CourtyardRubble%d" % index, at, size, rust if index % 2 == 0 else concrete, false, angle)
+	_flush_courtyard_boxes()
 
 func _build_starting_tower() -> void:
 	# Begin gameplay on the enclosed rooftop instead of inside the tower.
@@ -469,20 +472,22 @@ func _build_starting_tower() -> void:
 
 
 func _add_arena_box(label: String, at: Vector3, dimensions: Vector3, material: Material, collidable: bool, yaw: float = 0.0) -> void:
-	var root: Node3D
-	if collidable:
-		var body := StaticBody3D.new()
-		body.collision_layer = 1
-		var collision := CollisionShape3D.new()
-		var shape := BoxShape3D.new()
-		shape.size = dimensions
-		collision.shape = shape
-		collision.position = Vector3.ZERO
-		body.add_child(collision)
-		root = body
-		body.add_to_group("zombie_spawn_occluder")
-	else:
-		root = Node3D.new()
+	if not collidable:
+		_queue_courtyard_box(at, dimensions, material, yaw)
+		if dimensions.y >= 1.0:
+			# Preserve the exact world-space spawn blocker, including the yaw of
+			# non-colliding skyline pieces; only their visual submissions change.
+			var placement := global_transform * Transform3D(Basis(Vector3.UP, yaw), at)
+			_spawn_blockers.append(placement * AABB(-dimensions * 0.5, dimensions))
+		return
+	var root := StaticBody3D.new()
+	root.collision_layer = 1
+	var collision := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = dimensions
+	collision.shape = shape
+	root.add_child(collision)
+	root.add_to_group("zombie_spawn_occluder")
 	root.name = label
 	root.position = at
 	root.rotation.y = yaw
@@ -493,9 +498,56 @@ func _add_arena_box(label: String, at: Vector3, dimensions: Vector3, material: M
 	mesh_instance.material_override = material
 	root.add_child(mesh_instance)
 	add_child(root)
-	if not collidable and dimensions.y >= 1.0:
-		# Non-colliding skyline buildings still cannot contain new enemies.
-		_spawn_blockers.append(root.global_transform * AABB(-dimensions * 0.5, dimensions))
+
+func _queue_courtyard_box(at: Vector3, dimensions: Vector3, material: Material, yaw: float) -> void:
+	# MultiMesh culls as a whole. Keep materials and nearby 12 m cells separate
+	# so an offscreen skyline or rubble cell can still be rejected by the GPU.
+	var cell_x := floori(at.x / COURTYARD_BATCH_CELL_SIZE)
+	var cell_z := floori(at.z / COURTYARD_BATCH_CELL_SIZE)
+	var key := "%d:%d:%d" % [material.get_instance_id(), cell_x, cell_z]
+	var center := Vector3((cell_x + 0.5) * COURTYARD_BATCH_CELL_SIZE, 0.0,
+		(cell_z + 0.5) * COURTYARD_BATCH_CELL_SIZE)
+	var instance := Transform3D(Basis(Vector3.UP, yaw).scaled(dimensions), at - center)
+	var part_bounds := instance * AABB(-Vector3.ONE * 0.5, Vector3.ONE)
+	if not _courtyard_box_batches.has(key):
+		_courtyard_box_batches[key] = {
+			"center": center,
+			"material": material,
+			"transforms": [],
+			"bounds": part_bounds,
+		}
+	var bucket: Dictionary = _courtyard_box_batches[key]
+	var transforms: Array = bucket["transforms"]
+	transforms.append(instance)
+	var bounds: AABB = bucket["bounds"]
+	bucket["bounds"] = bounds.merge(part_bounds)
+
+func _flush_courtyard_boxes() -> void:
+	var unit_box := BoxMesh.new()
+	unit_box.size = Vector3.ONE
+	var keys := _courtyard_box_batches.keys()
+	keys.sort()
+	for index in range(keys.size()):
+		var bucket: Dictionary = _courtyard_box_batches[keys[index]]
+		var transforms: Array = bucket["transforms"]
+		var batch := MultiMesh.new()
+		batch.transform_format = MultiMesh.TRANSFORM_3D
+		batch.mesh = unit_box
+		batch.instance_count = transforms.size()
+		for slot in range(transforms.size()):
+			batch.set_instance_transform(slot, transforms[slot])
+		var visual := MultiMeshInstance3D.new()
+		visual.name = "CourtyardBoxBatch%02d" % index
+		visual.multimesh = batch
+		visual.material_override = bucket["material"]
+		visual.position = bucket["center"]
+		# Headless renderers may return an empty derived MultiMesh AABB. An
+		# explicit bound also includes all rotated, non-uniformly scaled boxes.
+		visual.custom_aabb = bucket["bounds"]
+		visual.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		visual.add_to_group("courtyard_static_batch")
+		add_child(visual)
+	_courtyard_box_batches.clear()
 
 func _add_ground_ring(label: String, at: Vector3, inner_radius: float, outer_radius: float, material: Material) -> void:
 	var ring_instance := MeshInstance3D.new()
@@ -935,6 +987,16 @@ func _apply_distance_visibility(node: Node) -> void:
 	if node.is_in_group("radial_floor"):
 		manages_visibility = true
 		desired_visibility = true
+	elif node is MultiMeshInstance3D and node.is_in_group("courtyard_static_batch"):
+		manages_visibility = true
+		var batch_visual := node as MultiMeshInstance3D
+		var bounds := batch_visual.global_transform * batch_visual.custom_aabb
+		var closest := Vector3(
+			clampf(player.global_position.x, bounds.position.x, bounds.end.x),
+			clampf(player.global_position.y, bounds.position.y, bounds.end.y),
+			clampf(player.global_position.z, bounds.position.z, bounds.end.z)
+		)
+		desired_visibility = closest.distance_squared_to(player.global_position) <= VISIBILITY_RADIUS * VISIBILITY_RADIUS
 	elif node is GeometryInstance3D or node is Label3D:
 		manages_visibility = true
 		desired_visibility = node.global_position.distance_squared_to(player.global_position) <= VISIBILITY_RADIUS * VISIBILITY_RADIUS
