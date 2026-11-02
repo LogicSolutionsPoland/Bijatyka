@@ -38,17 +38,17 @@ The benchmark starts a fixed 30-zombie concentrated ground scene, warms up for 9
 
 The first uncorrected run at PR #57 logged repeated `SCRIPT ERROR` messages and is **not** a valid performance baseline. The corrected one-run CPU timing differences are small and noisy; they do not establish an Android FPS improvement. The 29-node reduction is deterministic.
 
-| GitHub Actions, 180 samples | Corrected baseline `dc321a4` | Stage 4 `2c78b9e` |
+| GitHub Actions, 180 samples | Corrected baseline `dc321a4` | Stage 4 `991634b` |
 | --- | ---: | ---: |
-| Headless wall interval average / P95, ms | 6.922 / 8.068 | 6.934 / 8.292 |
+| Headless wall interval average / P95, ms | 6.922 / 8.068 | 6.930 / 8.340 |
 | Headless static memory monitor peak, MiB | 144.3 | 139.6 |
-| Desktop software OpenGL wall interval average / P95, ms | 173.840 / 188.549 | 176.172 / 185.696 |
+| Desktop software OpenGL wall interval average / P95, ms | 173.840 / 188.549 | 173.418 / 180.014 |
 | Desktop software OpenGL draw calls average | 191.1 | 179.8 |
-| Desktop software OpenGL rendered objects average | 399.0 | 389.7 |
+| Desktop software OpenGL rendered objects average | 399.0 | 389.6 |
 | Desktop software OpenGL static memory monitor peak, MiB | 70.6 | 70.3 |
 | Android GPU frame time / VRAM / FPS | N/A | N/A |
 
-The baseline [Actions run](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/41374742180) passed. The implementation [Actions run](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/41375075797) passed import, all headless tests and both benchmarks; its final rendered-probe step then reported GL textures retained at process shutdown. Restoring the roof and clearing the Pencil test cache in [a follow-up run](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/41375465907), then replacing test-only texture image readbacks in [the next run](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/41376280993), did not remove the shutdown error. The short rendered probe now checks profile toggles at physically matching roof and ground positions, avoiding the normal height rule's immediate reversal; it inspects import configuration and texture existence without separately loading the three source textures. A rerun must pass before PR #58 is ready for mobile review. The draw-call reduction is observed on the desktop software renderer; the timing shifts cannot establish Android throughput or thermal gains. Phone GPU measurements remain outstanding.
+The baseline [Actions run](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/41374742180) and final [Stage 4 run](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/41377072927) passed. Earlier test iterations reported GL textures retained at process shutdown. The short rendered probe had switched to the ground profile while its player remained on the rooftop, allowing the normal height rule to reverse the profile during teardown. The corrected probe changes player floor with each profile, checks the rendered cells, and completes without GL leaks. The 11.3 fewer draw calls per frame (191.1 to 179.8, about 5.9%) and 9.4 fewer rendered objects are desktop software-renderer observations. Host timing is noisy and cannot establish Android throughput or thermal gains. Phone GPU measurements remain outstanding.
 
 ## Validation and device checklist
 
