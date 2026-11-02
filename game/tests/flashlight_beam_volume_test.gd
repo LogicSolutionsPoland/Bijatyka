@@ -49,6 +49,7 @@ func _run() -> void:
 	await RenderingServer.frame_post_draw
 
 	var image := root.get_texture().get_image()
+	_save_stage6_capture(image, "beam-air-before-wall.png")
 	var axis_point := manager.beam_origin + manager.beam_direction * 14.0
 	# The project viewport can differ from the captured root image when the
 	# test sets root.size (notably on software Compatibility rendering).
@@ -76,6 +77,7 @@ func _run() -> void:
 		await process_frame
 	await RenderingServer.frame_post_draw
 	var blocked_image := root.get_texture().get_image()
+	_save_stage6_capture(blocked_image, "beam-air-behind-wall.png")
 	var blocked_blue := _sample_blue_max(blocked_image, beam_screen, 4)
 	print("FLASHLIGHT_WALL_CUTOFF_PIXEL " + JSON.stringify({"before": visible_blue, "after": blocked_blue}))
 	_check(blocked_blue < visible_blue * 0.70, "opaque wall cuts off the far flashlight shaft")
@@ -124,6 +126,16 @@ func _run() -> void:
 			push_error(failure)
 		print("FAIL: visible flashlight air beam (%d failures)" % failures.size())
 	quit(0 if failures.is_empty() else 1)
+
+func _save_stage6_capture(image: Image, filename: String) -> void:
+	var directory := OS.get_environment("BIJATYKA_CAPTURE_DIR")
+	if directory.is_empty():
+		return
+	var path := directory.path_join(filename)
+	var error := image.save_png(path)
+	_check(error == OK, "save Stage 6 beam wall capture %s" % filename)
+	if error == OK:
+		print("STAGE6_BEAM_CAPTURE " + JSON.stringify({"path": path, "size": image.get_size()}))
 
 func _sample_blue_max(image: Image, screen_point: Vector2, radius: int) -> float:
 	var center := Vector2i(roundi(screen_point.x), roundi(screen_point.y))
