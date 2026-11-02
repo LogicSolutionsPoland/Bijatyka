@@ -1,0 +1,39 @@
+name: Import KayKit 1.1 assets
+
+on:
+  push:
+    branches:
+      - codex/kaykit-animations-1-1-assets
+    paths:
+      - .github/workflows/import-kaykit-1-1.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  import-verified-assets:
+    name: Verify and commit 33 free KayKit assets
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout the dedicated import branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Download and check exact file hashes
+        run: python3 tools/import_kaykit_1_1.py
+
+      - name: Commit only the verified assets
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- third_party/kaykit_character_animations_1_1/Animations                      "third_party/kaykit_character_animations_1_1/Mannequin Character"
+          if git diff --cached --quiet; then
+            echo "Assets are already present and verified."
+          else
+            git commit -m "chore(assets): import verified KayKit 1.1 FBX and GLB library"
+            git push origin HEAD:codex/kaykit-animations-1-1-assets
+          fi

@@ -1,0 +1,104 @@
+name: Bijatyka GPU stage 6 flashlight beam profiling
+
+on:
+  push:
+    branches:
+      - perf/gpu-stage6-flashlight-beam-20261102
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  profile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+      - name: Import the Compatibility project
+        run: |
+          set -euo pipefail
+          mkdir -p stage6-ci/captures
+          godot --headless --editor --path game --import --quit 2>&1 | tee stage6-ci/import.log
+          if grep -E 'SCRIPT ERROR:|ERROR:' stage6-ci/import.log | \
+            grep -v -E 'ERROR: Animation name "(Idle|Jump|Sprint|Walk)" already exists in library\.'; then
+            exit 1
+          fi
+      - name: Focused shader, flashlight, zombie, and elevator checks
+        run: |
+          set -euo pipefail
+          for test in gpu_stage3_test.gd gpu_stage4_test.gd zombie_30_optimization_test.gd \
+            flashlight_visibility_test.gd flashlight_enemy_reveal_test.gd elevator_loading_test.gd; do
+            godot --headless --path game --script "res://tests/$test" 2>&1 | tee "stage6-ci/check-$test.log"
+            grep -q 'PASS:' "stage6-ci/check-$test.log"
+            if grep -E 'SCRIPT ERROR:|ERROR:' "stage6-ci/check-$test.log"; then exit 1; fi
+          done
+      - name: Rendered 3D flashlight shader probes
+        env:
+          BIJATYKA_CAPTURE_DIR: ${{ github.workspace }}/stage6-ci/captures
+        run: |
+          set -euo pipefail
+          for test in flashlight_volume_test.gd flashlight_beam_volume_test.gd; do
+            xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game \
+              --script "res://tests/$test" 2>&1 | tee "stage6-ci/render-$test.log"
+            grep -q 'PASS:' "stage6-ci/render-$test.log"
+            if grep -E 'SCRIPT ERROR:|ERROR:' "stage6-ci/render-$test.log"; then exit 1; fi
+            if [ "$test" = "flashlight_beam_volume_test.gd" ]; then test "$(grep -c 'STAGE6_BEAM_CAPTURE' "stage6-ci/render-$test.log")" -eq 2; fi
+          done
+      - name: Download validated Stage 5 visual baseline
+        uses: actions/download-artifact@v4
+        with:
+          name: gpu-stage5-screen-effects-evidence
+          repository: LogicSolutionsPoland/Bijatyka
+          run-id: 41445734781
+          github-token: ${{ github.token }}
+          path: stage6-ci/stage5-baseline
+      - name: Frozen beam and separate spotlight A/B on host software OpenGL
+        run: |
+          set -euo pipefail
+          xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 LP_NUM_THREADS=1 godot --audio-driver Dummy \
+            --rendering-driver opengl3 --path game --script res://tests/gpu_stage6_beam_profile.gd \
+            2>&1 | tee stage6-ci/beam-profile.log
+          test "$(grep -c 'STAGE6_BEAM_SAMPLE' stage6-ci/beam-profile.log)" -eq 36
+          test "$(grep -c 'STAGE6_SPOT_SAMPLE' stage6-ci/beam-profile.log)" -eq 12
+          test "$(grep -c 'STAGE6_BEAM_SUMMARY' stage6-ci/beam-profile.log)" -eq 4
+          test "$(grep -c 'STAGE6_SPOTLIGHT_SUMMARY' stage6-ci/beam-profile.log)" -eq 1
+          grep -q 'PASS: Stage 6 frozen 30-zombie flashlight beam profile' stage6-ci/beam-profile.log
+          if grep -E 'SCRIPT ERROR:|ERROR:' stage6-ci/beam-profile.log; then exit 1; fi
+      - name: Paired reference vs zero-alpha beam shader trial
+        env:
+          BIJATYKA_CAPTURE_DIR: ${{ github.workspace }}/stage6-ci/captures
+        run: |
+          set -euo pipefail
+          xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 LP_NUM_THREADS=1 godot --audio-driver Dummy \
+            --rendering-driver opengl3 --path game --script res://tests/gpu_stage6_beam_shader_pair.gd \
+            2>&1 | tee stage6-ci/beam-shader-pair.log
+          test "$(grep -c 'STAGE6_BEAM_SHADER_SAMPLE' stage6-ci/beam-shader-pair.log)" -eq 12
+          test "$(grep -c 'STAGE6_BEAM_SHADER_PAIR' stage6-ci/beam-shader-pair.log)" -eq 3
+          test "$(grep -c 'STAGE6_BEAM_SHADER_SUMMARY' stage6-ci/beam-shader-pair.log)" -eq 1
+          grep -q 'PASS: Stage 6 paired zero-alpha flashlight shader trial' stage6-ci/beam-shader-pair.log
+          if grep -E 'SCRIPT ERROR:|ERROR:' stage6-ci/beam-shader-pair.log; then exit 1; fi
+      - name: Compare Stage 5 roof and ground plus beam wall occlusion
+        env:
+          BIJATYKA_CAPTURE_DIR: ${{ github.workspace }}/stage6-ci/captures
+          BIJATYKA_STAGE5_CAPTURE_DIR: ${{ github.workspace }}/stage6-ci/stage5-baseline/captures
+        run: |
+          set -euo pipefail
+          xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 LP_NUM_THREADS=1 godot --audio-driver Dummy \
+            --rendering-driver opengl3 --path game --script res://tests/gpu_stage6_visual_capture.gd \
+            2>&1 | tee stage6-ci/visual-comparison.log
+          test "$(grep -c 'STAGE6_VISUAL_CAPTURE' stage6-ci/visual-comparison.log)" -eq 4
+          test "$(grep -c 'STAGE6_BASELINE_IMAGE_COMPARE' stage6-ci/visual-comparison.log)" -eq 2
+          grep -q 'PASS: Stage 6 roof/ground comparison and beam wall occlusion' stage6-ci/visual-comparison.log
+          if grep -E 'SCRIPT ERROR:|ERROR:' stage6-ci/visual-comparison.log; then exit 1; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gpu-stage6-flashlight-beam-evidence
+          path: stage6-ci/
+          if-no-files-found: warn

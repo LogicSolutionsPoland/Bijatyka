@@ -1,0 +1,180 @@
+{
+  "name": "KayKit Character Animations",
+  "version": "1.1",
+  "license": "CC0-1.0",
+  "publisher": "Kay Lousberg",
+  "official_source": "https://kaylousberg.itch.io/kaykit-character-animations",
+  "upstream_binary_mirror": "GeorgeQLe/assets-kaykit-3d-characters",
+  "upstream_commit": "af08a62d3669370ec4636ae6314b38cdcd5dd759",
+  "upstream_path": "assets/kaykit/character-animations-1.1",
+  "uploaded_archive_sha256": "65882f31f905ad2e953819648a59287cdeab8f623908d5ef701971d3758be20f",
+  "file_count": 33,
+  "total_bytes": 42940665,
+  "files": [
+    {
+      "path": "Animations/fbx/Rig_Large/Rig_Large_CombatMelee.fbx",
+      "git_sha1": "641736a92ec3e6daa6709955d68426ceacff87d2",
+      "size": 2673100
+    },
+    {
+      "path": "Animations/fbx/Rig_Large/Rig_Large_General.fbx",
+      "git_sha1": "3177e9582513ef0af5792f757b2db18caef64d70",
+      "size": 1309276
+    },
+    {
+      "path": "Animations/fbx/Rig_Large/Rig_Large_MovementAdvanced.fbx",
+      "git_sha1": "d2166e50e095abc02cf4dc06147d28e0593cbe9e",
+      "size": 1112092
+    },
+    {
+      "path": "Animations/fbx/Rig_Large/Rig_Large_MovementBasic.fbx",
+      "git_sha1": "70679acd0c8dd3a6779c65937af1941518cb3ed0",
+      "size": 884556
+    },
+    {
+      "path": "Animations/fbx/Rig_Large/Rig_Large_Simulation.fbx",
+      "git_sha1": "986a3773a2b30aadec93c101b24e2966f6a8c398",
+      "size": 788140
+    },
+    {
+      "path": "Animations/fbx/Rig_Large/Rig_Large_Special.fbx",
+      "git_sha1": "12e5876696f880b422bc77dc9541faf91d937eb6",
+      "size": 761916
+    },
+    {
+      "path": "Animations/fbx/Rig_Medium/Rig_Medium_CombatMelee.fbx",
+      "git_sha1": "7d2df4fdbd472d9c456145a74c4ed0f4143635aa",
+      "size": 3313740
+    },
+    {
+      "path": "Animations/fbx/Rig_Medium/Rig_Medium_CombatRanged.fbx",
+      "git_sha1": "ccebf7528d11f1f6ef0dd46afeb936f41e8136bd",
+      "size": 3068636
+    },
+    {
+      "path": "Animations/fbx/Rig_Medium/Rig_Medium_General.fbx",
+      "git_sha1": "2abcd06d6df7eda781a726e97fd89db715281c30",
+      "size": 2382700
+    },
+    {
+      "path": "Animations/fbx/Rig_Medium/Rig_Medium_MovementAdvanced.fbx",
+      "git_sha1": "ff188316654191f267475903a8d8e5d9289b1d25",
+      "size": 2062124
+    },
+    {
+      "path": "Animations/fbx/Rig_Medium/Rig_Medium_MovementBasic.fbx",
+      "git_sha1": "afbc67426f531cdda49b7f665f91c2cc7e744fbf",
+      "size": 1821068
+    },
+    {
+      "path": "Animations/fbx/Rig_Medium/Rig_Medium_Simulation.fbx",
+      "git_sha1": "cc6641d380bfb906a85a204cbcd20157bf3ec5dd",
+      "size": 2325724
+    },
+    {
+      "path": "Animations/fbx/Rig_Medium/Rig_Medium_Special.fbx",
+      "git_sha1": "78d8a19f69cd4dbc44a5e3e782148f46c78d4b73",
+      "size": 2502060
+    },
+    {
+      "path": "Animations/fbx/Rig_Medium/Rig_Medium_Tools.fbx",
+      "git_sha1": "72df46850d70c9a95c62395e1a832bf0c04775c0",
+      "size": 4444524
+    },
+    {
+      "path": "Animations/gltf/Rig_Large/Rig_Large_CombatMelee.glb",
+      "git_sha1": "f19c23a9da0030bb2ca5ee48fdc33817b5139214",
+      "size": 1025388
+    },
+    {
+      "path": "Animations/gltf/Rig_Large/Rig_Large_General.glb",
+      "git_sha1": "6a4b23c8289e1bf3b82ad62c5ecb31b78630bcfd",
+      "size": 700336
+    },
+    {
+      "path": "Animations/gltf/Rig_Large/Rig_Large_MovementAdvanced.glb",
+      "git_sha1": "b7e01649483b9080769d0e95dfbea2e16f32c704",
+      "size": 601624
+    },
+    {
+      "path": "Animations/gltf/Rig_Large/Rig_Large_MovementBasic.glb",
+      "git_sha1": "f1f9df3f11523c6c92e8c6bb52b9f906686204a3",
+      "size": 584676
+    },
+    {
+      "path": "Animations/gltf/Rig_Large/Rig_Large_Simulation.glb",
+      "git_sha1": "ed6dc6f100b45e30a8ac9f2bde72fe5dac7595cc",
+      "size": 589952
+    },
+    {
+      "path": "Animations/gltf/Rig_Large/Rig_Large_Special.glb",
+      "git_sha1": "10f7465f487a5d63d36e9ecb80e7bb4910960799",
+      "size": 575264
+    },
+    {
+      "path": "Animations/gltf/Rig_Medium/Rig_Medium_CombatMelee.glb",
+      "git_sha1": "0ab63f221ca5d5c7c485a245199fb6107f1f3764",
+      "size": 999416
+    },
+    {
+      "path": "Animations/gltf/Rig_Medium/Rig_Medium_CombatRanged.glb",
+      "git_sha1": "df56bad0071108e4d735771483233aa4fc85456c",
+      "size": 1014852
+    },
+    {
+      "path": "Animations/gltf/Rig_Medium/Rig_Medium_General.glb",
+      "git_sha1": "5d16cb6815fc8371705147188813f851c10ba26a",
+      "size": 828240
+    },
+    {
+      "path": "Animations/gltf/Rig_Medium/Rig_Medium_MovementAdvanced.glb",
+      "git_sha1": "f3ea309627f3ad76b92b85877ebc46f945cd4f1d",
+      "size": 719628
+    },
+    {
+      "path": "Animations/gltf/Rig_Medium/Rig_Medium_MovementBasic.glb",
+      "git_sha1": "98e965e886ec539e80f8984a77a29b0c1c02e5e5",
+      "size": 689624
+    },
+    {
+      "path": "Animations/gltf/Rig_Medium/Rig_Medium_Simulation.glb",
+      "git_sha1": "c64056cda5d2fca14ecb3b61d02d9dde56d1b401",
+      "size": 855904
+    },
+    {
+      "path": "Animations/gltf/Rig_Medium/Rig_Medium_Special.glb",
+      "git_sha1": "4c2277dee56909c52800430f0a0daa419fe58654",
+      "size": 924308
+    },
+    {
+      "path": "Animations/gltf/Rig_Medium/Rig_Medium_Tools.glb",
+      "git_sha1": "bc9db031f6608ce4b5e2b1c07f3cfae0c9b152a3",
+      "size": 1461204
+    },
+    {
+      "path": "Mannequin Character/characters/Mannequin_Large.fbx",
+      "git_sha1": "97d55edcd8ff0214e5c0ce8d46ed32d2329f503c",
+      "size": 513836
+    },
+    {
+      "path": "Mannequin Character/characters/Mannequin_Large.glb",
+      "git_sha1": "c332cd774562dc053aa93c450fe0eb618a73c213",
+      "size": 541784
+    },
+    {
+      "path": "Mannequin Character/characters/Mannequin_Medium.fbx",
+      "git_sha1": "99f03d450442fd0f7ef54c2907c267b4957eda9f",
+      "size": 426812
+    },
+    {
+      "path": "Mannequin Character/characters/Mannequin_Medium.glb",
+      "git_sha1": "c15d93a623acde4c08862290f4465bb994506fd8",
+      "size": 420044
+    },
+    {
+      "path": "Mannequin Character/Textures/mannequin_texture.png",
+      "git_sha1": "d9f5ae836be8ab2988a2d26e33b47ee47a7a181a",
+      "size": 18117
+    }
+  ]
+}

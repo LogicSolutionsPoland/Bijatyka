@@ -1,0 +1,60 @@
+name: Elevator call ground loading - Godot checks (no APK)
+
+on:
+  push:
+    branches:
+      - feat/elevator-call-loading-screen-20261031
+    paths:
+      - game/**
+      - .github/workflows/elevator-loading-validation.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  elevator-loading:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Godot 4.7.2
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+
+      - name: Import and compile all game scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --editor --path game --import --quit 2>&1 | tee import.log
+          if grep -E 'SCRIPT ERROR:|Parse Error:|ERROR: Failed to load' import.log; then exit 1; fi
+
+      - name: Exercise lift call, shader warmup, ground arrival and respawn
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path game --script res://tests/elevator_loading_test.gd 2>&1 | tee elevator-loading.log
+          grep -q 'PASS: elevator call loading and ground GPU warmup' elevator-loading.log
+          if grep -E 'SCRIPT ERROR:|Parse Error:|ERROR:' elevator-loading.log; then exit 1; fi
+
+      - name: Core gameplay regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path game --script res://tests/test_runner.gd 2>&1 | tee core-tests.log
+          grep -q 'PASS:' core-tests.log
+          if grep -E 'SCRIPT ERROR:|Parse Error:|ERROR:' core-tests.log; then exit 1; fi
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: elevator-loading-validation-logs
+          path: |
+            import.log
+            elevator-loading.log
+            core-tests.log
+          if-no-files-found: warn
