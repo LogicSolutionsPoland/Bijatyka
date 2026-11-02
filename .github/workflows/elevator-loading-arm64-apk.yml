@@ -1,0 +1,92 @@
+name: Bijatyka elevator-loading Android ARM64 APK
+
+on:
+  push:
+    branches:
+      - feat/elevator-call-loading-screen-20261031
+    paths:
+      - .github/workflows/elevator-loading-arm64-apk.yml
+      - game/**
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-elevator-arm64:
+    name: Export and publish direct APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - name: Check out tested elevator-loading branch
+        uses: actions/checkout@v4
+
+      - name: Install Godot 4.7.2 and Android export templates
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: true
+
+      - name: Import project and compile scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --editor --path game --import --quit 2>&1 | tee "$RUNNER_TEMP/import.log"
+          if grep -E 'SCRIPT ERROR:|Parse Error:|ERROR: Failed to load' "$RUNNER_TEMP/import.log"; then exit 1; fi
+
+      - name: Verify loading screen and elevator
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path game --script res://tests/elevator_loading_test.gd 2>&1 | tee "$RUNNER_TEMP/elevator.log"
+          grep -q 'PASS: elevator call loading and ground GPU warmup' "$RUNNER_TEMP/elevator.log"
+          if grep -E 'SCRIPT ERROR:|Parse Error:' "$RUNNER_TEMP/elevator.log"; then exit 1; fi
+
+      - name: Export Android ARM64 debug APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          godot --headless --path game --export-debug "Android ARM64" "$GITHUB_WORKSPACE/build/Bijatyka-elevator-loading-arm64.apk" 2>&1 | tee "$RUNNER_TEMP/export.log"
+          if grep -E 'SCRIPT ERROR:|Parse Error:|ERROR:' "$RUNNER_TEMP/export.log"; then exit 1; fi
+          test -s build/Bijatyka-elevator-loading-arm64.apk
+
+      - name: Verify ARM64 architecture and new loading scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=build/Bijatyka-elevator-loading-arm64.apk
+          unzip -tqq "$apk"
+          unzip -Z1 "$apk" > "$RUNNER_TEMP/apk-files.txt"
+          grep -Fxq 'lib/arm64-v8a/libgodot_android.so' "$RUNNER_TEMP/apk-files.txt"
+          grep -Fxq 'assets/scripts/ground_loading_coordinator.gdc' "$RUNNER_TEMP/apk-files.txt"
+          grep -Fxq 'assets/scripts/ground_loading_screen.gdc' "$RUNNER_TEMP/apk-files.txt"
+          grep -Fxq 'assets/scenes/foundation.tscn.remap' "$RUNNER_TEMP/apk-files.txt"
+          if grep -Eq '^lib/(armeabi-v7a|x86|x86_64)/' "$RUNNER_TEMP/apk-files.txt"; then exit 1; fi
+          sha256sum "$apk" | tee build/Bijatyka-elevator-loading-arm64.sha256
+
+      - name: Upload APK as CI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bijatyka-elevator-loading-arm64
+          path: |
+            build/Bijatyka-elevator-loading-arm64.apk
+            build/Bijatyka-elevator-loading-arm64.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish prerelease with directly downloadable APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="bijatyka-elevator-loading-20261031"
+          gh release create "$tag" \
+            build/Bijatyka-elevator-loading-arm64.apk \
+            build/Bijatyka-elevator-loading-arm64.sha256 \
+            --target "$GITHUB_SHA" \
+            --title "Bijatyka - elevator loading Android ARM64" \
+            --notes "Debug Android ARM64 build from feat/elevator-call-loading-screen-20261031. Includes Exo Gray native-speed kick timing and ground-floor loading screen with GPU warmup triggered by lift call. This is an experimental prerelease; verify real FPS on your device." \
+            --prerelease
