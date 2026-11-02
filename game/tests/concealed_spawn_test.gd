@@ -342,7 +342,7 @@ func _test_elevator_ground_wave() -> void:
 		and elevator._car_enclosure.visible and not elevator._ground_floor_ready
 		and map_batch_count > 0, "downward ride starts staged map preparation inside the closed car")
 	arena._apply_camera_look(0.1, 0.0)
-	check(arena._ground_map_visual_index == 0 and director._live.is_empty(),
+	check(arena._ground_loading_coordinator._visual_index == 0 and director._live.is_empty(),
 		"camera look cannot trigger map setup or zombie activation")
 	director._physics_process(1.0)
 	check(elevator._travelling and director.ordinary_population_count() == 4
