@@ -3,8 +3,13 @@ extends Node3D
 
 const RUIN_SURFACE_SHADER := preload("res://shaders/ruined_surface.gdshader")
 const DEAD_TREE_1 := preload("res://assets/environment/nature/DeadTree_1.gltf")
+const DEAD_TREE_2 := preload("res://assets/environment/nature/DeadTree_2.gltf")
 const DEAD_TREE_3 := preload("res://assets/environment/nature/DeadTree_3.gltf")
+const DEAD_TREE_4 := preload("res://assets/environment/nature/DeadTree_4.gltf")
+const DEAD_TREE_5 := preload("res://assets/environment/nature/DeadTree_5.gltf")
 const ROCK_MEDIUM_1 := preload("res://assets/environment/nature/Rock_Medium_1.gltf")
+const ROCK_MEDIUM_2 := preload("res://assets/environment/nature/Rock_Medium_2.gltf")
+const ROCK_MEDIUM_3 := preload("res://assets/environment/nature/Rock_Medium_3.gltf")
 const BUSH_COMMON := preload("res://assets/environment/nature/Bush_Common.gltf")
 var _static_box_batches: Dictionary = {}
 var collision_bounds: Array[AABB] = []
@@ -55,6 +60,24 @@ func _build_nature() -> void:
 		_nature_transform(-74.0, 63.0, -63.0, 0.59),
 		_nature_transform(48.0, -72.0, 115.0, 0.54),
 	])
+	_add_nature_batch("DeadTreesGnarled", DEAD_TREE_2, [
+		_nature_transform(-87.0, -48.0, 22.0, 0.76),
+		_nature_transform(87.0, 48.0, 79.0, 0.71),
+		_nature_transform(-86.0, 62.0, -35.0, 0.74),
+		_nature_transform(86.0, -63.0, 148.0, 0.77),
+	])
+	_add_nature_batch("DeadTreesBroken", DEAD_TREE_4, [
+		_nature_transform(-88.0, 30.0, -18.0, 0.73),
+		_nature_transform(88.0, -30.0, 161.0, 0.69),
+		_nature_transform(-46.0, -86.0, 48.0, 0.74),
+		_nature_transform(47.0, 86.0, -44.0, 0.72),
+	])
+	_add_nature_batch("DeadTreesSplit", DEAD_TREE_5, [
+		_nature_transform(-89.0, -8.0, 8.0, 0.70),
+		_nature_transform(89.0, 10.0, 132.0, 0.73),
+		_nature_transform(-17.0, -87.0, -26.0, 0.74),
+		_nature_transform(17.0, 87.0, 84.0, 0.71),
+	])
 	_add_nature_batch("RoadsideRocks", ROCK_MEDIUM_1, [
 		_nature_transform(-19.0, 8.5, 12.0, 0.70),
 		_nature_transform(20.0, 10.0, 58.0, 0.65),
@@ -68,6 +91,26 @@ func _build_nature() -> void:
 		_nature_transform(60.0, 73.0, 80.0, 0.64),
 		_nature_transform(-35.0, 47.0, -17.0, 0.62),
 		_nature_transform(84.0, 8.0, 120.0, 0.68),
+	])
+	_add_nature_batch("RoadsideRocksAngular", ROCK_MEDIUM_2, [
+		_nature_transform(-38.0, -63.0, 12.0, 0.78),
+		_nature_transform(38.0, -63.0, 44.0, 0.73),
+		_nature_transform(-38.0, 55.0, -31.0, 0.82),
+		_nature_transform(38.0, 55.0, 127.0, 0.76),
+		_nature_transform(-82.0, -29.0, 59.0, 0.71),
+		_nature_transform(82.0, 29.0, -14.0, 0.79),
+		_nature_transform(-21.0, 82.0, 91.0, 0.75),
+		_nature_transform(21.0, -82.0, 157.0, 0.80),
+	])
+	_add_nature_batch("RoadsideRocksFlat", ROCK_MEDIUM_3, [
+		_nature_transform(-38.0, -46.0, 31.0, 0.92),
+		_nature_transform(38.0, -46.0, -52.0, 0.86),
+		_nature_transform(-38.0, 38.0, 113.0, 0.89),
+		_nature_transform(38.0, 38.0, 56.0, 0.94),
+		_nature_transform(-80.0, 48.0, -18.0, 0.85),
+		_nature_transform(80.0, -48.0, 129.0, 0.90),
+		_nature_transform(-67.0, -83.0, 43.0, 0.88),
+		_nature_transform(68.0, 83.0, -74.0, 0.91),
 	])
 	_add_nature_batch("OvergrownShrubs", BUSH_COMMON, [
 		_nature_transform(-19.2, 10.0, 0.0, 0.78),

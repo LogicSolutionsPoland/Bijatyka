@@ -47,7 +47,7 @@ func _run() -> void:
 			_check(nature.multimesh.mesh != null and nature.multimesh.mesh.get_surface_count() > 0, "nature uses imported meshes")
 			_check(nature.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "nature casts no shadows")
 	_check(district_batches > 7 and district_boxes > 500, "expanded city adds spatially batched streets and ruins")
-	_check(nature_batches == 4 and nature_instances == 34, "dead vegetation covers the wider district in four mesh batches")
+	_check(nature_batches == 9 and nature_instances == 62, "nine Zasoby nature models cover the wider district in batched instances")
 	var obstacle_bounds: Array[AABB] = district.get("collision_bounds")
 	_check(obstacle_bounds.size() == 32, "sixteen building cores and sixteen wrecks are physical cover")
 	_check(game._spawn_blockers.size() == 67, "city cover is registered before zombie spawning")
