@@ -1,0 +1,42 @@
+name: Bijatyka local AI Director validation
+
+on:
+  push:
+    branches:
+      - feat/local-ai-director-20-zombies-20261103
+  pull_request:
+    branches:
+      - feat/ruined-city-map-20261103
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+      - name: Import game and scripts
+        run: |
+          set -o pipefail
+          godot --headless --editor --path game --import --quit 2>&1 | tee import.log
+          if grep -E 'SCRIPT ERROR:|ERROR: Failed to load' import.log; then exit 1; fi
+      - name: Director, gameplay, spawn, dormancy and elevator regression
+        run: |
+          set -euo pipefail
+          for test in ai_director_test.gd test_runner.gd concealed_spawn_test.gd zombie_30_optimization_test.gd dormant_visuals_test.gd elevator_loading_test.gd full_gameplay_smoke_test.gd; do
+            godot --headless --path game --script "res://tests/$test" 2>&1 | tee "$test.log"
+            grep -q 'PASS:' "$test.log"
+            if grep -E 'SCRIPT ERROR:|ERROR:' "$test.log"; then exit 1; fi
+          done
+      - name: Ten-second scene smoke
+        run: |
+          set -o pipefail
+          godot --headless --fixed-fps 60 --path game --quit-after 600 2>&1 | tee scene.log
+          if grep -E 'SCRIPT ERROR:|ERROR:' scene.log; then exit 1; fi
