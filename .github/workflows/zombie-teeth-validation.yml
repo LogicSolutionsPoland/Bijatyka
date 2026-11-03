@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - codex/zombie-teeth-flashlight-plus5m-sides3m-20261027
+      - feat/zombie-teeth-hidden-in-beam-20261103
   workflow_dispatch:
 
 permissions:

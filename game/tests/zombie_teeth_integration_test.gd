@@ -52,7 +52,21 @@ func _run() -> void:
 
 	enemy.position.z = -20.0
 	manager._update_distant_teeth()
-	_check(_glint_count(manager) == 1, "zombie inside the normal flashlight range glints")
+	_check(_glint_count(manager) == 1, "zombie beyond the 10 m flashlight range still glints")
+
+	enemy.position = Vector3(0.0, 0.0, -5.0)
+	manager._update_distant_teeth()
+	_check(_glint_count(manager) == 0, "facing zombie inside the 3D flashlight beam has no screen-space glint")
+
+	enemy.position = Vector3(5.0, 0.0, -8.0)
+	manager._update_distant_teeth()
+	_check(_glint_count(manager) == 1, "facing zombie beside the beam but within 10 m still glints")
+
+	manager.set_rooftop_sky_visible(true)
+	manager._update_distant_teeth()
+	_check(_glint_count(manager) == 0, "rooftop still suppresses all tooth glints")
+	manager.set_rooftop_sky_visible(false)
+	enemy.position = Vector3(0.0, 0.0, -20.0)
 
 	enemy.is_boss = true
 	manager._update_distant_teeth()
