@@ -93,10 +93,10 @@ func _build_nature() -> void:
 		_nature_transform(84.0, 8.0, 120.0, 0.68),
 	])
 	_add_nature_batch("RoadsideRocksAngular", ROCK_MEDIUM_2, [
-		_nature_transform(-38.0, -63.0, 12.0, 0.78),
-		_nature_transform(38.0, -63.0, 44.0, 0.73),
-		_nature_transform(-38.0, 55.0, -31.0, 0.82),
-		_nature_transform(38.0, 55.0, 127.0, 0.76),
+		_nature_transform(-38.0, -70.0, 12.0, 0.78),
+		_nature_transform(38.0, -70.0, 44.0, 0.73),
+		_nature_transform(-38.0, 46.0, -31.0, 0.82),
+		_nature_transform(38.0, 46.0, 127.0, 0.76),
 		_nature_transform(-82.0, -29.0, 59.0, 0.71),
 		_nature_transform(82.0, 29.0, -14.0, 0.79),
 		_nature_transform(-21.0, 82.0, 91.0, 0.75),
