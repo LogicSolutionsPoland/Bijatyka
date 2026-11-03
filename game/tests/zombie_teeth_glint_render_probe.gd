@@ -18,9 +18,9 @@ func _run() -> void:
 	_check(manager != null and is_instance_valid(manager._teeth_overlay), "tooth overlay exists in gameplay")
 	_check(manager._teeth_canvas.layer == 0, "tooth overlay draws on its own CanvasLayer")
 	# The rooftop intentionally disables flashlight and glints. Sample the
-	# ground profile, where the overlay must draw over the darkness mask. Freeze
-	# the rooftop controller so it cannot switch the profile back next frame.
-	game.set_process(false)
+	# ground profile, where the overlay must draw over the darkness mask. Moving
+	# the player below the tower keeps the live rooftop controller in that mode.
+	game.player.global_position.y = 0.0
 	game._set_rooftop_render_profile(false)
 	# Isolate the glint from bright skyline pixels in this rooftop camera pose.
 	game.burning_horizon.visible = false
