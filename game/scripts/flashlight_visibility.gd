@@ -16,8 +16,8 @@ const VISIBILITY_SHADER := preload("res://shaders/flashlight_visibility.gdshader
 const BEAM_VOLUME_SHADER := preload("res://shaders/flashlight_beam_volume.gdshader")
 const BEAM_SECTIONS_SHADER := preload("res://shaders/flashlight_beam_sections.gdshader")
 const DISTANT_TEETH_OVERLAY := preload("res://scripts/distant_zombie_teeth.gd")
-const MAX_RADIUS := 30.0
-const BRIGHT_RADIUS := 22.0
+const MAX_RADIUS := 10.0
+const BRIGHT_RADIUS := 7.333333
 const CLOSE_COMBAT_RADIUS := FoundationEnemy.DETAILED_RADIUS
 const SECTOR_HYSTERESIS_METERS := 0.65
 const CLASSIFICATION_INTERVAL := 0.12
@@ -200,6 +200,8 @@ func _build_composite() -> void:
 	_material.set_shader_parameter("oval_center_uv", OVAL_CENTER_UV)
 	_material.set_shader_parameter("oval_radius_uv", OVAL_RADIUS_UV)
 	_material.set_shader_parameter("oval_feather", OVAL_FEATHER)
+	_material.set_shader_parameter("bright_radius", BRIGHT_RADIUS)
+	_material.set_shader_parameter("max_radius", MAX_RADIUS)
 	_composite = MeshInstance3D.new()
 	_composite.name = "FlashlightVisibilityComposite"
 	_composite.add_to_group("flashlight_visibility_composite")
@@ -267,7 +269,7 @@ func _build_visible_beam_volume() -> void:
 	sheets.multimesh = instances
 	sheets.material_override = material
 	sheets.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	# All three sheets occupy a cone from z=0 to z=-30 in spotlight space.
+	# All three sheets occupy a cone from z=0 to z=-MAX_RADIUS in spotlight space.
 	# Include the shader-expanded radii for conservative whole-batch culling.
 	var maximum_width := maxf(0.32, MAX_RADIUS * BEAM_TANGENT)
 	sheets.custom_aabb = AABB(
@@ -283,7 +285,7 @@ func _build_visible_beam_sections() -> void:
 	material.set_shader_parameter("beam_color", Color(0.61, 0.80, 1.0))
 	material.set_shader_parameter("section_opacity", 0.16)
 	material.set_shader_parameter("beam_range", MAX_RADIUS)
-	material.set_shader_parameter("fade_end_start", 24.0)
+	material.set_shader_parameter("fade_end_start", MAX_RADIUS * 0.8)
 
 	# Camera-facing sections expose scattering from the third-person view,
 	# which follows the beam and sees longitudinal sheets nearly edge-on.
@@ -292,7 +294,7 @@ func _build_visible_beam_sections() -> void:
 	var indices := PackedInt32Array()
 	# Spend the same seven depth-tested sections closer to the player, where
 	# the rooftop view previously showed only the distant part past the rail.
-	for distance in [2.0, 3.5, 5.5, 8.5, 13.0, 20.0, 27.0]:
+	for distance in [0.7, 1.2, 1.8, 2.8, 4.3, 6.7, 9.0]:
 		var radius: float = float(distance) * BEAM_TANGENT
 		var base := vertices.size()
 		vertices.append_array(PackedVector3Array([
@@ -325,8 +327,8 @@ func _build_visible_beam_sections() -> void:
 	sections.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var maximum_width := MAX_RADIUS * BEAM_TANGENT
 	sections.custom_aabb = AABB(
-		Vector3(-maximum_width, -maximum_width, -MAX_RADIUS + 1.9),
-		Vector3(maximum_width * 2.0, maximum_width * 2.0, MAX_RADIUS - 3.9)
+		Vector3(-maximum_width, -maximum_width, -MAX_RADIUS),
+		Vector3(maximum_width * 2.0, maximum_width * 2.0, MAX_RADIUS)
 	)
 	spotlight.add_child(sections)
 

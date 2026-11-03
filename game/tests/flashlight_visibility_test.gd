@@ -28,14 +28,16 @@ func _run() -> void:
 	manager.set_aim_yaw(0.0)
 	_check(manager.is_point_in_sector(game.player.global_position + Vector3(0, 0, -10)), "forward point is inside the 180-degree sector")
 	_check(not manager.is_point_in_sector(game.player.global_position + Vector3(0, 0, 10)), "rear point is outside the 180-degree sector")
-	_check(not manager.is_point_in_sector(game.player.global_position + Vector3(0, 0, 31)), "visibility never extends beyond the 30 m radius")
+	_check(not manager.is_point_in_sector(game.player.global_position + Vector3(0, 0, 31)), "rear point remains outside the forward flashlight sector")
 	_check(manager.is_point_in_sector(game.player.global_position + Vector3(0, 0, 0.3), 0.65), "sector hysteresis holds a recently visible actor near the boundary")
-	_check(is_equal_approx(manager.get_radial_weight(22.0), 1.0), "illumination stays bright through 22 m")
-	_check(manager.get_radial_weight(26.0) > 0.0 and manager.get_radial_weight(26.0) < 1.0, "outer 22–30 m band fades smoothly")
-	_check(is_zero_approx(manager.get_radial_weight(30.0)), "illumination reaches black at 30 m")
-	# Tooth glints are independent of flashlight aim/range; the world mask is unchanged.
+	_check(is_equal_approx(manager.get_radial_weight(VisibilityManager.BRIGHT_RADIUS), 1.0), "illumination stays bright through 7.33 m")
+	_check(manager.get_radial_weight((VisibilityManager.BRIGHT_RADIUS + VisibilityManager.MAX_RADIUS) * 0.5) > 0.0 and manager.get_radial_weight((VisibilityManager.BRIGHT_RADIUS + VisibilityManager.MAX_RADIUS) * 0.5) < 1.0, "outer 7.33–10 m band fades smoothly")
+	_check(is_zero_approx(manager.get_radial_weight(VisibilityManager.MAX_RADIUS)), "illumination reaches black at 10 m")
+	# Rooftop glints stay off; ground-floor glints remain independent of beam aim and range.
 	var base_position: Vector3 = game.player.global_position
-	_check(manager.get_teeth_glow_weight(base_position + Vector3(0, 0, -15)) > 0.99, "teeth glint in the normal flashlight range")
+	_check(is_zero_approx(manager.get_teeth_glow_weight(base_position + Vector3(0, 0, -15))), "rooftop keeps tooth glints off")
+	game._set_rooftop_render_profile(false)
+	_check(manager.get_teeth_glow_weight(base_position + Vector3(0, 0, -15)) > 0.99, "teeth remain visible beyond the new 10 m flashlight range")
 	_check(manager.get_teeth_glow_weight(base_position + Vector3(0, 0, -34)) > 0.99, "teeth remain visible outside the flashlight beam")
 	_check(manager.get_teeth_glow_weight(base_position + Vector3(0, 0, -35)) > 0.99, "teeth do not stop at the former forward boundary")
 	_check(manager.get_teeth_glow_weight(base_position + Vector3(0, 0, -100)) > 0.99, "teeth remain visible at long range")
@@ -45,7 +47,7 @@ func _run() -> void:
 	_check(manager.get_teeth_glow_weight(base_position + Vector3(-33, 0, -1)) > 0.99, "teeth do not stop at the former left boundary")
 	_check(manager.get_teeth_glow_weight(base_position + Vector3(0, 0, 2)) > 0.99, "teeth are not clipped behind the player")
 	_check(manager.get_teeth_glow_weight(base_position + Vector3(34, 0, -34)) > 0.99, "teeth are not clipped by the former diagonal boundary")
-	_check(is_zero_approx(manager.get_radial_weight(31.0)), "ordinary environment light does not extend with teeth")
+	_check(is_zero_approx(manager.get_radial_weight(11.0)), "ordinary environment light does not extend with teeth beyond 10 m")
 	_check(manager.get_oval_weight(VisibilityManager.OVAL_CENTER_UV) > 0.999, "reference oval center is lit")
 	_check(is_zero_approx(manager.get_oval_weight(Vector2(0.02, 0.60))), "left of the oval is black")
 	_check(is_zero_approx(manager.get_oval_weight(Vector2(0.90, 0.60))), "right of the oval is black")
@@ -102,16 +104,16 @@ func _run() -> void:
 			enemy.global_position = game.player.global_position + Vector3(45.0, 0.0, 0.0)
 		var visible_zombie := test_enemies[0] as FoundationEnemy
 		var dark_zombie := test_enemies[1] as FoundationEnemy
-		visible_zombie.global_position = game.player.global_position + Vector3(0.0, 0.0, -20.0)
+		visible_zombie.global_position = game.player.global_position + Vector3(0.0, 0.0, -8.0)
 		dark_zombie.global_position = game.player.global_position + Vector3(0.0, 0.0, 5.0)
 		var dark_position := dark_zombie.global_position
 		manager._classify_enemies()
-		_check(manager.get_band(visible_zombie) == VisibilityManager.Band.VISIBLE_DISTANT, "distant zombie inside the light is classified as visible")
+		_check(manager.get_band(visible_zombie) == VisibilityManager.Band.VISIBLE_CLOSE, "zombie inside the 10 m light range is classified as visible")
 		_check(manager.get_band(dark_zombie) == VisibilityManager.Band.DARK_CLOSE_COMBAT, "close zombie behind the light remains in the combat simulation but is visually dark")
 		_check(not dark_zombie._visual_root.visible, "dark ordinary zombie detail model is visually hidden")
 		game.horde_far_visuals._update_full_rig_selection()
 		game.horde_far_visuals._process(0.21)
-		_check(game.horde_far_visuals.multimesh.visible_instance_count == 1, "shared MultiMesh compacts the horde to the one visible distant zombie")
+		_check(game.horde_far_visuals.multimesh.visible_instance_count == 0, "zombie inside the 10 m range uses the close render path")
 		manager.set_aim_yaw(PI)
 		manager._classify_enemies()
 		_check(dark_zombie.global_position.distance_to(dark_position) < 0.001, "turning the flashlight never teleports a hidden zombie")
@@ -173,6 +175,7 @@ func _run() -> void:
 		_check(normalized.y >= 0.75 and normalized.y <= 0.86, "camera keeps combat area ahead at %s" % [viewport_size])
 	root.size = saved_size
 
+	game._set_rooftop_render_profile(true)
 	_check(Foundation.ZOMBIE_HORDE_SIZE == 4 and Foundation.ZOMBIE_PERFORMANCE_CAPACITY == 20, "game stores four rooftop zombies and never profiles more than 20")
 	_check(game.burning_horizon.get_child_count() == 4, "Burning Horizon remains present while masked")
 	_check(game._boss_enemy != null and game._boss_enemy.hp > 0, "boss simulation remains independent from flashlight visibility")
