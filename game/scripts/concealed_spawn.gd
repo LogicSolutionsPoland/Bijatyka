@@ -14,6 +14,7 @@ const MOBILE_SPAWN_INTERVAL := 0.12
 const RETRY_SECONDS := 0.25
 const REPLACEMENT_SECONDS := 1.0
 const MAX_PLAYER_ATTACKERS := 4
+const MAX_ORDINARY_POPULATION := 20
 # Only unalerted, invisible actors can be stored as data (boss excluded).
 const DORMANT_SLEEP_DISTANCE_SQUARED := 10.0 * 10.0
 const DORMANT_WAKE_DISTANCE_SQUARED := 5.0 * 5.0
@@ -33,7 +34,9 @@ const VISUAL_EXTENTS := Vector3(1.5, 1.6, 1.5)
 
 var player: FoundationPlayer
 var camera: Camera3D
-var population_limit := 4
+var population_limit := 4:
+	set(value):
+		population_limit = clampi(value, 0, MAX_ORDINARY_POPULATION)
 var spawn_distance := 50.0
 var initial_spawn_min_distance := INITIAL_SPAWN_MIN_DISTANCE
 var initial_spawn_max_distance := INITIAL_SPAWN_MAX_DISTANCE
@@ -57,6 +60,11 @@ var _retry_time := 0.0
 var _sample_index := 0
 var _capsule := CapsuleShape3D.new()
 var _mobile_spawn_cooldown := 0.0
+# Tunable ordinary-zombie policy; the population and placement checks below
+# remain authoritative even when an encounter Director requests more pressure.
+var director_attacker_target := MAX_PLAYER_ATTACKERS
+var director_replacement_delay := REPLACEMENT_SECONDS
+var director_flank_bias := 0.0
 
 func _init() -> void:
 	_capsule.radius = 0.55
@@ -77,14 +85,15 @@ func store_upstairs_population(count: int) -> void:
 	_dormant_population.clear()
 	_dormant_scan_time = 0.0
 	dormancy_enabled = true
+	reset_director_policy()
 	population_limit = count
-	for index in range(count):
+	for index in range(population_limit):
 		_stored_population.append({"kind": "shambler"})
 
 func activate_ground_population(cap: int) -> void:
 	if _ground_active:
 		return
-	# Consume the four stored entries, not the full thirteen-slot capacity.
+	# Consume the four stored entries, preserving the full ground capacity.
 	var opening_count := mini(_stored_population.size(), cap)
 	_stored_population.clear()
 	population_limit = cap
@@ -97,6 +106,7 @@ func activate_profiling_population(cap: int) -> void:
 	_stored_population.clear()
 	_dormant_population.clear()
 	dormancy_enabled = false # Profiling still measures the full active load.
+	reset_director_policy()
 	population_limit = cap
 	_ground_active = true
 	set_physics_process(true)
@@ -128,10 +138,30 @@ func request_population() -> void:
 	if not _ground_active:
 		return
 	while _live.size() + _dormant_population.size() + _pending.size() + _initial_population_pending < population_limit:
-		_pending.append(_clock)
+		_queue_birth(_clock)
+
+func request_reinforcements(count: int) -> void:
+	if not _ground_active:
+		return
+	var available := maxi(0, population_limit - _live.size() - _dormant_population.size() - _pending.size() - _initial_population_pending)
+	for index in mini(maxi(0, count), available):
+		_queue_birth(_clock + director_replacement_delay)
+
+func reset_director_policy() -> void:
+	director_attacker_target = MAX_PLAYER_ATTACKERS
+	director_replacement_delay = REPLACEMENT_SECONDS
+	director_flank_bias = 0.0
+
+func _queue_birth(when: float) -> void:
+	# Changed pacing can place a new reservation before an older one. Keep the
+	# queue ordered so a later deadline never blocks a ready reinforcement.
+	var index := _pending.size()
+	while index > 0 and _pending[index - 1] > when:
+		index -= 1
+	_pending.insert(index, when)
 
 func register_enemy(enemy: FoundationEnemy) -> void:
-	if not _ground_active or enemy.is_boss or _live.has(enemy.get_instance_id()) or _live.size() + _dormant_population.size() >= population_limit:
+	if not _ground_active or enemy.is_boss or _live.has(enemy.get_instance_id()) or _live.size() + _dormant_population.size() + _pending.size() + _initial_population_pending >= population_limit:
 		return
 	var id := enemy.get_instance_id()
 	_live[id] = enemy
@@ -151,11 +181,11 @@ func _on_removed(id: int, replacements: int = 1) -> void:
 	_attackers.erase(id)
 	_live.erase(id)
 	if _ground_active:
-		# Pending births reserve slots. A death at thirteen therefore adds one;
+		# Pending births reserve slots. A death at the cap therefore adds one;
 		# a death in the opening group can add both requested replacements.
 		var available := maxi(0, population_limit - _live.size() - _dormant_population.size() - _pending.size() - _initial_population_pending)
 		for index in range(mini(replacements, available)):
-			_pending.append(_clock + REPLACEMENT_SECONDS)
+			_queue_birth(_clock + director_replacement_delay)
 
 # No scene node, animator, AI or physics is retained for a dormant entry.
 # A living zombie returns to the SAME previously occupied offscreen position.
@@ -220,7 +250,7 @@ func try_acquire_attacker(enemy: FoundationEnemy) -> bool:
 		return false
 	if _attackers.has(id):
 		return true
-	if _attackers.size() >= MAX_PLAYER_ATTACKERS:
+	if _attackers.size() >= mini(MAX_PLAYER_ATTACKERS, director_attacker_target):
 		return false
 	_attackers[id] = true
 	return true
@@ -286,7 +316,7 @@ func forward_direction() -> Vector3:
 func _sample_candidate() -> Vector3:
 	# Low discrepancy sampling spreads replacement waves across the forward arc.
 	_sample_index += 1
-	var angle := lerpf(-FORWARD_HALF_ANGLE, FORWARD_HALF_ANGLE, fmod(float(_sample_index) * 0.61803398875, 1.0))
+	var angle := clampf(lerpf(-FORWARD_HALF_ANGLE, FORWARD_HALF_ANGLE, fmod(float(_sample_index) * 0.61803398875, 1.0)) + director_flank_bias, -FORWARD_HALF_ANGLE, FORWARD_HALF_ANGLE)
 	var radius := spawn_distance + lerpf(-RADIAL_SPREAD, RADIAL_SPREAD, fmod(float(_sample_index) * 0.41421356237, 1.0))
 	return player.global_position + forward_direction().rotated(Vector3.UP, angle) * radius
 

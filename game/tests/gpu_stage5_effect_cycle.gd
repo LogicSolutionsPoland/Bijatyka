@@ -1,5 +1,5 @@
 extends SceneTree
-## Paired software-renderer A/B on one frozen 30-zombie ground scene.
+## Paired software-renderer A/B on one frozen 20-zombie ground scene.
 ## The 40% scale and 60 FPS cap match the mobile profile; host timings do not.
 
 const SCENE := preload("res://scenes/foundation.tscn")
@@ -23,8 +23,8 @@ func _run() -> void:
 	game._set_rooftop_render_profile(false)
 	game._ground_map_ready = true
 	game._ground_wave_started = true
-	if not game.start_performance_scenario(30, "concentrated"):
-		push_error("Cannot start 30-zombie effect comparison")
+	if not game.start_performance_scenario(20, "concentrated"):
+		push_error("Cannot start 20-zombie effect comparison")
 		quit(1)
 		return
 	for frame in range(WARMUP_FRAMES):
@@ -43,8 +43,8 @@ func _run() -> void:
 				enemy._animation_player.pause()
 	var slots: int = game.spawn_director._live.size() + game.spawn_director._dormant_population.size() + \
 		game.spawn_director._pending.size() + game.spawn_director._initial_population_pending
-	if slots != 30 or game.horde_far_visuals.get_resident_rig_count() > 7:
-		push_error("The fixed comparison lost its 30 slots or seven-rig cap")
+	if slots != 20 or game.horde_far_visuals.get_resident_rig_count() > 7:
+		push_error("The fixed comparison lost its 20 slots or seven-rig cap")
 		quit(1)
 		return
 	var index := 0
@@ -75,7 +75,7 @@ func _run() -> void:
 		index += 1
 	game.queue_free()
 	await process_frame
-	print("PASS: Stage 5 paired 30-zombie screen-effect comparison")
+	print("PASS: Stage 5 paired 20-zombie screen-effect comparison")
 	quit(0)
 
 func _avg(values: Array[float]) -> float:

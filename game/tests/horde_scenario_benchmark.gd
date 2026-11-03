@@ -1,7 +1,7 @@
 extends SceneTree
 ## Headless comparison run. Render-only monitors are explicitly reported as N/A.
 
-const POPULATIONS := [15, 20, 69, 100, 200]
+const POPULATIONS := [15, 20]
 const MODES := ["concentrated", "approach"]
 const FOUNDATION_SCENE := preload("res://scenes/foundation.tscn")
 const WARMUP_FRAMES := 60

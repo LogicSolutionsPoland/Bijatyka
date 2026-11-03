@@ -56,11 +56,11 @@ func run() -> void:
 	fixture.add_child(gate)
 	director = Director.new()
 	director.player = player
-	director.population_limit = 30
+	director.population_limit = 20
 	fixture.add_child(director)
 	director.set_physics_process(false)
 	batch = Batch.new() as HordeFarVisuals
-	batch.configure(30)
+	batch.configure(20)
 	batch.player = player
 	batch.dormant_source = director
 	batch.visibility_manager = gate
