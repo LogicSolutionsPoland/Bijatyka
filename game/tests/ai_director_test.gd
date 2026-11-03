@@ -31,7 +31,7 @@ func _run() -> void:
 	fixture.add_child(director)
 	director.activate()
 	_check(not director.active and spawns.ordinary_population_count() == 4 and spawns._pending.is_empty(), "roof retains four data records and no Director births")
-	spawns.activate_ground_population(30)
+	spawns.activate_ground_population(20)
 	spawns.set_physics_process(false)
 	director.activate()
 	_check(director.active and director._timer.time_left > 0.0 and spawns.director_attacker_target == 3, "arrival alone activates a 1 Hz pressure policy")
@@ -81,7 +81,7 @@ func _run() -> void:
 		ordered = ordered and spawns._pending[index] >= spawns._pending[index - 1]
 	_check(ordered, "a faster replacement does not wait behind a later queue deadline")
 	spawns.request_reinforcements(100)
-	_check(spawns._live.size() + spawns._dormant_population.size() + spawns._pending.size() + spawns._initial_population_pending == 30, "reinforcement reservations never exceed the phase-one 30 cap")
+	_check(spawns._live.size() + spawns._dormant_population.size() + spawns._pending.size() + spawns._initial_population_pending == 20, "reinforcement reservations never exceed the final 20 cap")
 	var start_us := Time.get_ticks_usec()
 	for index in range(300):
 		director._evaluate(false)

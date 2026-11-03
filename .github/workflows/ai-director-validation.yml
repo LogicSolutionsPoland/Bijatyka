@@ -30,7 +30,7 @@ jobs:
       - name: Director, gameplay, spawn, dormancy and elevator regression
         run: |
           set -euo pipefail
-          for test in ai_director_test.gd test_runner.gd concealed_spawn_test.gd zombie_30_optimization_test.gd dormant_visuals_test.gd elevator_loading_test.gd full_gameplay_smoke_test.gd; do
+          for test in ai_director_test.gd test_runner.gd concealed_spawn_test.gd zombie_20_optimization_test.gd dormant_visuals_test.gd elevator_loading_test.gd full_gameplay_smoke_test.gd horde_performance_test.gd rig_budget_lifecycle_test.gd flashlight_visibility_test.gd burning_horizon_test.gd gpu_stage4_benchmark.gd; do
             godot --headless --path game --script "res://tests/$test" 2>&1 | tee "$test.log"
             grep -q 'PASS:' "$test.log"
             if grep -E 'SCRIPT ERROR:|ERROR:' "$test.log"; then exit 1; fi

@@ -22,8 +22,8 @@ const ARENA_MAP_SCRIPT := preload("res://scripts/arena_map_upgrade.gd")
 const STARTING_TOWER := preload("res://scripts/starting_tower.gd")
 const GROUND_LOADING_COORDINATOR := preload("res://scripts/ground_loading_coordinator.gd")
 const ZOMBIE_HORDE_SIZE := 4
-const GROUND_ZOMBIE_HORDE_SIZE := 30
-const ZOMBIE_PERFORMANCE_CAPACITY := 200
+const GROUND_ZOMBIE_HORDE_SIZE := 20
+const ZOMBIE_PERFORMANCE_CAPACITY := 20
 const ZOMBIE_SPAWN_DISTANCE := 50.0
 const VISIBILITY_RADIUS := 30.0
 const COURTYARD_BATCH_CELL_SIZE := 12.0
@@ -985,7 +985,7 @@ func _update_distance_visibility() -> void:
 
 func _apply_distance_visibility(node: Node) -> void:
 	# Enemy rigs own their 18/30 m bands; walking every bone and mesh every
-	# 120 ms scales with the full 200-zombie population.
+	# Keep the existing visibility cadence for the full ground population.
 	if node is FoundationEnemy or node == horde_far_visuals or node.is_in_group("distant_backdrop") or node.is_in_group("nature_scenery_batch") or node.is_in_group("flashlight_beam") or node.is_in_group("pencil_screen_pass") or node.is_in_group("flashlight_visibility_composite"):
 		return
 	if node is MultiMeshInstance3D and node.is_in_group("static_map_batch"):
@@ -1138,7 +1138,7 @@ func _set_debug_map_visible(is_visible: bool) -> void:
 		arena_map.visible = is_visible
 
 func start_performance_scenario(population: int, mode: String) -> bool:
-	if not [15, 20, 30, 69, 100, 200].has(population) or not ["concentrated", "approach"].has(mode):
+	if not [15, 20].has(population) or not ["concentrated", "approach"].has(mode):
 		return false
 	if not is_instance_valid(spawn_director) or not is_instance_valid(player):
 		return false

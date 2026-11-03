@@ -33,20 +33,20 @@ jobs:
       - name: Focused headless gameplay and visibility checks
         run: |
           set -euo pipefail
-          for test in gpu_stage3_test.gd gpu_stage4_test.gd zombie_30_optimization_test.gd \
+          for test in gpu_stage3_test.gd gpu_stage4_test.gd zombie_20_optimization_test.gd \
             flashlight_visibility_test.gd flashlight_enemy_reveal_test.gd elevator_loading_test.gd; do
             godot --headless --path game --script "res://tests/$test" 2>&1 | tee "stage5-ci/headless-$test.log"
             grep -q 'PASS:' "stage5-ci/headless-$test.log"
             if grep -E 'SCRIPT ERROR:|ERROR:' "stage5-ci/headless-$test.log"; then exit 1; fi
           done
-      - name: Fixed 30-zombie effect matrix at 40 percent, host only
+      - name: Fixed 20-zombie effect matrix at 40 percent, host only
         run: |
           set -euo pipefail
           for mode in both mask pencil neither; do
             xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game \
               --script res://tests/gpu_stage4_benchmark.gd -- "--effects=$mode" 2>&1 | tee "stage5-ci/effects-$mode.log"
             grep -q 'STAGE5_EFFECT_SAMPLE' "stage5-ci/effects-$mode.log"
-            grep -q 'PASS: Stage 4 fixed 30-zombie benchmark' "stage5-ci/effects-$mode.log"
+            grep -q 'PASS: Stage 4 fixed 20-zombie benchmark' "stage5-ci/effects-$mode.log"
             if grep -E 'SCRIPT ERROR:|ERROR:' "stage5-ci/effects-$mode.log"; then exit 1; fi
           done
       - name: Paired static-scene A/B, host only
@@ -55,9 +55,9 @@ jobs:
           xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game \
             --script res://tests/gpu_stage5_effect_cycle.gd 2>&1 | tee stage5-ci/paired.log
           test "$(grep -c 'STAGE5_PAIRED_SAMPLE' stage5-ci/paired.log)" -eq 7
-          grep -q 'PASS: Stage 5 paired 30-zombie screen-effect comparison' stage5-ci/paired.log
+          grep -q 'PASS: Stage 5 paired 20-zombie screen-effect comparison' stage5-ci/paired.log
           if grep -E 'SCRIPT ERROR:|ERROR:' stage5-ci/paired.log; then exit 1; fi
-      - name: Stage 4 versus optimized mask on the same 30-zombie frame
+      - name: Stage 4 versus optimized mask on the same 20-zombie frame
         run: |
           set -euo pipefail
           xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 LP_NUM_THREADS=1 godot --audio-driver Dummy \

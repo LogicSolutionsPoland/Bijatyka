@@ -32,7 +32,7 @@ jobs:
       - name: Focused shader, flashlight, zombie, and elevator checks
         run: |
           set -euo pipefail
-          for test in gpu_stage3_test.gd gpu_stage4_test.gd zombie_30_optimization_test.gd \
+          for test in gpu_stage3_test.gd gpu_stage4_test.gd zombie_20_optimization_test.gd \
             flashlight_visibility_test.gd flashlight_enemy_reveal_test.gd elevator_loading_test.gd; do
             godot --headless --path game --script "res://tests/$test" 2>&1 | tee "stage6-ci/check-$test.log"
             grep -q 'PASS:' "stage6-ci/check-$test.log"
@@ -68,7 +68,7 @@ jobs:
           test "$(grep -c 'STAGE6_SPOT_SAMPLE' stage6-ci/beam-profile.log)" -eq 12
           test "$(grep -c 'STAGE6_BEAM_SUMMARY' stage6-ci/beam-profile.log)" -eq 4
           test "$(grep -c 'STAGE6_SPOTLIGHT_SUMMARY' stage6-ci/beam-profile.log)" -eq 1
-          grep -q 'PASS: Stage 6 frozen 30-zombie flashlight beam profile' stage6-ci/beam-profile.log
+          grep -q 'PASS: Stage 6 frozen 20-zombie flashlight beam profile' stage6-ci/beam-profile.log
           if grep -E 'SCRIPT ERROR:|ERROR:' stage6-ci/beam-profile.log; then exit 1; fi
       - name: Paired reference vs zero-alpha beam shader trial
         env:

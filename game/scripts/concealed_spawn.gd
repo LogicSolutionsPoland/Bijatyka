@@ -14,6 +14,7 @@ const MOBILE_SPAWN_INTERVAL := 0.12
 const RETRY_SECONDS := 0.25
 const REPLACEMENT_SECONDS := 1.0
 const MAX_PLAYER_ATTACKERS := 4
+const MAX_ORDINARY_POPULATION := 20
 # Only unalerted, invisible actors can be stored as data (boss excluded).
 const DORMANT_SLEEP_DISTANCE_SQUARED := 10.0 * 10.0
 const DORMANT_WAKE_DISTANCE_SQUARED := 5.0 * 5.0
@@ -33,7 +34,9 @@ const VISUAL_EXTENTS := Vector3(1.5, 1.6, 1.5)
 
 var player: FoundationPlayer
 var camera: Camera3D
-var population_limit := 4
+var population_limit := 4:
+	set(value):
+		population_limit = clampi(value, 0, MAX_ORDINARY_POPULATION)
 var spawn_distance := 50.0
 var initial_spawn_min_distance := INITIAL_SPAWN_MIN_DISTANCE
 var initial_spawn_max_distance := INITIAL_SPAWN_MAX_DISTANCE
@@ -84,13 +87,13 @@ func store_upstairs_population(count: int) -> void:
 	dormancy_enabled = true
 	reset_director_policy()
 	population_limit = count
-	for index in range(count):
+	for index in range(population_limit):
 		_stored_population.append({"kind": "shambler"})
 
 func activate_ground_population(cap: int) -> void:
 	if _ground_active:
 		return
-	# Consume the four stored entries, not the full thirteen-slot capacity.
+	# Consume the four stored entries, preserving the full ground capacity.
 	var opening_count := mini(_stored_population.size(), cap)
 	_stored_population.clear()
 	population_limit = cap
@@ -158,7 +161,7 @@ func _queue_birth(when: float) -> void:
 	_pending.insert(index, when)
 
 func register_enemy(enemy: FoundationEnemy) -> void:
-	if not _ground_active or enemy.is_boss or _live.has(enemy.get_instance_id()) or _live.size() + _dormant_population.size() >= population_limit:
+	if not _ground_active or enemy.is_boss or _live.has(enemy.get_instance_id()) or _live.size() + _dormant_population.size() + _pending.size() + _initial_population_pending >= population_limit:
 		return
 	var id := enemy.get_instance_id()
 	_live[id] = enemy
