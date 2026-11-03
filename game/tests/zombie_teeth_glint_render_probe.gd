@@ -22,14 +22,10 @@ func _run() -> void:
 	# the player below the tower keeps the live rooftop controller in that mode.
 	game.player.global_position.y = 0.0
 	game._set_rooftop_render_profile(false)
-	# Isolate the glint from bright skyline pixels in this rooftop camera pose.
-	game.burning_horizon.visible = false
-	game._environment.background_mode = Environment.BG_COLOR
-	game._environment.background_color = Color.BLACK
 	manager.set_process(false)
 	game.hud._root.visible = false
 	var viewport_size := root.get_visible_rect().size
-	var center := viewport_size * Vector2(0.78, 0.18)
+	var center := viewport_size * Vector2(0.85, 0.75)
 	_check(manager.get_oval_weight(center / viewport_size) < 0.001, "render test point is outside the flashlight oval")
 
 	var empty_points: Array[Dictionary] = []
