@@ -17,6 +17,9 @@ func _run() -> void:
 	var manager := game.flashlight_visibility_manager
 	_check(manager != null and is_instance_valid(manager._teeth_overlay), "tooth overlay exists in gameplay")
 	_check(manager._teeth_canvas.layer == 0, "tooth overlay draws on its own CanvasLayer")
+	# The rooftop intentionally disables flashlight and glints. Sample the
+	# ground profile, where the overlay must draw over the darkness mask.
+	game._set_rooftop_render_profile(false)
 	manager.set_process(false)
 	game.hud._root.visible = false
 	var viewport_size := root.get_visible_rect().size
