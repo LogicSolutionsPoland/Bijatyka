@@ -33,6 +33,7 @@ on:
       - codex/exo-gray-player-model-20261031
       - codex/exo-mixamo-arm64-build-20261031
       - codex/exo-gray-kick-arm64-apk-20261031
+      - build/flashlight-10m-arm64-20261103
 
 permissions:
   contents: read
