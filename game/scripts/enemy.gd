@@ -87,6 +87,7 @@ var _player_grapple_owner: FoundationPlayer
 var _player_grapple_time := 0.0
 var _pursuit_avoid_direction := Vector3.ZERO
 var _pursuit_avoid_remaining := 0.0
+var _player_alert_shared := false
 
 # Sharing this ten-Hz broad-phase cache across all enemies prevents a full
 # scene-group scan for every physics frame. The 10 m cells and 3x3 query remain
@@ -176,15 +177,26 @@ func _choose_target() -> void:
 		return
 	if not is_instance_valid(_player) or _player.is_queued_for_deletion():
 		combat_target = null
+		_player_alert_shared = false
 		return
 	# Spawn-rushing and alerted zombies stay committed through distance and cover.
 	# They pursue the player instead of switching to other zombies.
 	if combat_target == _player or _spawn_assault_time > 0.0 or global_position.distance_to(_player.global_position) <= 14.0:
 		combat_target = _player
+		if not _player_alert_shared:
+			_alert_nearby_allies()
+			_player_alert_shared = true
 		return
 	# Unalerted zombies remain still and concealed until the player enters their
 	# awareness radius. The spawn manager can then store them as data records.
 	combat_target = null
+
+func _alert_nearby_allies() -> void:
+	for ally in _nearby():
+		if ally.is_boss or ally.state == "windup":
+			continue
+		if ally.global_position.distance_squared_to(global_position) <= 100.0:
+			ally.combat_target = _player
 
 func _wander(delta: float) -> void:
 	_wander_time -= delta
@@ -217,6 +229,7 @@ func begin_spawn_assault(target: FoundationPlayer) -> bool:
 		return false
 	_player = target
 	combat_target = target
+	_player_alert_shared = false
 	state = "assault"
 	_spawn_assault_time = SPAWN_ASSAULT_DURATION
 	var direction := target.global_position - global_position

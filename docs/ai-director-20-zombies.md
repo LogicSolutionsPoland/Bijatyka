@@ -21,8 +21,9 @@ reduce attacker count or slow the replacement pace. Boss proximity only bounds
 ordinary reinforcements; the boss AI, damage and attack logic remain unchanged.
 Ordinary zombies commit to the player after a spawn assault or once within 14 m,
 keep that target through distance and cover, and do not switch to other zombies.
-Ray probes steer active pursuers around nearby solid obstacles; collision and
-attack line-of-sight checks remain authoritative.
+When one detects the player, it alerts nearby allies, which spread the pursuit
+through the horde. Ray probes steer active pursuers around nearby solid obstacles;
+collision and attack line-of-sight checks remain authoritative.
 
 | State | Ordinary attacker target | Replacement delay | Entry condition |
 | --- | ---: | ---: | --- |

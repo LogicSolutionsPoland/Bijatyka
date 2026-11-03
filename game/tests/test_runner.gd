@@ -611,16 +611,18 @@ func _test_roaming_aggression() -> void:
 	b.position = Vector3(1.5, 0, 0)
 	await physics_frame
 	a._choose_target()
-	_check(a.combat_target == b, "zombie selects nearby rival when player is distant")
+	_check(a.combat_target == null and b.combat_target == null, "unalerted zombie does not hunt nearby rivals")
 	var before := b.hp
 	a._resolve_enemy_attack(1.5)
-	_check(b.hp == before - 12, "zombie infighting damages rival")
-	_check(b.combat_target == a, "surviving rival retaliates")
-	_check(player.rage.rage == 0.0, "infighting awards no player RAGE")
+	_check(b.hp == before, "zombies do not infight when the player is distant")
+	_check(b.combat_target == null, "unalerted rival remains focused on the player")
+	_check(player.rage.rage == 0.0, "no infighting adds player RAGE")
 	player.position = Vector3(0, 0, 10)
 	a._choose_target()
 	_check(a.combat_target == player and b.combat_target == player, "player detection alerts nearby zombies")
 	player.position = Vector3(60, 0, 0)
+	a._choose_target()
+	_check(a.combat_target == player and b.combat_target == player, "alerted pack retains the player target at distance")
 	b.position = Vector3(40, 0, 0)
 	a.combat_target = null
 	a.state = "idle"
