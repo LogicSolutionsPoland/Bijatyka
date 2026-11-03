@@ -425,10 +425,22 @@ func _body_position_intersects_beam(world_position: Vector3, boss: bool) -> bool
 	return false
 
 
+func _is_inside_flashlight_beam(world_position: Vector3) -> bool:
+	# Use the same 3D cone as the translucent beam and spot light. Tooth glints
+	# remain visible beyond and beside it, but never over a zombie in the beam.
+	var offset := world_position - beam_origin
+	var axial := offset.dot(beam_direction)
+	if axial <= 0.0 or axial >= MAX_RADIUS:
+		return false
+	var radius := maxf(0.4, axial * BEAM_TANGENT)
+	var lateral := (offset - beam_direction * axial).length()
+	return lateral <= radius
+
+
 func _update_distant_teeth() -> void:
-	# Mouth-only screen-space glints stay visible beyond the flashlight cone/range.
-	# They reveal no body or environment and remain blocked by solid world geometry.
-	# The current ordinary-zombie population cap bounds this loop to twenty.
+	# Screen-space glints remain independent of aim and range outside the actual
+	# beam, while the visible 3D teeth take over inside it. Static world geometry
+	# still occludes glints. The ordinary-zombie population cap bounds this loop.
 	var points: Array[Dictionary] = []
 	var glow_weight := get_teeth_glow_weight(Vector3.ZERO)
 	if glow_weight <= 0.0 or not is_instance_valid(camera) or not is_instance_valid(player) or not camera.is_current():
@@ -454,6 +466,8 @@ func _update_distant_teeth() -> void:
 		if front_dot <= TEETH_FRONT_FACING_DOT:
 			continue
 		var mouth_world := enemy.global_position + Vector3.UP * 1.60 + enemy_forward * 0.22
+		if _is_inside_flashlight_beam(mouth_world):
+			continue
 		if camera.is_position_behind(mouth_world):
 			continue
 		var screen_position := camera.unproject_position(mouth_world)
