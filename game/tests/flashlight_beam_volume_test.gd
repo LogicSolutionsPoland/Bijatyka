@@ -71,7 +71,7 @@ func _run() -> void:
 	wall.material_override = wall_material
 	wall.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	world.add_child(wall)
-	wall.global_position = manager.beam_origin + manager.beam_direction * 8.5
+	wall.global_position = manager.beam_origin + manager.beam_direction * 5.0
 	wall.global_basis = Basis.looking_at(manager.beam_direction, Vector3.UP)
 	for frame in range(4):
 		await process_frame
