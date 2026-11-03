@@ -8,6 +8,7 @@ const PLAYER_SCENE := preload("res://scenes/player.tscn")
 const PLAYER_SCRIPT := preload("res://scripts/player_controller.gd")
 const ENEMY_SCRIPT := preload("res://scripts/enemy.gd")
 const CONCEALED_SPAWN := preload("res://scripts/concealed_spawn.gd")
+const AI_DIRECTOR := preload("res://scripts/ai_director.gd")
 const HORDE_FAR_VISUALS := preload("res://scripts/horde_far_visuals.gd")
 const PERFORMANCE_DIAGNOSTICS := preload("res://scripts/performance_diagnostics.gd")
 const COMBAT_FX_POOL := preload("res://scripts/combat_fx_pool.gd")
@@ -21,8 +22,8 @@ const ARENA_MAP_SCRIPT := preload("res://scripts/arena_map_upgrade.gd")
 const STARTING_TOWER := preload("res://scripts/starting_tower.gd")
 const GROUND_LOADING_COORDINATOR := preload("res://scripts/ground_loading_coordinator.gd")
 const ZOMBIE_HORDE_SIZE := 4
-const GROUND_ZOMBIE_HORDE_SIZE := 30
-const ZOMBIE_PERFORMANCE_CAPACITY := 200
+const GROUND_ZOMBIE_HORDE_SIZE := 20
+const ZOMBIE_PERFORMANCE_CAPACITY := 20
 const ZOMBIE_SPAWN_DISTANCE := 50.0
 const VISIBILITY_RADIUS := 30.0
 const COURTYARD_BATCH_CELL_SIZE := 12.0
@@ -100,6 +101,7 @@ var arena_map: Node3D
 var starting_tower: StartingTower
 var game_music_player: AudioStreamPlayer
 var spawn_director: Node3D
+var ai_director: BijatykaAIDirector
 var horde_far_visuals: HordeFarVisuals
 var performance_diagnostics: FoundationPerformanceDiagnostics
 var combat_fx_pool: FoundationCombatFxPool
@@ -777,12 +779,17 @@ func _spawn_enemies() -> void:
 	horde_far_visuals.dormant_source = spawn_director
 	# The four upstairs entries are data only; no ordinary enemy actors exist.
 	spawn_director.store_upstairs_population(ZOMBIE_HORDE_SIZE)
+	ai_director = AI_DIRECTOR.new() as BijatykaAIDirector
+	ai_director.name = "LocalAIDirector"
+	ai_director.configure(player, spawn_director)
+	add_child(ai_director)
 	horde_far_visuals.visible = false
 	horde_far_visuals.set_process(false)
 	horde_far_visuals.multimesh.visible_instance_count = 0
 	# Keep one boss in the original arena; the HUD locator can point to it when
 	# the player moves beyond the 30 m render radius.
 	_spawn_enemy("boss", Vector3(0.6, 0.05, -16.2), true)
+	ai_director.boss = _boss_enemy
 
 func _spawn_assault_zombie(at: Vector3) -> void:
 	var is_visual_sample := not _high_detail_zombie_sample_assigned
@@ -879,6 +886,7 @@ func _on_elevator_rider_arrived(floor: StringName) -> void:
 	spawn_director.initial_spawn_min_distance = 34.0
 	spawn_director.initial_spawn_max_distance = 45.0
 	spawn_director.activate_ground_population(GROUND_ZOMBIE_HORDE_SIZE)
+	ai_director.activate()
 	horde_far_visuals.visible = true
 	horde_far_visuals.set_process(true)
 
@@ -900,6 +908,8 @@ func _on_player_respawned() -> void:
 	_deactivate_ground_population()
 
 func _deactivate_ground_population() -> void:
+	if is_instance_valid(ai_director):
+		ai_director.deactivate()
 	_ground_wave_started = false
 	_performance_scenario = ""
 	_reset_ordinary_population()
@@ -955,7 +965,10 @@ func _on_enemy_defeated(enemy: Node) -> void:
 		hud.hide_boss_marker()
 		return
 	if is_instance_valid(spawn_director):
+		var was_registered: bool = spawn_director._live.has(enemy.get_instance_id())
 		spawn_director.replace_enemy(enemy)
+		if was_registered and is_instance_valid(ai_director):
+			ai_director.on_ordinary_defeated()
 
 func _update_boss_locator() -> void:
 	if hud == null or not is_instance_valid(_boss_enemy) or _boss_enemy.hp <= 0:
@@ -972,7 +985,7 @@ func _update_distance_visibility() -> void:
 
 func _apply_distance_visibility(node: Node) -> void:
 	# Enemy rigs own their 18/30 m bands; walking every bone and mesh every
-	# 120 ms scales with the full 200-zombie population.
+	# Keep the existing visibility cadence for the full ground population.
 	if node is FoundationEnemy or node == horde_far_visuals or node.is_in_group("distant_backdrop") or node.is_in_group("nature_scenery_batch") or node.is_in_group("flashlight_beam") or node.is_in_group("pencil_screen_pass") or node.is_in_group("flashlight_visibility_composite"):
 		return
 	if node is MultiMeshInstance3D and node.is_in_group("static_map_batch"):
@@ -1125,10 +1138,12 @@ func _set_debug_map_visible(is_visible: bool) -> void:
 		arena_map.visible = is_visible
 
 func start_performance_scenario(population: int, mode: String) -> bool:
-	if not [15, 20, 30, 69, 100, 200].has(population) or not ["concentrated", "approach"].has(mode):
+	if not [15, 20].has(population) or not ["concentrated", "approach"].has(mode):
 		return false
 	if not is_instance_valid(spawn_director) or not is_instance_valid(player):
 		return false
+	if is_instance_valid(ai_director):
+		ai_director.deactivate()
 
 	# Scenario changes are transient and isolated to debug profiling. Clear only
 	# ordinary zombies; keep the boss, arena, camera, HUD, and gameplay systems.

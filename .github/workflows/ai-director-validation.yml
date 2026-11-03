@@ -1,0 +1,58 @@
+name: Bijatyka local AI Director validation
+
+on:
+  push:
+    branches:
+      - feat/local-ai-director-20-zombies-20261103
+  pull_request:
+    branches:
+      - feat/ruined-city-map-20261103
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+      - name: Import game and scripts
+        run: |
+          set -o pipefail
+          godot --headless --editor --path game --import --quit 2>&1 | tee import.log
+          if grep -E 'SCRIPT ERROR:|ERROR: Failed to load' import.log; then exit 1; fi
+      - name: Director, gameplay, spawn, dormancy and elevator regression
+        run: |
+          set -euo pipefail
+          for test in ai_director_test.gd test_runner.gd concealed_spawn_test.gd zombie_20_optimization_test.gd dormant_visuals_test.gd elevator_loading_test.gd full_gameplay_smoke_test.gd horde_performance_test.gd rig_budget_lifecycle_test.gd flashlight_visibility_test.gd burning_horizon_test.gd gpu_stage4_benchmark.gd; do
+            godot --headless --path game --script "res://tests/$test" 2>&1 | tee "$test.log"
+            grep -q 'PASS:' "$test.log"
+            if grep -E 'SCRIPT ERROR:|ERROR:' "$test.log"; then exit 1; fi
+          done
+      - name: Animation, boss, graphics and sustained horde regression
+        run: |
+          set -euo pipefail
+          for test in player_animation_test.gd enemy_attack_animation_test.gd zombie_animation_test.gd runtime_creation_test.gd gpu_stage3_test.gd gpu_stage4_test.gd environment_render_test.gd flashlight_enemy_reveal_test.gd horde_scenario_benchmark.gd; do
+            godot --headless --path game --script "res://tests/$test" 2>&1 | tee "$test.log"
+            grep -q 'PASS:' "$test.log"
+            if grep -E 'SCRIPT ERROR:|ERROR:' "$test.log"; then exit 1; fi
+          done
+      - name: Compatibility rendering and 20-zombie draw profile on host
+        run: |
+          set -euo pipefail
+          for test in flashlight_beam_volume_test.gd flashlight_enemy_render_probe.gd flashlight_boss_render_probe.gd environment_render_probe.gd gpu_stage4_benchmark.gd; do
+            xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script "res://tests/$test" 2>&1 | tee "render-$test.log"
+            if grep -E 'SCRIPT ERROR:|ERROR:' "render-$test.log"; then exit 1; fi
+          done
+          grep -q 'PASS: Stage 4 fixed 20-zombie benchmark' render-gpu_stage4_benchmark.gd.log
+      - name: Ten-second scene smoke
+        run: |
+          set -o pipefail
+          godot --headless --fixed-fps 60 --path game --quit-after 600 2>&1 | tee scene.log
+          if grep -E 'SCRIPT ERROR:|ERROR:' scene.log; then exit 1; fi

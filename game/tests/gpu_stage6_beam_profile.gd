@@ -1,5 +1,5 @@
 extends SceneTree
-## Frozen 30-zombie GL Compatibility benchmark for the two translucent flashlight meshes.
+## Frozen 20-zombie GL Compatibility benchmark for the two translucent flashlight meshes.
 ## Timings from the CI software renderer are host measurements, never Android GPU times.
 
 const SCENE := preload("res://scenes/foundation.tscn")
@@ -50,8 +50,8 @@ func _run() -> void:
 	game._set_rooftop_render_profile(false)
 	game._ground_map_ready = true
 	game._ground_wave_started = true
-	if not game.start_performance_scenario(30, "concentrated"):
-		_fail("Cannot start the fixed 30-zombie ground scene")
+	if not game.start_performance_scenario(20, "concentrated"):
+		_fail("Cannot start the fixed 20-zombie ground scene")
 		quit(1)
 		return
 
@@ -76,8 +76,8 @@ func _run() -> void:
 		"Stage 5 ground shader settings stay unchanged")
 	var slots: int = game.spawn_director._live.size() + game.spawn_director._dormant_population.size() + \
 		game.spawn_director._pending.size() + game.spawn_director._initial_population_pending
-	_check(slots == 30, "the frozen ordinary-zombie population has exactly 30 reserved slots")
-	# The spawn system reserves 30 population slots while only nearby zombies have live rigs.
+	_check(slots == 20, "the frozen ordinary-zombie population has exactly 20 reserved slots")
+	# The spawn system reserves 20 population slots while only nearby zombies have live rigs.
 	_check(game.horde_far_visuals.get_resident_rig_count() <= 7, "resident zombie rigs stay within the seven-rig cap")
 	if not _failures.is_empty():
 		_finish_failure()
@@ -141,7 +141,7 @@ func _run() -> void:
 	game.queue_free()
 	await process_frame
 	if _failures.is_empty():
-		print("PASS: Stage 6 frozen 30-zombie flashlight beam profile")
+		print("PASS: Stage 6 frozen 20-zombie flashlight beam profile")
 		quit(0)
 	else:
 		_finish_failure()

@@ -373,9 +373,9 @@ func _test_elevator_ground_wave() -> void:
 		and not elevator._car_enclosure.visible and arena._environment.sky == arena._ground_sky
 		and arena.arena_map.get_instance_id() == map_instance_id,
 		"ground map and render profile finish before doors open without a second map instance")
-	check(director.population_limit == 30 and director._initial_population_pending + director._live.size() == 4
+	check(director.population_limit == 20 and director._initial_population_pending + director._live.size() == 4
 		and director._stored_population.is_empty() and director._pending.is_empty(),
-		"ground arrival activates exactly four stored entries with a thirty-zombie cap")
+		"ground arrival activates exactly four stored entries with a twenty-zombie cap")
 	director.set_physics_process(false)
 	for frame in range(180):
 		await physics_frame
@@ -417,7 +417,7 @@ func _test_elevator_ground_wave() -> void:
 	capped_victim.receive_hit(10000)
 	capped_victim._complete_death()
 	check(director._live.size() == 12 and director._pending.size() == 2,
-		"at thirteen, one death still queues two until reaching 30")
+		"at thirteen, one death still queues two until reaching 20")
 	check(arena._interact_with_starting_elevator() and elevator.is_player_riding(player),
 		"ground-floor lift can start its return trip")
 	check(director.ordinary_population_count() == 4 and director._live.is_empty()
@@ -477,7 +477,7 @@ func _test_attacker_slots() -> void:
 	var fixture := _fixture()
 	var director = fixture.get_node("Director")
 	var player := fixture.get_node("Player") as FoundationPlayer
-	director.population_limit = 30
+	director.population_limit = 20
 	var enemies: Array[FoundationEnemy] = []
 	for index in range(5):
 		var enemy := Enemy.new() as FoundationEnemy
@@ -553,10 +553,11 @@ func _test_population_and_replacements() -> void:
 	arena._boss_enemy.set_physics_process(false)
 	var director = arena.spawn_director
 	director.set_physics_process(false)
+	check(not arena.start_performance_scenario(30, "concentrated"), "debug scenario cannot bypass the 20-zombie cap")
 	check(Foundation.ZOMBIE_HORDE_SIZE == 4 and director.population_limit == 4 and director._stored_population.size() == 4, "normal game stores four ordinary zombies separately from the boss")
 	director.request_population()
 	check(director._pending.is_empty() and director._initial_population_pending == 0, "upstairs cannot schedule an ordinary zombie")
-	director.activate_profiling_population(30)
+	director.activate_profiling_population(20)
 	director.set_physics_process(false)
 	director.spawn_requested.connect(func(at: Vector3) -> void:
 		var enemy: FoundationEnemy = director._live.values().back()
@@ -569,18 +570,18 @@ func _test_population_and_replacements() -> void:
 		check(not enemy._visual_root.visible, "actual birth cannot render beyond the visibility limit")
 	)
 	director.request_population()
-	check(director._pending.size() == 30, "30-zombie profiling gameplay sample is queued once")
+	check(director._pending.size() == 20, "20-zombie profiling gameplay sample is queued once")
 	director.request_population()
-	check(director._pending.size() == 30, "duplicate fill request cannot exceed the profiling population cap")
+	check(director._pending.size() == 20, "duplicate fill request cannot exceed the profiling population cap")
 	var budgets_ok := true
 	for frame in range(500):
 		await physics_frame
 		director._physics_process(1.0 / 60.0)
 		budgets_ok = budgets_ok and director.last_candidate_count <= Director.MAX_CANDIDATES_PER_TICK and director.last_spawn_count <= Director.MAX_SPAWNS_PER_TICK
-		if director._live.size() == 30:
+		if director._live.size() == 20:
 			break
 	check(budgets_ok, "startup never exceeds shared query or spawn budget")
-	check(director._live.size() == 30 and director._pending.is_empty(), "budgeted startup reaches all 30 ordinary zombies")
+	check(director._live.size() == 20 and director._pending.is_empty(), "budgeted startup reaches all 20 ordinary zombies")
 	check(is_instance_valid(arena._boss_enemy), "existing boss remains separate from the horde cap")
 	if director._live.size() < 10:
 		arena.queue_free()
@@ -600,18 +601,18 @@ func _test_population_and_replacements() -> void:
 		defeated.receive_hit(10000)
 		defeated._complete_death() # Advance the death animation deterministically for this spawn-director test.
 		arena._on_enemy_defeated(defeated) # Duplicate notifications are harmless.
-	check(director._live.size() == 26 and director._pending.size() == 4, "four deaths queue exactly four replacements")
+	check(director._live.size() == 16 and director._pending.size() == 4, "four deaths queue exactly four replacements")
 	director._physics_process(0.99)
-	check(director._live.size() == 26, "one second replacement delay is retained")
+	check(director._live.size() == 16, "one second replacement delay is retained")
 	await physics_frame
 	director._physics_process(0.02)
-	check(director.last_spawn_count <= 2 and director._live.size() <= 28, "simultaneous deaths cannot create an unbounded spawn frame")
+	check(director.last_spawn_count <= 2 and director._live.size() <= 18, "simultaneous deaths cannot create an unbounded spawn frame")
 	for frame in range(100):
 		await physics_frame
 		director._physics_process(1.0 / 60.0)
-		if director._live.size() == 30:
+		if director._live.size() == 20:
 			break
-	check(director._live.size() == 30 and director._pending.is_empty(), "endless replacements restore the full population")
+	check(director._live.size() == 20 and director._pending.is_empty(), "endless replacements restore the full population")
 	check(behind.transform == behind_transform and behind.state == "wander", "zombie left behind is neither teleported nor retargeted")
 	check(visible.transform == visible_transform and visible.state == "idle", "visible living zombie is untouched by replacements")
 	var victim: FoundationEnemy = director._live.values().back()
@@ -630,26 +631,26 @@ func _test_population_and_replacements() -> void:
 	for frame in range(30):
 		await physics_frame
 		director._physics_process(0.3)
-		if director._live.size() == 30:
+		if director._live.size() == 20:
 			break
-	check(director._live.size() == 30 and director._pending.is_empty(), "deferred request succeeds after the player turns inward")
+	check(director._live.size() == 20 and director._pending.is_empty(), "deferred request succeeds after the player turns inward")
 	var removed: FoundationEnemy = director._live.values().back()
 	removed.queue_free()
 	await process_frame
-	check(director._live.size() == 29 and director._pending.size() == 1, "unexpected removal also queues one endless replacement")
+	check(director._live.size() == 19 and director._pending.size() == 1, "unexpected removal also queues one endless replacement")
 	var saved_camera: Camera3D = director.camera
 	director.camera = null
 	director._physics_process(1.1)
-	check(director._live.size() == 29 and director._pending.size() == 1, "camera unavailability retains the pending replacement")
+	check(director._live.size() == 19 and director._pending.size() == 1, "camera unavailability retains the pending replacement")
 	director.camera = saved_camera
 	for frame in range(30):
 		await physics_frame
 		director._physics_process(0.3)
-		if director._live.size() == 30:
+		if director._live.size() == 20:
 			break
-	check(director._live.size() == 30 and director._pending.is_empty(), "spawn queue recovers after the camera returns")
+	check(director._live.size() == 20 and director._pending.is_empty(), "spawn queue recovers after the camera returns")
 	arena._boss_enemy.receive_hit(10000)
-	check(director._live.size() == 30 and director._pending.is_empty(), "boss defeat does not add a 31st ordinary zombie")
+	check(director._live.size() == 20 and director._pending.is_empty(), "boss defeat does not add a 21st ordinary zombie")
 	check(Foundation.ZOMBIE_HORDE_SIZE == 4 and Foundation.ZOMBIE_SPAWN_DISTANCE == 50.0 and Foundation.VISIBILITY_RADIUS == 30.0, "four dormant entries, 50 m replacement distance and 30 m visibility remain intact")
 	arena.queue_free()
 	await process_frame

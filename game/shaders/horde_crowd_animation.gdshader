@@ -27,6 +27,8 @@ void vertex() {
 }
 
 void fragment() {
-	ALBEDO = COLOR.rgb * vec3(0.92, 0.94, 0.90);
+	// Distant proxies can remain nearby when the seven-rig budget is full.
+	// Keep them visible in the beam without letting overlapping silhouettes wash out the scene.
+	ALBEDO = COLOR.rgb * vec3(0.28, 0.34, 0.41);
 	ROUGHNESS = 1.0;
 }
