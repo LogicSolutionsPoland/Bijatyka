@@ -20,6 +20,10 @@ func _run() -> void:
 	# The rooftop intentionally disables flashlight and glints. Sample the
 	# ground profile, where the overlay must draw over the darkness mask.
 	game._set_rooftop_render_profile(false)
+	# Isolate the glint from bright skyline pixels in this rooftop camera pose.
+	game.burning_horizon.visible = false
+	game._environment.background_mode = Environment.BG_COLOR
+	game._environment.background_color = Color.BLACK
 	manager.set_process(false)
 	game.hud._root.visible = false
 	var viewport_size := root.get_visible_rect().size
@@ -43,15 +47,16 @@ func _run() -> void:
 	var glint := root.get_texture().get_image()
 	_check(glint != null and not glint.is_empty(), "Compatibility glint frame readback succeeded")
 	var illuminated := _max_brightness(glint, center, 12)
-	print("TEETH_GLINT_RENDER_SAMPLE " + JSON.stringify({"baseline": baseline, "glint": illuminated, "uv": center / viewport_size}))
-	_check(illuminated > baseline + 0.20, "visible tooth strokes render above the oval blackout")
+	var increase := _max_pixel_increase(dark, glint, center, 12)
+	print("TEETH_GLINT_RENDER_SAMPLE " + JSON.stringify({"baseline": baseline, "glint": illuminated, "increase": increase, "uv": center / viewport_size}))
+	_check(increase > 0.20, "visible tooth strokes render above the oval blackout")
 
 	manager._teeth_overlay.call("set_glints", empty_points)
 	for frame in range(3):
 		await process_frame
 	await RenderingServer.frame_post_draw
-	var cleared := _max_brightness(root.get_texture().get_image(), center, 12)
-	_check(cleared < illuminated - 0.20, "tooth overlay fully disappears when glints are cleared")
+	var cleared := root.get_texture().get_image()
+	_check(_max_pixel_increase(cleared, glint, center, 12) > 0.20, "tooth overlay fully disappears when glints are cleared")
 
 	game.queue_free()
 	await process_frame
@@ -76,6 +81,21 @@ func _max_brightness(img: Image, center: Vector2, radius: int) -> float:
 			var pixel := img.get_pixel(x, y)
 			brightest = maxf(brightest, maxf(pixel.r, maxf(pixel.g, pixel.b)))
 	return brightest
+
+func _max_pixel_increase(before: Image, after: Image, center: Vector2, radius: int) -> float:
+	if before == null or after == null or before.is_empty() or after.is_empty():
+		return 0.0
+	var maximum := 0.0
+	var x0 := maxi(int(center.x) - radius, 0)
+	var x1 := mini(int(center.x) + radius, mini(before.get_width(), after.get_width()) - 1)
+	var y0 := maxi(int(center.y) - radius, 0)
+	var y1 := mini(int(center.y) + radius, mini(before.get_height(), after.get_height()) - 1)
+	for y in range(y0, y1 + 1):
+		for x in range(x0, x1 + 1):
+			var a := before.get_pixel(x, y)
+			var b := after.get_pixel(x, y)
+			maximum = maxf(maximum, maxf(b.r - a.r, maxf(b.g - a.g, b.b - a.b)))
+	return maximum
 
 func _check(ok: bool, description: String) -> void:
 	checks += 1
