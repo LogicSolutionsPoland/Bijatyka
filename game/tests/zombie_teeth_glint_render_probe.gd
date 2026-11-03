@@ -33,7 +33,7 @@ func _run() -> void:
 	for frame in range(3):
 		await process_frame
 	await RenderingServer.frame_post_draw
-	_check(manager._teeth_canvas.is_visible_in_tree(), "ground profile keeps the tooth overlay visible during capture")
+	_check(manager._teeth_canvas.visible and manager._teeth_overlay.is_visible_in_tree(), "ground profile keeps the tooth overlay visible during capture")
 	var dark := root.get_texture().get_image()
 	_check(dark != null and not dark.is_empty(), "Compatibility dark frame readback succeeded")
 	var baseline := _max_brightness(dark, center, 12)
