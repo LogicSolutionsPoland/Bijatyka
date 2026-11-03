@@ -25,6 +25,9 @@ const SPAWN_ASSAULT_SPEED_MULTIPLIER := 3.2
 const SPAWN_ASSAULT_HANDOFF_DISTANCE := 6.0
 const PURSUIT_PROBE_DISTANCE := 2.4
 const PURSUIT_AVOID_SECONDS := 0.45
+const CROWD_SEPARATION_RADIUS := 1.55
+const CROWD_SEPARATION_STRENGTH := 1.25
+const CROWD_WAIT_SPEED := 0.70
 const PURSUIT_DETOUR_ANGLES := [35.0, -35.0, 60.0, -60.0, 90.0, -90.0, 125.0, -125.0]
 
 @export_enum("shambler", "brute", "stalker", "boss") var enemy_variant := "shambler"
@@ -168,6 +171,64 @@ func _pursuit_direction(desired: Vector3, delta: float, target_distance: float) 
 	_pursuit_avoid_remaining = PURSUIT_AVOID_SECONDS
 	return _pursuit_avoid_direction
 
+func _crowd_separation_direction() -> Vector3:
+	# Zombie bodies intentionally do not collide with one another. Use the
+	# shared 10 Hz neighbor grid to stop live actors and their low-detail
+	# silhouettes from occupying the same spot in the horde.
+	var total := Vector3.ZERO
+	var neighbor_count := 0
+	var strongest_weight := 0.0
+	var radius_squared := CROWD_SEPARATION_RADIUS * CROWD_SEPARATION_RADIUS
+	for ally in _nearby():
+		if ally.is_boss or ally.hp <= 0:
+			continue
+		var offset := global_position - ally.global_position
+		offset.y = 0.0
+		var distance_squared := offset.length_squared()
+		if distance_squared >= radius_squared:
+			continue
+		neighbor_count += 1
+		var distance := sqrt(distance_squared)
+		var away := Vector3.ZERO
+		if distance_squared <= 0.0001:
+			# Give exact overlaps a stable, opposite escape direction per pair.
+			var self_id: int = get_instance_id()
+			var ally_id: int = ally.get_instance_id()
+			var low_id: int = mini(self_id, ally_id)
+			var high_id: int = maxi(self_id, ally_id)
+			var overlap_angle := deg_to_rad(float(((low_id % 360) * 31 + (high_id % 360) * 17) % 360))
+			away = Vector3(cos(overlap_angle), 0.0, sin(overlap_angle))
+			if self_id > ally_id:
+				away = -away
+		else:
+			away = offset / distance
+		var weight := 1.0 - distance / CROWD_SEPARATION_RADIUS
+		strongest_weight = maxf(strongest_weight, weight)
+		total += away * weight
+	if neighbor_count == 0:
+		return Vector3.ZERO
+	if total.length_squared() <= 0.001:
+		# A perfectly symmetric pile must still have a repeatable way to spread.
+		var fallback_angle := deg_to_rad(float(get_instance_id() % 360))
+		total = Vector3(cos(fallback_angle), 0.0, sin(fallback_angle)) * strongest_weight
+	return total.limit_length(1.0)
+
+func _crowd_wait_direction(toward_target: Vector3) -> Vector3:
+	var away := _crowd_separation_direction()
+	if away.length_squared() < 0.04:
+		return Vector3.ZERO
+	var toward := toward_target
+	toward.y = 0.0
+	if toward.length_squared() <= 0.001:
+		return away
+	toward = toward.normalized()
+	var tangent := away - toward * away.dot(toward)
+	if tangent.length_squared() <= 0.001:
+		tangent = Vector3.UP.cross(toward)
+		if get_instance_id() % 2 == 0:
+			tangent = -tangent
+	return tangent.normalized()
+
 func _valid_target() -> bool:
 	return is_instance_valid(combat_target) and not combat_target.is_queued_for_deletion() and (not combat_target is FoundationEnemy or combat_target.hp > 0)
 
@@ -262,6 +323,9 @@ func _update_spawn_assault(delta: float) -> bool:
 		_finish_spawn_assault()
 		return false
 	var direction := offset.normalized()
+	var crowd_separation := _crowd_separation_direction()
+	if crowd_separation.length_squared() > 0.001:
+		direction = (direction + crowd_separation * CROWD_SEPARATION_STRENGTH).normalized()
 	rotation.y = atan2(-direction.x, -direction.z)
 	velocity.x = direction.x * move_speed * SPAWN_ASSAULT_SPEED_MULTIPLIER * slow_factor
 	velocity.z = direction.z * move_speed * SPAWN_ASSAULT_SPEED_MULTIPLIER * slow_factor
@@ -833,10 +897,11 @@ func _update_ai(delta: float, distance: float) -> void:
 	else:
 		if distance <= attack_range and _clear_sight(combat_target):
 			if combat_target == _player and not is_boss and is_instance_valid(attack_director) and not attack_director.call("try_acquire_attacker", self):
-				# Keep crowding the player; the four active attack slots still
-				# prevent an unfair fifth simultaneous hit.
-				velocity.x = 0.0
-				velocity.z = 0.0
+				# Waiters make room around the player instead of stacking inside
+				# the same capsule while one of the four attack slots is occupied.
+				var queue_direction := _crowd_wait_direction(direction)
+				velocity.x = queue_direction.x * CROWD_WAIT_SPEED
+				velocity.z = queue_direction.z * CROWD_WAIT_SPEED
 				return
 			state = "windup"
 			state_time = telegraph_duration if is_boss else telegraph_duration * 0.55
@@ -849,7 +914,11 @@ func _update_ai(delta: float, distance: float) -> void:
 		else:
 			# Ray probes steer around the next solid obstacle without changing
 			# CharacterBody collision handling or teleporting the zombie.
-			var chase_direction := _pursuit_direction(direction, delta, distance)
+			var crowd_separation := _crowd_separation_direction()
+			var desired_direction := direction
+			if crowd_separation.length_squared() > 0.001:
+				desired_direction = (direction + crowd_separation * CROWD_SEPARATION_STRENGTH).normalized()
+			var chase_direction := _pursuit_direction(desired_direction, delta, distance)
 			velocity.x = chase_direction.x * move_speed * slow_factor * (1.0 if is_boss else 1.45)
 			velocity.z = chase_direction.z * move_speed * slow_factor * (1.0 if is_boss else 1.45)
 			_play_animation("Sprint" if _is_high_speed_chase() else "Walk")
