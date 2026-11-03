@@ -60,8 +60,8 @@ func _run() -> void:
 	var dark_world := game.camera.project_position(viewport_size * Vector2(0.96, 0.58), 5.0)
 	var lit_probe := _add_probe(game, lit_world, Color(1.0, 0.05, 0.03))
 	var dark_probe := _add_probe(game, dark_world, Color(0.02, 1.0, 0.04))
-	_check(game.flashlight_visibility_manager.is_point_in_sector(lit_world) and lit_world.distance_to(game.player.global_position) < 22.0, "lit probe is within the original range and sector")
-	_check(game.flashlight_visibility_manager.is_point_in_sector(dark_world) and dark_world.distance_to(game.player.global_position) < 22.0, "dark probe differs only by its position outside the oval")
+	_check(game.flashlight_visibility_manager.is_point_in_sector(lit_world) and lit_world.distance_to(game.player.global_position) < 10.0, "lit probe is within the original range and sector")
+	_check(game.flashlight_visibility_manager.is_point_in_sector(dark_world) and dark_world.distance_to(game.player.global_position) < 10.0, "dark probe differs only by its position outside the oval")
 	for scale in [1.0, Foundation.MOBILE_BALANCED_RENDER_SCALE, Foundation.MOBILE_3D_RENDER_SCALE]:
 		root.scaling_3d_scale = scale
 		for frame in range(6):

@@ -5,8 +5,8 @@ render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, fog_disabled;
 // looks straight down the beam. Each fragment still depth-tests against walls.
 uniform vec3 beam_color : source_color = vec3(0.61, 0.80, 1.0);
 uniform float section_opacity = 0.16;
-uniform float beam_range = 30.0;
-uniform float fade_end_start = 24.0;
+uniform float beam_range = 10.0;
+uniform float fade_end_start = 8.0;
 
 varying vec2 radial_uv;
 varying float axial_distance;

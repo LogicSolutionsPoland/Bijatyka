@@ -28,14 +28,14 @@ func _run() -> void:
 	manager.set_aim_yaw(0.0)
 	_check(manager.is_point_in_sector(game.player.global_position + Vector3(0, 0, -10)), "forward point is inside the 180-degree sector")
 	_check(not manager.is_point_in_sector(game.player.global_position + Vector3(0, 0, 10)), "rear point is outside the 180-degree sector")
-	_check(not manager.is_point_in_sector(game.player.global_position + Vector3(0, 0, 31)), "visibility never extends beyond the 30 m radius")
+	_check(not manager.is_point_in_sector(game.player.global_position + Vector3(0, 0, 31)), "rear point remains outside the forward flashlight sector")
 	_check(manager.is_point_in_sector(game.player.global_position + Vector3(0, 0, 0.3), 0.65), "sector hysteresis holds a recently visible actor near the boundary")
-	_check(is_equal_approx(manager.get_radial_weight(22.0), 1.0), "illumination stays bright through 22 m")
-	_check(manager.get_radial_weight(26.0) > 0.0 and manager.get_radial_weight(26.0) < 1.0, "outer 22–30 m band fades smoothly")
-	_check(is_zero_approx(manager.get_radial_weight(30.0)), "illumination reaches black at 30 m")
+	_check(is_equal_approx(manager.get_radial_weight(VisibilityManager.BRIGHT_RADIUS), 1.0), "illumination stays bright through 7.33 m")
+	_check(manager.get_radial_weight((VisibilityManager.BRIGHT_RADIUS + VisibilityManager.MAX_RADIUS) * 0.5) > 0.0 and manager.get_radial_weight((VisibilityManager.BRIGHT_RADIUS + VisibilityManager.MAX_RADIUS) * 0.5) < 1.0, "outer 7.33–10 m band fades smoothly")
+	_check(is_zero_approx(manager.get_radial_weight(VisibilityManager.MAX_RADIUS)), "illumination reaches black at 10 m")
 	# Tooth glints are independent of flashlight aim/range; the world mask is unchanged.
 	var base_position: Vector3 = game.player.global_position
-	_check(manager.get_teeth_glow_weight(base_position + Vector3(0, 0, -15)) > 0.99, "teeth glint in the normal flashlight range")
+	_check(manager.get_teeth_glow_weight(base_position + Vector3(0, 0, -15)) > 0.99, "teeth remain visible beyond the new 10 m flashlight range")
 	_check(manager.get_teeth_glow_weight(base_position + Vector3(0, 0, -34)) > 0.99, "teeth remain visible outside the flashlight beam")
 	_check(manager.get_teeth_glow_weight(base_position + Vector3(0, 0, -35)) > 0.99, "teeth do not stop at the former forward boundary")
 	_check(manager.get_teeth_glow_weight(base_position + Vector3(0, 0, -100)) > 0.99, "teeth remain visible at long range")
@@ -45,7 +45,7 @@ func _run() -> void:
 	_check(manager.get_teeth_glow_weight(base_position + Vector3(-33, 0, -1)) > 0.99, "teeth do not stop at the former left boundary")
 	_check(manager.get_teeth_glow_weight(base_position + Vector3(0, 0, 2)) > 0.99, "teeth are not clipped behind the player")
 	_check(manager.get_teeth_glow_weight(base_position + Vector3(34, 0, -34)) > 0.99, "teeth are not clipped by the former diagonal boundary")
-	_check(is_zero_approx(manager.get_radial_weight(31.0)), "ordinary environment light does not extend with teeth")
+	_check(is_zero_approx(manager.get_radial_weight(11.0)), "ordinary environment light does not extend with teeth beyond 10 m")
 	_check(manager.get_oval_weight(VisibilityManager.OVAL_CENTER_UV) > 0.999, "reference oval center is lit")
 	_check(is_zero_approx(manager.get_oval_weight(Vector2(0.02, 0.60))), "left of the oval is black")
 	_check(is_zero_approx(manager.get_oval_weight(Vector2(0.90, 0.60))), "right of the oval is black")
@@ -102,11 +102,11 @@ func _run() -> void:
 			enemy.global_position = game.player.global_position + Vector3(45.0, 0.0, 0.0)
 		var visible_zombie := test_enemies[0] as FoundationEnemy
 		var dark_zombie := test_enemies[1] as FoundationEnemy
-		visible_zombie.global_position = game.player.global_position + Vector3(0.0, 0.0, -20.0)
+		visible_zombie.global_position = game.player.global_position + Vector3(0.0, 0.0, -8.0)
 		dark_zombie.global_position = game.player.global_position + Vector3(0.0, 0.0, 5.0)
 		var dark_position := dark_zombie.global_position
 		manager._classify_enemies()
-		_check(manager.get_band(visible_zombie) == VisibilityManager.Band.VISIBLE_DISTANT, "distant zombie inside the light is classified as visible")
+		_check(manager.get_band(visible_zombie) == VisibilityManager.Band.VISIBLE_CLOSE, "zombie inside the 10 m light range is classified as visible")
 		_check(manager.get_band(dark_zombie) == VisibilityManager.Band.DARK_CLOSE_COMBAT, "close zombie behind the light remains in the combat simulation but is visually dark")
 		_check(not dark_zombie._visual_root.visible, "dark ordinary zombie detail model is visually hidden")
 		game.horde_far_visuals._update_full_rig_selection()

@@ -4,8 +4,8 @@ render_mode unshaded, blend_mix, depth_test_disabled, depth_draw_never, cull_dis
 uniform sampler2D depth_texture : hint_depth_texture, repeat_disable, filter_nearest;
 uniform vec3 flashlight_origin = vec3(0.0);
 uniform vec3 flashlight_forward = vec3(0.0, 0.0, -1.0);
-uniform float bright_radius = 22.0;
-uniform float max_radius = 30.0;
+uniform float bright_radius = 7.333333;
+uniform float max_radius = 10.0;
 uniform float player_keep_radius = 2.1;
 uniform vec2 oval_center_uv = vec2(0.44, 0.60);
 uniform vec2 oval_radius_uv = vec2(0.29, 0.22);
