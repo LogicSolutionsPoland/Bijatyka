@@ -48,7 +48,7 @@ func _run() -> void:
 	enemy.rotation.y = PI
 	enemy.position.z = -36.0
 	manager._update_distant_teeth()
-	_check(_glint_count(manager) == 0, "zombie beyond the extra 5m cannot glint")
+	_check(_glint_count(manager) == 1, "zombie remains visible beyond the former +5m range")
 
 	enemy.position.z = -20.0
 	manager._update_distant_teeth()
