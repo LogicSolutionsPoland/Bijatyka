@@ -125,6 +125,11 @@ func _ready() -> void:
 	arena_map = ARENA_MAP_SCRIPT.new() as Node3D
 	arena_map.name = "AshenQuarantineMap"
 	add_child(arena_map)
+	# Reserve solid wrecks and building cores before the spawn director starts.
+	# These shapes share the road map's world transform and reject births inside cover.
+	var city_obstacle_bounds: Array[AABB] = arena_map.get("collision_bounds")
+	for local_bounds in city_obstacle_bounds:
+		_spawn_blockers.append(arena_map.global_transform * local_bounds)
 	# The map is already built in this scene. Keep its visual batches dormant
 	# on the roof and reveal the same instances over the downward ride.
 	for child in arena_map.get_children():
@@ -968,7 +973,22 @@ func _update_distance_visibility() -> void:
 func _apply_distance_visibility(node: Node) -> void:
 	# Enemy rigs own their 18/30 m bands; walking every bone and mesh every
 	# 120 ms scales with the full 200-zombie population.
-	if node is FoundationEnemy or node == horde_far_visuals or node.is_in_group("distant_backdrop") or node.is_in_group("static_map_batch") or node.is_in_group("nature_scenery_batch") or node.is_in_group("flashlight_beam") or node.is_in_group("pencil_screen_pass") or node.is_in_group("flashlight_visibility_composite"):
+	if node is FoundationEnemy or node == horde_far_visuals or node.is_in_group("distant_backdrop") or node.is_in_group("nature_scenery_batch") or node.is_in_group("flashlight_beam") or node.is_in_group("pencil_screen_pass") or node.is_in_group("flashlight_visibility_composite"):
+		return
+	if node is MultiMeshInstance3D and node.is_in_group("static_map_batch"):
+		# The loading coordinator owns visibility during elevator preparation.
+		# Once downstairs, skip distant cells before the flashlight mask pass.
+		if _ground_map_ready and not _ground_map_preparing and not _rooftop_sky_active:
+			var city_cell := node as MultiMeshInstance3D
+			var bounds := city_cell.global_transform * city_cell.custom_aabb
+			var nearest := Vector3(
+				clampf(player.global_position.x, bounds.position.x, bounds.end.x),
+				clampf(player.global_position.y, bounds.position.y, bounds.end.y),
+				clampf(player.global_position.z, bounds.position.z, bounds.end.z)
+			)
+			var within_view := nearest.distance_squared_to(player.global_position) <= (VISIBILITY_RADIUS + 3.0) * (VISIBILITY_RADIUS + 3.0)
+			if city_cell.visible != within_view:
+				city_cell.visible = within_view
 		return
 	# Do not resend an unchanged visibility state to the RenderingServer every
 	# 120 ms. This applies to no-shadow local lights and ordinary map meshes;

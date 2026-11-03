@@ -1,6 +1,5 @@
 extends Node3D
-## Batched quarantine map geometry and imported CC0 nature dressing.
-## All scenery is visual-only and leaves the combat routes unobstructed.
+## Spatially batched ruined city with broad streets and selected solid cover.
 
 const RUIN_SURFACE_SHADER := preload("res://shaders/ruined_surface.gdshader")
 const DEAD_TREE_1 := preload("res://assets/environment/nature/DeadTree_1.gltf")
@@ -8,6 +7,8 @@ const DEAD_TREE_3 := preload("res://assets/environment/nature/DeadTree_3.gltf")
 const ROCK_MEDIUM_1 := preload("res://assets/environment/nature/Rock_Medium_1.gltf")
 const BUSH_COMMON := preload("res://assets/environment/nature/Bush_Common.gltf")
 var _static_box_batches: Dictionary = {}
+var collision_bounds: Array[AABB] = []
+const CITY_CELL_SIZE := 24.0
 
 func _ready() -> void:
 	_build_map()
@@ -20,6 +21,8 @@ func _build_map() -> void:
 	var glass := _surface(Color(0.035, 0.065, 0.078), 0.30, 0.42)
 	var road_paint := _surface(Color(0.49, 0.22, 0.09), 0.82)
 	var amber := _glow(Color(0.95, 0.20, 0.035))
+	var soot := _surface(Color(0.038, 0.036, 0.037), 1.0)
+	var scorched := _surface(Color(0.13, 0.075, 0.055), 0.98)
 
 	_build_street(asphalt, concrete, dark_concrete, road_paint)
 	_build_transit_corner(concrete, dark_concrete, rust, glass, amber)
@@ -27,6 +30,9 @@ func _build_map() -> void:
 	_build_ruined_fronts(concrete, dark_concrete, glass)
 	_build_edge_debris(rust, concrete)
 	_build_southern_checkpoint(concrete, dark_concrete, rust, amber)
+	_build_outer_streets(asphalt, concrete, road_paint, soot)
+	_build_burned_blocks(concrete, dark_concrete, soot, scorched, rust, glass, amber)
+	_build_wrecks_and_rubble(rust, soot, scorched, glass, amber)
 	_flush_static_boxes()
 	_build_nature()
 
@@ -37,11 +43,17 @@ func _build_nature() -> void:
 		_nature_transform(-17.8, -22.0, 20.0, 0.65),
 		_nature_transform(23.0, 7.5, -37.0, 0.65),
 		_nature_transform(-27.0, -5.0, 112.0, 0.82),
+		_nature_transform(-79.0, -53.0, 12.0, 0.76),
+		_nature_transform(72.0, 43.0, 35.0, 0.73),
+		_nature_transform(-51.0, 69.0, -21.0, 0.78),
 	])
 	_add_nature_batch("DeadTreesTall", DEAD_TREE_3, [
 		_nature_transform(18.2, -23.0, 45.0, 0.50),
 		_nature_transform(-23.5, 17.0, -28.0, 0.62),
 		_nature_transform(22.0, 17.5, 131.0, 0.59),
+		_nature_transform(79.0, -68.0, 42.0, 0.55),
+		_nature_transform(-74.0, 63.0, -63.0, 0.59),
+		_nature_transform(48.0, -72.0, 115.0, 0.54),
 	])
 	_add_nature_batch("RoadsideRocks", ROCK_MEDIUM_1, [
 		_nature_transform(-19.0, 8.5, 12.0, 0.70),
@@ -52,6 +64,10 @@ func _build_nature() -> void:
 		_nature_transform(19.0, -25.0, 143.0, 0.57),
 		_nature_transform(-22.0, -25.0, -53.0, 0.70),
 		_nature_transform(23.5, -17.0, 33.0, 0.66),
+		_nature_transform(-61.0, -76.0, 20.0, 0.61),
+		_nature_transform(60.0, 73.0, 80.0, 0.64),
+		_nature_transform(-35.0, 47.0, -17.0, 0.62),
+		_nature_transform(84.0, 8.0, 120.0, 0.68),
 	])
 	_add_nature_batch("OvergrownShrubs", BUSH_COMMON, [
 		_nature_transform(-19.2, 10.0, 0.0, 0.78),
@@ -60,7 +76,109 @@ func _build_nature() -> void:
 		_nature_transform(25.5, 1.5, -21.0, 0.76),
 		_nature_transform(-21.5, -23.5, 40.0, 0.87),
 		_nature_transform(23.0, -23.0, 115.0, 0.80),
+		_nature_transform(-82.0, 15.0, 40.0, 0.86),
+		_nature_transform(82.0, -22.0, 90.0, 0.72),
+		_nature_transform(-48.0, -73.0, 145.0, 0.79),
+		_nature_transform(49.0, 71.0, 15.0, 0.82),
 	])
+
+func _build_outer_streets(asphalt: Material, concrete: Material, road_paint: Material, soot: Material) -> void:
+	# The original courtyard remains intact. Four broad loops and two cross
+	# streets fill the previously empty ground out to roughly 90 m each way.
+	for x in [-58.0, -30.0, 0.0, 30.0, 58.0]:
+		for segment in range(8):
+			var z := -77.0 + float(segment) * 22.0
+			_box("NorthSouthStreet", Vector3(x, 0.010, z), Vector3(10.0, 0.018, 22.0), asphalt)
+			if absf(x) > 1.0 or z < -37.0 or z > 31.0:
+				_box("FadedLaneMark", Vector3(x, 0.026, z), Vector3(0.16, 0.012, 2.8), road_paint)
+	for z in [-62.0, -35.0, 24.0, 54.0]:
+		for segment in range(8):
+			var x := -77.0 + float(segment) * 22.0
+			_box("EastWestStreet", Vector3(x, 0.012, z), Vector3(22.0, 0.018, 9.5), asphalt)
+			_box("FadedCrossStreetMark", Vector3(x, 0.027, z), Vector3(2.8, 0.012, 0.16), road_paint)
+	# Sidewalk slabs visually border each block without closing the roads.
+	for side in [-1.0, 1.0]:
+		for lane in [30.0, 58.0]:
+			for segment in range(7):
+				var z := -70.0 + float(segment) * 22.0
+				_box("CharredSidewalk", Vector3(side * (lane + 6.4), 0.07, z), Vector3(2.4, 0.12, 20.0), concrete)
+				_box("CinderStrip", Vector3(side * (lane + 7.7), 0.14, z), Vector3(0.12, 0.012, 15.0), soot)
+
+func _build_burned_blocks(concrete: Material, dark_concrete: Material, soot: Material,
+		scorched: Material, rust: Material, glass: Material, amber: Material) -> void:
+	# Solid cores make real cover; broken upper silhouettes stay visual only.
+	# Every street is at least 9.5 m wide and remains connected around the blocks.
+	for side in [-1.0, 1.0]:
+		for lane in [44.0, 74.0]:
+			for z in [-76.0, -48.0, 38.0, 72.0]:
+				var x: float = float(side) * float(lane)
+				var at := Vector3(x, 0.0, z)
+				var height := 5.4 + float((int(lane) + int(z)) % 3) * 1.3
+				_solid_box("BurnedBuildingCore", at + Vector3.UP * height * 0.5,
+					Vector3(7.0, height, 8.0), soot)
+				_box("BrokenUpperFloor", at + Vector3(-side * 0.8, height + 0.38, 0.6),
+					Vector3(5.1, 0.72, 6.4), concrete)
+				_box("CollapsedParapet", at + Vector3(side * 1.7, height + 1.1, -2.7),
+					Vector3(1.0, 1.4, 2.8), dark_concrete)
+				_box("ScorchedWallFace", at + Vector3(0.0, height * 0.53, -4.03),
+					Vector3(6.0, height * 0.77, 0.08), scorched)
+				for window in [-1.8, 1.8]:
+					_box("BurnedWindow", at + Vector3(window, 2.9, -4.09),
+						Vector3(1.08, 1.52, 0.10), glass)
+				_box("ExposedRebar", at + Vector3(-side * 2.6, height + 1.45, 2.4),
+					Vector3(0.13, 2.9, 0.13), rust)
+				if z == -48.0 or z == 38.0:
+					_box("DyingEmber", at + Vector3(2.0, 0.34, 4.5),
+						Vector3(0.48, 0.14, 0.28), amber)
+	# A shattered back row closes the view before the existing world boundary.
+	for index in range(9):
+		var x := -84.0 + float(index) * 21.0
+		if absf(x) < 15.0:
+			continue
+		_box("DistantBurnedSkyline", Vector3(x, 7.5 + float(index % 3), -89.0),
+			Vector3(7.5, 15.0 + float(index % 3) * 2.0, 5.0), dark_concrete)
+
+func _build_wrecks_and_rubble(rust: Material, soot: Material, scorched: Material,
+		glass: Material, amber: Material) -> void:
+	# Wrecks sit at road shoulders and leave the central routes clear. Their
+	# chassis collide with player and zombies; sparks have no dynamic lights.
+	for side in [-1.0, 1.0]:
+		for x_lane in [25.0, 64.0]:
+			for z in [-68.0, -39.0, 21.0, 59.0]:
+				var x: float = float(side) * float(x_lane)
+				var yaw: float = float(side) * 0.16
+				var at := Vector3(x, 0.0, z)
+				_solid_box("BurnedVehicleChassis", at + Vector3.UP * 0.73,
+					Vector3(2.4, 1.46, 4.8), soot, yaw)
+				_box("BurnedVehicleCabin", at + Vector3(0.0, 1.62, 0.5),
+					Vector3(2.0, 0.56, 2.2), rust, yaw)
+				_box("ShatteredWindshield", at + Vector3(0.0, 1.64, -0.66),
+					Vector3(1.55, 0.34, 0.08), glass, yaw)
+				_box("WreckEmbers", at + Vector3(0.65, 0.27, 2.30),
+					Vector3(0.52, 0.13, 0.26), amber, yaw)
+	for index in range(32):
+		var side := -1.0 if index % 2 == 0 else 1.0
+		var ring := float(index / 8)
+		var z := -72.0 + float(index % 8) * 19.0
+		var x := side * (37.0 + ring * 11.0)
+		_box("BlackenedDebris", Vector3(x, 0.21, z), Vector3(1.1, 0.42, 1.6),
+			scorched if index % 3 == 0 else rust, float(index % 4) * 0.31)
+
+func _solid_box(label: String, at: Vector3, dimensions: Vector3, surface: Material, yaw: float = 0.0) -> void:
+	_box(label, at, dimensions, surface, yaw)
+	var body := StaticBody3D.new()
+	body.name = "%s%02d" % [label, collision_bounds.size()]
+	body.collision_layer = 1
+	var shape_node := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = dimensions
+	shape_node.shape = shape
+	body.add_child(shape_node)
+	body.position = at
+	body.rotation.y = yaw
+	body.add_to_group("ruined_city_obstacle")
+	add_child(body)
+	collision_bounds.append(Transform3D(Basis(Vector3.UP, yaw), at) * AABB(-dimensions * 0.5, dimensions))
 
 func _nature_transform(x: float, z: float, yaw_degrees: float, scale_factor: float) -> Transform3D:
 	return Transform3D(Basis(Vector3.UP, deg_to_rad(yaw_degrees)).scaled(Vector3.ONE * scale_factor), Vector3(x, 0.10, z))
@@ -204,13 +322,20 @@ func _build_southern_checkpoint(concrete: Material, dark_concrete: Material, rus
 	_box("SouthGateBrokenBarrierEast", Vector3(12.6, 1.05, 17.4), Vector3(3.8, 2.1, 0.78), rust, 0.12)
 
 func _box(_label: String, at: Vector3, dimensions: Vector3, surface: Material, yaw: float = 0.0) -> void:
-	# A scaled unit box keeps all static scenery with one material in one draw.
-	# The shader's world-space weathering still uses the per-instance transform.
-	var key := surface.get_instance_id()
+	# Spatial cells keep the expanded city out of near-field GPU batches.
+	var cell_x := floori(at.x / CITY_CELL_SIZE)
+	var cell_z := floori(at.z / CITY_CELL_SIZE)
+	var key := "%d:%d:%d" % [surface.get_instance_id(), cell_x, cell_z]
+	var center := Vector3((cell_x + 0.5) * CITY_CELL_SIZE, 0.0,
+		(cell_z + 0.5) * CITY_CELL_SIZE)
+	var transform := Transform3D(Basis(Vector3.UP, yaw).scaled(dimensions), at - center)
+	var bounds := transform * AABB(-Vector3.ONE * 0.5, Vector3.ONE)
 	if not _static_box_batches.has(key):
-		_static_box_batches[key] = {"material": surface, "transforms": []}
+		_static_box_batches[key] = {"material": surface, "center": center,
+			"transforms": [], "bounds": bounds}
 	var transforms: Array = _static_box_batches[key]["transforms"]
-	transforms.append(Transform3D(Basis(Vector3.UP, yaw).scaled(dimensions), at))
+	transforms.append(transform)
+	_static_box_batches[key]["bounds"] = (_static_box_batches[key]["bounds"] as AABB).merge(bounds)
 
 func _box_batch(label: String, _center: Vector3, dimensions: Vector3, positions: Array[Vector3], surface: Material) -> void:
 	for position in positions:
@@ -218,7 +343,10 @@ func _box_batch(label: String, _center: Vector3, dimensions: Vector3, positions:
 
 func _flush_static_boxes() -> void:
 	var unit_box := BoxMesh.new()
-	for key in _static_box_batches:
+	unit_box.size = Vector3.ONE
+	var keys := _static_box_batches.keys()
+	keys.sort()
+	for key in keys:
 		var data: Dictionary = _static_box_batches[key]
 		var transforms: Array = data["transforms"]
 		var batch := MultiMesh.new()
@@ -232,6 +360,8 @@ func _flush_static_boxes() -> void:
 		instance.name = "DistrictStaticBatch%d" % get_child_count()
 		instance.multimesh = batch
 		instance.material_override = data["material"]
+		instance.position = data["center"]
+		instance.custom_aabb = data["bounds"]
 		instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		instance.add_to_group("static_map_batch")
 		add_child(instance)

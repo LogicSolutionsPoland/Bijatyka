@@ -39,14 +39,33 @@ func _run() -> void:
 			district_batches += 1
 			district_boxes += batch.multimesh.instance_count
 			_check(batch.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "district batches cast no shadows")
+			_check(batch.custom_aabb.has_volume(), "city cells have nonempty culling bounds")
 		elif child is MultiMeshInstance3D and child.is_in_group("nature_scenery_batch"):
 			var nature := child as MultiMeshInstance3D
 			nature_batches += 1
 			nature_instances += nature.multimesh.instance_count
 			_check(nature.multimesh.mesh != null and nature.multimesh.mesh.get_surface_count() > 0, "nature uses imported meshes")
 			_check(nature.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "nature casts no shadows")
-	_check(district_batches == 7 and district_boxes == 103, "all 103 district boxes share seven material draws")
-	_check(nature_batches == 4 and nature_instances == 20, "six trees, eight rocks, six shrubs share four mesh batches")
+	_check(district_batches > 7 and district_boxes > 500, "expanded city adds spatially batched streets and ruins")
+	_check(nature_batches == 4 and nature_instances == 34, "dead vegetation covers the wider district in four mesh batches")
+	var obstacle_bounds: Array[AABB] = district.get("collision_bounds")
+	_check(obstacle_bounds.size() == 32, "sixteen building cores and sixteen wrecks are physical cover")
+	_check(game._spawn_blockers.size() == 67, "city cover is registered before zombie spawning")
+	_check(game.get_tree().get_nodes_in_group("ruined_city_obstacle").size() == 32,
+		"city cover has collision bodies")
+	var space := game.get_world_3d().direct_space_state
+	var building_hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(
+		Vector3(44.0, 18.0, -48.0), Vector3(44.0, -2.0, -48.0), 1))
+	var wreck_hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(
+		Vector3(25.0, 10.0, -39.0), Vector3(25.0, -2.0, -39.0), 1))
+	var street_hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(
+		Vector3(0.0, 10.0, 54.0), Vector3(0.0, -2.0, 54.0), 1))
+	_check(not building_hit.is_empty() and building_hit.collider.is_in_group("ruined_city_obstacle"),
+		"burned buildings physically block the player and enemies")
+	_check(not wreck_hit.is_empty() and wreck_hit.collider.is_in_group("ruined_city_obstacle"),
+		"wrecked vehicles physically block the player and enemies")
+	_check(not street_hit.is_empty() and street_hit.collider == game.get_node("QuarantineCourtyardGround"),
+		"the extended south street remains passable ground")
 	_check(Foundation.VISIBILITY_RADIUS == 30.0, "visual edge stays at 30 m")
 	game.queue_free()
 	await process_frame
