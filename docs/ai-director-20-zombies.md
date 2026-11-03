@@ -16,24 +16,29 @@ with immediate reevaluation after damage and confirmed ordinary-zombie deaths.
 It reads the existing spawn manager's cached live actors and attacker slots.
 Health, recent damage, nearby actors, attackers, kills over six seconds,
 horizontal speed, relative player position, quiet time and boss proximity feed
-a normalized intensity score. Boss proximity only bounds ordinary reinforcements;
-the boss AI, damage and attack logic remain unchanged.
+a normalized intensity score. A damaging hit starts a short FRENZY; it does not
+reduce attacker count or slow the replacement pace. Boss proximity only bounds
+ordinary reinforcements; the boss AI, damage and attack logic remain unchanged.
+Ordinary zombies commit to the player after a spawn assault or once within 14 m,
+keep that target through distance and cover, and do not switch to other zombies.
+Ray probes steer active pursuers around nearby solid obstacles; collision and
+attack line-of-sight checks remain authoritative.
 
 | State | Ordinary attacker target | Replacement delay | Entry condition |
 | --- | ---: | ---: | --- |
-| PRESSURE | 3 | 1.0 s | Default active ground combat |
+| PRESSURE | 4 | 1.0 s | Default active ground combat |
 | SURGE | 4 | 0.8 s | Quiet combat with few nearby enemies |
 | PEAK | 4 | 0.65 s | Three quick kills with sufficient intensity |
-| RECOVERY | 2 | 1.4 s | Damage spike or critical health under pressure |
+| FRENZY | 4 | 0.55 s | Player takes damage; repeated hits refresh the 4 s duration |
 
-States use bounded, varying durations rather than a fixed time cycle. A recovery
-lasts two to four seconds and leaves ordinary attackers, pending births and the
-boss intact. Quiet periods can reserve at most two new ordinary reinforcements
-per one-second evaluation. The original concealed spawn implementation still
-checks camera/frustum, opaque cover, collision, ground and navigation before any
-birth. Its one-spawn-per-mobile-tick budget is unchanged. The Director only
-biases sampling toward the less occupied forward flank and never moves an
-existing zombie.
+States use bounded, varying durations rather than a fixed time cycle. All active
+states retain four attack slots; only the replacement delay changes. FRENZY lasts
+at least four seconds after damage and refreshes on repeated hits. Quiet periods
+can reserve at most two new ordinary reinforcements per one-second evaluation.
+The original concealed spawn implementation still checks camera/frustum, opaque
+cover, collision, ground and navigation before any birth. Its one-spawn-per-mobile-
+tick budget is unchanged. The Director biases sampling toward the less occupied
+forward flank and never moves an existing zombie.
 
 The existing spawn manager remains the sole owner of live actors, dormant data
 records, pending reservations, wake transitions and attacker slots. Its maximum

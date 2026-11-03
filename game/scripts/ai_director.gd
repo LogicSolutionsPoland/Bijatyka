@@ -3,7 +3,7 @@ class_name BijatykaAIDirector
 
 ## Offline encounter pacing. ConcealedForwardSpawns remains the sole owner of
 ## ordinary population, placement, replacement reservations and attacker slots.
-enum State { PRESSURE, SURGE, PEAK, RECOVERY }
+enum State { PRESSURE, SURGE, PEAK, FRENZY }
 
 const EVALUATION_SECONDS := 1.0
 const NEARBY_DISTANCE_SQUARED := 18.0 * 18.0
@@ -21,7 +21,7 @@ var evaluation_count := 0
 var _timer: Timer
 var _random := RandomNumberGenerator.new()
 var _state_remaining := 0.0
-var _recovery_cooldown := 0.0
+var _damage_frenzy_seconds := 0.0
 var _quiet_seconds := 0.0
 var _recent_damage := 0.0
 var _last_health := 0
@@ -67,7 +67,7 @@ func deactivate() -> void:
 func _nearby_reset() -> void:
 	_nearby_reset_counters()
 	_state_remaining = 0.0
-	_recovery_cooldown = 0.0
+	_damage_frenzy_seconds = 0.0
 	_quiet_seconds = 0.0
 	_recent_damage = 0.0
 	_kill_bucket = 0
@@ -81,6 +81,7 @@ func _nearby_reset_counters() -> void:
 func _on_health_changed(current: int, _maximum: int) -> void:
 	if active and current < _last_health:
 		_recent_damage = minf(100.0, _recent_damage + float(_last_health - current))
+		_damage_frenzy_seconds = maxf(_damage_frenzy_seconds, 4.0)
 		_quiet_seconds = 0.0
 		_evaluate(false)
 	_last_health = current
@@ -102,8 +103,8 @@ func _evaluate(advance_clock: bool = true) -> void:
 	if advance_clock:
 		_quiet_seconds = minf(60.0, _quiet_seconds + EVALUATION_SECONDS)
 		_state_remaining = maxf(0.0, _state_remaining - EVALUATION_SECONDS)
-		_recovery_cooldown = maxf(0.0, _recovery_cooldown - EVALUATION_SECONDS)
 		_recent_damage *= 0.72
+		_damage_frenzy_seconds = maxf(0.0, _damage_frenzy_seconds - EVALUATION_SECONDS)
 		_kill_bucket = (_kill_bucket + 1) % KILL_WINDOW_SECONDS
 		_kills[_kill_bucket] = 0
 	var kills := 0
@@ -138,13 +139,13 @@ func _evaluate(advance_clock: bool = true) -> void:
 		+ 0.08 * minf(1.0, movement / 5.0)
 		+ 0.07 * (1.0 - health_fraction), 0.0, 1.0)
 	evaluation_count += 1
-	# A short respite follows a damage spike. A quiet patch quickly promotes a
-	# new surge; random ranges prevent a fixed-duration encounter loop.
-	if _state_remaining <= 0.0 or (_recovery_cooldown <= 0.0 and _recent_damage >= 28.0 and state != State.RECOVERY) or (kills >= 3 and intensity >= 0.36 and state != State.PEAK):
-		if _recovery_cooldown <= 0.0 and (_recent_damage >= 28.0 or health_fraction < 0.30 and intensity > 0.38):
-			_set_state(State.RECOVERY, 2.0, 4.0)
-			_recovery_cooldown = _random.randf_range(9.0, 14.0)
-		elif kills >= 3 and intensity >= 0.36 and health_fraction >= 0.30:
+	# Taking damage makes the pack more dangerous for several seconds instead
+	# of granting a respite. Quiet combat creates a surge; quick kills trigger PEAK.
+	if _damage_frenzy_seconds > 0.0:
+		if state != State.FRENZY:
+			_set_state(State.FRENZY, 3.0, 4.0)
+	elif state == State.FRENZY or _state_remaining <= 0.0 or (kills >= 3 and intensity >= 0.36 and state != State.PEAK):
+		if kills >= 3 and intensity >= 0.36:
 			_set_state(State.PEAK, 3.0, 5.0)
 		elif (_quiet_seconds >= 6.0 and nearby_count <= 2) or (intensity < 0.22 and _quiet_seconds >= 4.0):
 			_set_state(State.SURGE, 3.0, 5.0)
@@ -154,7 +155,7 @@ func _evaluate(advance_clock: bool = true) -> void:
 	spawns.director_flank_bias = 0.42 if left < right else (-0.42 if right < left else 0.0)
 	_apply_policy()
 	if advance_clock and _quiet_seconds >= 7.0 and nearby_count <= 2:
-		var target := 4 if state == State.RECOVERY else (12 if state == State.PEAK else (10 if state == State.SURGE else 7))
+		var target := 12 if state in [State.PEAK, State.FRENZY] else (10 if state == State.SURGE else 7)
 		if boss_engaged:
 			target = mini(target, 7)
 		spawns.request_reinforcements(mini(2, maxi(0, target - spawns.ordinary_population_count())))
@@ -167,11 +168,8 @@ func _apply_policy() -> void:
 	if not active or not is_instance_valid(spawns):
 		return
 	match state:
-		State.RECOVERY:
-			spawns.director_attacker_target = 2
-			spawns.director_replacement_delay = 1.4
 		State.PRESSURE:
-			spawns.director_attacker_target = 3
+			spawns.director_attacker_target = 4
 			spawns.director_replacement_delay = 1.0
 		State.SURGE:
 			spawns.director_attacker_target = 4
@@ -179,3 +177,6 @@ func _apply_policy() -> void:
 		State.PEAK:
 			spawns.director_attacker_target = 4
 			spawns.director_replacement_delay = 0.65
+		State.FRENZY:
+			spawns.director_attacker_target = 4
+			spawns.director_replacement_delay = 0.55

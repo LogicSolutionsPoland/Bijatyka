@@ -23,6 +23,9 @@ const FULL_ANIMATION_BUDGET := 7
 const SPAWN_ASSAULT_DURATION := 4.5
 const SPAWN_ASSAULT_SPEED_MULTIPLIER := 3.2
 const SPAWN_ASSAULT_HANDOFF_DISTANCE := 6.0
+const PURSUIT_PROBE_DISTANCE := 2.4
+const PURSUIT_AVOID_SECONDS := 0.45
+const PURSUIT_DETOUR_ANGLES := [35.0, -35.0, 60.0, -60.0, 90.0, -90.0, 125.0, -125.0]
 
 @export_enum("shambler", "brute", "stalker", "boss") var enemy_variant := "shambler"
 @export var is_boss := false
@@ -82,6 +85,8 @@ var _rig_budget_owner: Node
 var _low_poly_death_scale := 1.0
 var _player_grapple_owner: FoundationPlayer
 var _player_grapple_time := 0.0
+var _pursuit_avoid_direction := Vector3.ZERO
+var _pursuit_avoid_remaining := 0.0
 
 # Sharing this ten-Hz broad-phase cache across all enemies prevents a full
 # scene-group scan for every physics frame. The 10 m cells and 3x3 query remain
@@ -115,6 +120,53 @@ func _clear_sight(target: Node3D) -> bool:
 	query.exclude = [get_rid(), target.get_rid()] if target is CollisionObject3D else [get_rid()]
 	return get_world_3d().direct_space_state.intersect_ray(query).is_empty()
 
+func _pursuit_ray_clear(direction: Vector3, ray_distance: float) -> bool:
+	var flat := Vector3(direction.x, 0.0, direction.z)
+	if flat.length_squared() < 0.001:
+		return false
+	var origin := global_position + Vector3.UP * 0.85
+	var query := PhysicsRayQueryParameters3D.create(
+		origin,
+		origin + flat.normalized() * ray_distance,
+		collision_mask
+	)
+	query.exclude = [get_rid()]
+	if is_instance_valid(_player):
+		query.exclude.append(_player.get_rid())
+	return get_world_3d().direct_space_state.intersect_ray(query).is_empty()
+
+func _pursuit_direction(desired: Vector3, delta: float, target_distance: float) -> Vector3:
+	desired.y = 0.0
+	if desired.length_squared() < 0.001:
+		return Vector3.ZERO
+	desired = desired.normalized()
+	var probe_distance := minf(PURSUIT_PROBE_DISTANCE, maxf(1.0, target_distance))
+	_pursuit_avoid_remaining = maxf(0.0, _pursuit_avoid_remaining - delta)
+	if _pursuit_ray_clear(desired, probe_distance):
+		_pursuit_avoid_direction = Vector3.ZERO
+		_pursuit_avoid_remaining = 0.0
+		return desired
+	if _pursuit_avoid_remaining > 0.0 and _pursuit_avoid_direction.length_squared() > 0.001:
+		if _pursuit_ray_clear(_pursuit_avoid_direction, probe_distance * 0.8):
+			return _pursuit_avoid_direction
+	var preferred_side := -1.0 if get_instance_id() % 2 == 0 else 1.0
+	var lateral_axis := Vector3.UP.cross(desired)
+	var best_direction := Vector3.ZERO
+	var best_score := -INF
+	for angle_degrees in PURSUIT_DETOUR_ANGLES:
+		var candidate := desired.rotated(Vector3.UP, deg_to_rad(angle_degrees)).normalized()
+		if not _pursuit_ray_clear(candidate, probe_distance):
+			continue
+		var score := candidate.dot(desired) + preferred_side * candidate.dot(lateral_axis) * 0.025
+		if score > best_score:
+			best_score = score
+			best_direction = candidate
+	if best_direction.length_squared() < 0.001:
+		best_direction = desired.rotated(Vector3.UP, PI * 0.5 * preferred_side).normalized()
+	_pursuit_avoid_direction = best_direction
+	_pursuit_avoid_remaining = PURSUIT_AVOID_SECONDS
+	return _pursuit_avoid_direction
+
 func _valid_target() -> bool:
 	return is_instance_valid(combat_target) and not combat_target.is_queued_for_deletion() and (not combat_target is FoundationEnemy or combat_target.hp > 0)
 
@@ -122,25 +174,17 @@ func _choose_target() -> void:
 	if is_boss:
 		combat_target = _player
 		return
-	if is_instance_valid(_player) and global_position.distance_to(_player.global_position) <= 14.0 and _clear_sight(_player):
-		var newly_alerted := combat_target != _player
+	if not is_instance_valid(_player) or _player.is_queued_for_deletion():
+		combat_target = null
+		return
+	# Spawn-rushing and alerted zombies stay committed through distance and cover.
+	# They pursue the player instead of switching to other zombies.
+	if combat_target == _player or _spawn_assault_time > 0.0 or global_position.distance_to(_player.global_position) <= 14.0:
 		combat_target = _player
-		if newly_alerted:
-			for ally in _nearby():
-				if ally.global_position.distance_squared_to(global_position) <= 100.0 and ally.state != "windup":
-					ally.combat_target = _player
 		return
-	if _valid_target() and global_position.distance_to(combat_target.global_position) < 24.0:
-		return
+	# Unalerted zombies remain still and concealed until the player enters their
+	# awareness radius. The spawn manager can then store them as data records.
 	combat_target = null
-	var best := 36.0
-	for rival in _nearby():
-		if rival.is_boss:
-			continue
-		var distance := global_position.distance_squared_to(rival.global_position)
-		if distance < best and _clear_sight(rival):
-			best = distance
-			combat_target = rival
 
 func _wander(delta: float) -> void:
 	_wander_time -= delta
@@ -736,7 +780,17 @@ func _update_ai(delta: float, distance: float) -> void:
 			velocity.z = 0.0
 			if state_time > 0.0:
 				return
-		_wander(delta)
+		if not is_boss:
+			# Ordinary ground zombies wait for the player and never pick another
+			# zombie as prey or wander away from the encounter.
+			state = "idle"
+			_wander_time = 0.0
+			_wander_direction = Vector3.ZERO
+			velocity.x = move_toward(velocity.x, 0.0, delta * 9.0)
+			velocity.z = move_toward(velocity.z, 0.0, delta * 9.0)
+			_play_animation("Idle")
+		else:
+			_wander(delta)
 		return
 	distance = global_position.distance_to(combat_target.global_position)
 	var to_player := combat_target.global_position - global_position
@@ -764,13 +818,10 @@ func _update_ai(delta: float, distance: float) -> void:
 		if state_time <= 0.0:
 			state = "approach"
 	else:
-		if distance > attack_range:
-			velocity.x = direction.x * move_speed * slow_factor * (1.0 if is_boss else 1.45)
-			velocity.z = direction.z * move_speed * slow_factor * (1.0 if is_boss else 1.45)
-			_play_animation("Sprint" if _is_high_speed_chase() else "Walk")
-		elif distance <= attack_range and _clear_sight(combat_target):
+		if distance <= attack_range and _clear_sight(combat_target):
 			if combat_target == _player and not is_boss and is_instance_valid(attack_director) and not attack_director.call("try_acquire_attacker", self):
-				# Continue waiting in range until a current attacker finishes.
+				# Keep crowding the player; the four active attack slots still
+				# prevent an unfair fifth simultaneous hit.
 				velocity.x = 0.0
 				velocity.z = 0.0
 				return
@@ -783,8 +834,12 @@ func _update_ai(delta: float, distance: float) -> void:
 			_begin_attack_animation(combat_target, distance, state_time)
 			telegraph_started.emit(self, is_boss)
 		else:
-			velocity.x = 0.0
-			velocity.z = 0.0
+			# Ray probes steer around the next solid obstacle without changing
+			# CharacterBody collision handling or teleporting the zombie.
+			var chase_direction := _pursuit_direction(direction, delta, distance)
+			velocity.x = chase_direction.x * move_speed * slow_factor * (1.0 if is_boss else 1.45)
+			velocity.z = chase_direction.z * move_speed * slow_factor * (1.0 if is_boss else 1.45)
+			_play_animation("Sprint" if _is_high_speed_chase() else "Walk")
 
 func _resolve_enemy_attack(distance: float) -> void:
 	var hit := false

@@ -34,7 +34,7 @@ func _run() -> void:
 	spawns.activate_ground_population(20)
 	spawns.set_physics_process(false)
 	director.activate()
-	_check(director.active and director._timer.time_left > 0.0 and spawns.director_attacker_target == 3, "arrival alone activates a 1 Hz pressure policy")
+	_check(director.active and director._timer.time_left > 0.0 and spawns.director_attacker_target == 4, "arrival alone activates relentless pressure with four attack slots")
 	for index in range(4):
 		var enemy := Enemy.new() as FoundationEnemy
 		enemy.configure("shambler")
@@ -45,16 +45,23 @@ func _run() -> void:
 		spawns.register_enemy(enemy)
 	_check(spawns.ordinary_population_count() == 4, "the stored opening four become four actors without duplication")
 	var actors: Array = spawns._live.values()
-	_check(spawns.try_acquire_attacker(actors[0]) and spawns.try_acquire_attacker(actors[1]) and spawns.try_acquire_attacker(actors[2]) and not spawns.try_acquire_attacker(actors[3]), "PRESSURE admits three of the unchanged maximum four attackers")
+	_check(spawns.try_acquire_attacker(actors[0]) and spawns.try_acquire_attacker(actors[1]) and spawns.try_acquire_attacker(actors[2]) and spawns.try_acquire_attacker(actors[3]), "PRESSURE fills the four ordinary attack slots")
+	var fifth := Enemy.new() as FoundationEnemy
+	fifth.configure("shambler")
+	fifth.position = Vector3(5.0, 0.05, -6.0)
+	fifth._player = player
+	fixture.add_child(fifth)
+	fifth.set_physics_process(false)
+	spawns.register_enemy(fifth)
 	director._evaluate(false)
 	var calm_intensity := director.intensity
 	player.take_boss_damage(35)
-	_check(director.state == Director.State.RECOVERY and director.intensity > calm_intensity and spawns.director_attacker_target == 2, "damage spike quickly reduces ordinary attack pressure")
-	_check(not spawns.try_acquire_attacker(actors[3]), "recovery does not interrupt existing attacks or admit a fifth attacker")
+	_check(director.state == Director.State.FRENZY and director.intensity > calm_intensity and spawns.director_attacker_target == 4, "player damage triggers a short frenzy instead of a respite")
+	_check(not spawns.try_acquire_attacker(fifth), "frenzy still enforces the four-attacker ceiling")
 	for actor in actors:
 		spawns.release_attacker(actor)
 	director._recent_damage = 0.0
-	director._recovery_cooldown = 8.0
+	director._damage_frenzy_seconds = 0.0
 	director._state_remaining = 0.0
 	director._quiet_seconds = 8.0
 	for actor in actors:
