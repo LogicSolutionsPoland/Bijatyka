@@ -33,8 +33,10 @@ func _run() -> void:
 	_check(is_equal_approx(manager.get_radial_weight(VisibilityManager.BRIGHT_RADIUS), 1.0), "illumination stays bright through 7.33 m")
 	_check(manager.get_radial_weight((VisibilityManager.BRIGHT_RADIUS + VisibilityManager.MAX_RADIUS) * 0.5) > 0.0 and manager.get_radial_weight((VisibilityManager.BRIGHT_RADIUS + VisibilityManager.MAX_RADIUS) * 0.5) < 1.0, "outer 7.33–10 m band fades smoothly")
 	_check(is_zero_approx(manager.get_radial_weight(VisibilityManager.MAX_RADIUS)), "illumination reaches black at 10 m")
-	# Tooth glints are independent of flashlight aim/range; the world mask is unchanged.
+	# Rooftop glints stay off; ground-floor glints remain independent of beam aim and range.
 	var base_position: Vector3 = game.player.global_position
+	_check(is_zero_approx(manager.get_teeth_glow_weight(base_position + Vector3(0, 0, -15))), "rooftop keeps tooth glints off")
+	game._set_rooftop_render_profile(false)
 	_check(manager.get_teeth_glow_weight(base_position + Vector3(0, 0, -15)) > 0.99, "teeth remain visible beyond the new 10 m flashlight range")
 	_check(manager.get_teeth_glow_weight(base_position + Vector3(0, 0, -34)) > 0.99, "teeth remain visible outside the flashlight beam")
 	_check(manager.get_teeth_glow_weight(base_position + Vector3(0, 0, -35)) > 0.99, "teeth do not stop at the former forward boundary")
@@ -111,7 +113,7 @@ func _run() -> void:
 		_check(not dark_zombie._visual_root.visible, "dark ordinary zombie detail model is visually hidden")
 		game.horde_far_visuals._update_full_rig_selection()
 		game.horde_far_visuals._process(0.21)
-		_check(game.horde_far_visuals.multimesh.visible_instance_count == 1, "shared MultiMesh compacts the horde to the one visible distant zombie")
+		_check(game.horde_far_visuals.multimesh.visible_instance_count == 0, "zombie inside the 10 m range uses the close render path")
 		manager.set_aim_yaw(PI)
 		manager._classify_enemies()
 		_check(dark_zombie.global_position.distance_to(dark_position) < 0.001, "turning the flashlight never teleports a hidden zombie")
@@ -173,6 +175,7 @@ func _run() -> void:
 		_check(normalized.y >= 0.75 and normalized.y <= 0.86, "camera keeps combat area ahead at %s" % [viewport_size])
 	root.size = saved_size
 
+	game._set_rooftop_render_profile(true)
 	_check(Foundation.ZOMBIE_HORDE_SIZE == 4 and Foundation.ZOMBIE_PERFORMANCE_CAPACITY == 20, "game stores four rooftop zombies and never profiles more than 20")
 	_check(game.burning_horizon.get_child_count() == 4, "Burning Horizon remains present while masked")
 	_check(game._boss_enemy != null and game._boss_enemy.hp > 0, "boss simulation remains independent from flashlight visibility")
