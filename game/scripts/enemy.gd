@@ -10,6 +10,7 @@ const BOSS_MODEL_PATH := "res://assets/characters/universal_base/Universal_Base_
 const UNIVERSAL_BASE_MOTION := preload("res://scripts/universal_base_motion.gd")
 const ENEMY_MODEL_YAW_OFFSET := PI
 const FIGHT_ANIMATION_BUILDER := preload("res://scripts/universal_base_enemy_combat.gd")
+const RIG_ANIMATION_CACHE := preload("res://scripts/enemy_rig_animation_cache.gd")
 const ENEMY_FIGHT_LIBRARY := &"enemy_combat"
 const SHADOW_POLICY := preload("res://scripts/shadow_policy.gd")
 const FLASHLIGHT_REVEAL := preload("res://scripts/flashlight_enemy_reveal.gd")
@@ -456,8 +457,7 @@ func _adopt_detailed_model(model: Node3D) -> void:
 	for mesh_node in model.find_children("*", "MeshInstance3D", true, false):
 		_base_visual_meshes.append(mesh_node as MeshInstance3D)
 	if _animation_player != null and _skeleton != null:
-		UNIVERSAL_BASE_MOTION.install(_animation_player, _skeleton)
-		_fight_animations_ready = FIGHT_ANIMATION_BUILDER.install(_animation_player, _skeleton, _fight_attack_profiles())
+		_fight_animations_ready = RIG_ANIMATION_CACHE.install(model, _animation_player, _skeleton, _fight_attack_profiles())
 		_animation_player.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_PHYSICS
 	if _animation_player != null:
 		for loop_name in ["Idle", "Walk", "Sprint"]:

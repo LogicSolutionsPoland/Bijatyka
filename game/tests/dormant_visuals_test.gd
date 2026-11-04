@@ -119,11 +119,12 @@ func run() -> void:
 	world_gate.player = player
 	world_gate.enabled = true
 	world_gate.aim_direction = Vector3(0, 0, -1)
+	var behind_in_range := player.global_position + Vector3.BACK * 5.0
 	check(world_gate.is_world_position_visible(Vector3(0.0, 0.05, -11.0)), "shared classifier admits record inside front flashlight sector")
-	check(not world_gate.is_world_position_visible(Vector3(0.0, 0.05, 10.0)), "shared classifier rejects record behind flashlight")
-	check(not world_gate.is_world_position_visible(Vector3(0.0, 0.05, -40.0)), "shared classifier rejects record outside 30 m range")
+	check(not world_gate.is_world_position_visible(behind_in_range), "shared classifier rejects record behind flashlight")
+	check(not world_gate.is_world_position_visible(player.global_position + Vector3.FORWARD * (Flashlight.MAX_RADIUS + 1.0)), "shared classifier rejects record outside flashlight range")
 	world_gate.enabled = false
-	check(world_gate.is_world_position_visible(Vector3(0.0, 0.05, 10.0)), "disabling flashlight mask restores in-range visibility")
+	check(world_gate.is_world_position_visible(behind_in_range), "disabling flashlight mask restores in-range visibility")
 	world_gate.free()
 
 	director.store_upstairs_population(4)
