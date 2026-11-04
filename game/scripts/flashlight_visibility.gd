@@ -52,11 +52,17 @@ var _teeth_timer := 0.0
 var _teeth_canvas: CanvasLayer
 var _teeth_overlay: Control
 var _counts := {}
+var _last_upload_state: Array = []
+var _uploaded_uniforms: Dictionary = {}
+var _parameter_updates := 0
+var _uniform_writes := 0
 
 func configure(player_node: Node3D, camera_node: Camera3D, is_enabled: bool) -> void:
 	player = player_node
 	camera = camera_node
 	enabled = is_enabled
+	_last_upload_state.clear()
+	_uploaded_uniforms.clear()
 	_build_composite()
 	_build_beam_light()
 	_upload_shader_parameters()
@@ -85,8 +91,7 @@ func set_rooftop_sky_visible(is_visible: bool) -> void:
 	# The rooftop has no flashlight at all: no blackout, spot cone or glints.
 	rooftop_sky_visible = is_visible
 	_rooftop_mode = is_visible
-	if _material != null:
-		_material.set_shader_parameter("rooftop_sky_visible", is_visible)
+	_set_uniform_if_changed(&"rooftop_sky_visible", is_visible)
 	_sync_rooftop_render_visibility()
 	if not is_visible:
 		_upload_shader_parameters()
@@ -336,22 +341,44 @@ func _build_visible_beam_sections() -> void:
 func _upload_shader_parameters() -> void:
 	if not is_instance_valid(player):
 		return
-	beam_origin = player.global_position + Vector3.UP * BEAM_HEIGHT
 	# The camera supplies pitch while yaw follows the exact same direction as
 	# combat and the ground mask, including touch and gamepad turning.
 	var camera_forward := -camera.global_basis.z if is_instance_valid(camera) else aim_direction
+	# Foundation, camera input and this node may all request an update in one
+	# frame. Preserve immediate setters, but submit each distinct state once.
+	# Include the parent's basis: turning the player also rotates its spotlight.
+	var upload_state: Array = [player.global_transform, camera_forward, aim_direction,
+		enabled, rooftop_sky_visible, _rooftop_mode]
+	if upload_state == _last_upload_state:
+		return
+	_last_upload_state = upload_state
+	_parameter_updates += 1
+	beam_origin = player.global_position + Vector3.UP * BEAM_HEIGHT
 	var horizontal_length := maxf(Vector2(camera_forward.x, camera_forward.z).length(), 0.001)
 	beam_direction = (aim_direction + Vector3.UP * camera_forward.y / horizontal_length).normalized()
 	if is_instance_valid(spotlight):
-		spotlight.global_position = beam_origin
-		spotlight.global_basis = Basis.looking_at(beam_direction, Vector3.UP)
-		spotlight.visible = enabled and not _rooftop_mode
-	if _material == null:
+		if not spotlight.global_position.is_equal_approx(beam_origin):
+			spotlight.global_position = beam_origin
+		var desired_basis := Basis.looking_at(beam_direction, Vector3.UP)
+		if not spotlight.global_basis.is_equal_approx(desired_basis):
+			spotlight.global_basis = desired_basis
+		var should_draw := enabled and not _rooftop_mode
+		if spotlight.visible != should_draw:
+			spotlight.visible = should_draw
+	_set_uniform_if_changed(&"flashlight_origin", player.global_position)
+	_set_uniform_if_changed(&"flashlight_forward", aim_direction)
+	_set_uniform_if_changed(&"flashlight_enabled", enabled)
+	_set_uniform_if_changed(&"rooftop_sky_visible", rooftop_sky_visible)
+
+func _set_uniform_if_changed(parameter: StringName, value: Variant) -> void:
+	if _material == null or (_uploaded_uniforms.has(parameter) and _uploaded_uniforms[parameter] == value):
 		return
-	_material.set_shader_parameter("flashlight_origin", player.global_position)
-	_material.set_shader_parameter("flashlight_forward", aim_direction)
-	_material.set_shader_parameter("flashlight_enabled", enabled)
-	_material.set_shader_parameter("rooftop_sky_visible", rooftop_sky_visible)
+	_material.set_shader_parameter(parameter, value)
+	_uploaded_uniforms[parameter] = value
+	_uniform_writes += 1
+
+func get_parameter_update_stats() -> Dictionary:
+	return {"updates": _parameter_updates, "uniform_writes": _uniform_writes}
 
 func _classify_enemies() -> void:
 	_counts = {

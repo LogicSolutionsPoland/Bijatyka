@@ -1,0 +1,54 @@
+name: Bijatyka general CPU optimization validation
+
+on:
+  push:
+    branches:
+      - perf/general-cpu-20261104
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: general-cpu-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+      - name: Import game
+        run: |
+          set -euo pipefail
+          mkdir -p build/general-cpu
+          godot --headless --editor --path game --import --quit 2>&1 | tee build/general-cpu/import.log
+          if grep -E 'SCRIPT ERROR:|ERROR: Failed to load' build/general-cpu/import.log; then exit 1; fi
+      - name: Check animation cache, gameplay and flashlight
+        run: |
+          set -euo pipefail
+          for suite in general_cpu_optimization_test rig_reuse_benchmark rig_budget_lifecycle_test enemy_attack_animation_test zombie_animation_test test_runner ai_director_test concealed_spawn_test zombie_20_optimization_test dormant_visuals_test elevator_loading_test flashlight_visibility_test zombie_teeth_integration_test flashlight_enemy_reveal_test environment_render_test player_animation_test player_character_quality_test; do
+            timeout 150s godot --headless --path game --script "res://tests/$suite.gd" 2>&1 | tee "build/general-cpu/$suite.log"
+            grep -q 'PASS:' "build/general-cpu/$suite.log"
+            if grep -E 'SCRIPT ERROR:|ERROR:' "build/general-cpu/$suite.log"; then exit 1; fi
+          done
+      - name: Check rendered GL Compatibility pixels
+        run: |
+          set -euo pipefail
+          for suite in flashlight_volume_test flashlight_beam_volume_test zombie_teeth_glint_render_probe flashlight_enemy_render_probe flashlight_boss_render_probe; do
+            timeout 150s xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script "res://tests/$suite.gd" 2>&1 | tee "build/general-cpu/$suite.log"
+            grep -q 'PASS:' "build/general-cpu/$suite.log"
+            if grep -E 'SCRIPT ERROR:|ERROR:' "build/general-cpu/$suite.log"; then exit 1; fi
+          done
+      - name: Retain validation logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bijatyka-general-cpu-validation
+          path: build/general-cpu/*.log
+          if-no-files-found: error
