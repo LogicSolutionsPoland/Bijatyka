@@ -45,15 +45,17 @@ const ROOFTOP_SKY_MIN_HEIGHT := StartingTower.HEIGHT - 1.0
 # large at screen-left with combat clear ahead. The rooftop photo gets its own
 # wider, elevated camera profile so the zombie-filled city clears the parapet.
 # Height is measured above the player's ground origin, not added to an existing camera offset.
-const CAMERA_PIVOT_HEIGHT := 1.20
-const CAMERA_FOLLOW_DISTANCE := 2.5
+const CAMERA_PIVOT_HEIGHT := 1.42
+const CAMERA_FOLLOW_DISTANCE := 3.4
+const CAMERA_FOLLOW_RESPONSE := 10.0
+const CAMERA_MOUNT_VERTICAL_OFFSET := 0.12
 const ROOFTOP_CAMERA_PIVOT_LIFT := 1.0
 const ROOFTOP_CAMERA_FOLLOW_DISTANCE := 5.0
 const ROOFTOP_CAMERA_PITCH_BIAS_DEGREES := 10.0
 const ROOFTOP_CAMERA_BLEND_SPEED := 3.0
-const CAMERA_TARGET_SCREEN_X := 0.35
+const CAMERA_TARGET_SCREEN_X := 0.39
 const CAMERA_VERTICAL_FOV := 66.0
-const CAMERA_PITCH_DEGREES := -16.0
+const CAMERA_PITCH_DEGREES := -13.0
 const GAMEPAD_LOOK_DEADZONE := 0.12
 const CAMERA_GAMEPAD_YAW_RADIANS_PER_SECOND := 2.4
 const CAMERA_GAMEPAD_PITCH_RADIANS_PER_SECOND := 1.8
@@ -224,7 +226,7 @@ func _process(delta: float) -> void:
 		delta * ROOFTOP_CAMERA_BLEND_SPEED
 	)
 	var target_position := player.global_position + Vector3.UP * _camera_pivot_height()
-	camera_rig.global_position = camera_rig.global_position.lerp(target_position, 1.0 - exp(-delta * 7.5))
+	camera_rig.global_position = camera_rig.global_position.lerp(target_position, 1.0 - exp(-delta * CAMERA_FOLLOW_RESPONSE))
 	camera_arm.spring_length = _camera_follow_distance()
 	camera_arm.rotation.x = _effective_camera_pitch()
 	_update_camera_framing()
@@ -708,8 +710,9 @@ func _update_camera_framing() -> void:
 		return
 	var aspect := viewport_size.x / viewport_size.y
 	var half_horizontal_fov := atan(tan(deg_to_rad(CAMERA_VERTICAL_FOV * 0.5)) * aspect)
-	# Camera-space shoulder framing keeps the player in the lower-left reference
-	# region without shifting the player model away from the protected base.
+	# Move the spring-arm mount to shoulder height and keep the player slightly
+	# left of center so the jump direction and nearby landing area stay visible.
+	camera_arm.position.y = CAMERA_MOUNT_VERTICAL_OFFSET
 	camera_arm.position.x = (0.5 - CAMERA_TARGET_SCREEN_X) * 2.0 * _camera_follow_distance() * tan(half_horizontal_fov)
 
 func _camera_pivot_height() -> float:
