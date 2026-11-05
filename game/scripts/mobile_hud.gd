@@ -14,7 +14,7 @@ const GAMEPAD_ACTIONS := {
 	&"pad_jump": "jump", &"pad_dash": "dash", &"pad_cast_spell": "cast_spell",
 	&"pad_punch_left": "punch_left", &"pad_punch_right": "punch_right",
 	&"pad_blast": "blast",
-	&"pad_magic_left": "kick_left", &"pad_magic_right": "kick_right",
+	&"pad_magic_left": "magic_left", &"pad_magic_right": "magic_right",
 	&"pad_spell_0": "spell_0", &"pad_spell_1": "spell_1",
 	&"pad_spell_2": "spell_2", &"pad_spell_3": "spell_3"
 }
