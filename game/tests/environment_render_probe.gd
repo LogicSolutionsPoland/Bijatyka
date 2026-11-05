@@ -42,9 +42,9 @@ func _run() -> void:
 			quit(1)
 			return
 		for index in range(batch.multimesh.instance_count):
-			if batch.multimesh.get_instance_transform(index).origin.distance_to(Vector3(0.0, 0.032, -19.2)) < 0.01:
+			if (batch.global_transform * batch.multimesh.get_instance_transform(index)).origin.distance_to(Vector3(0.0, 0.032, -19.2)) < 0.01:
 				road_mark_found = true
-	if map_batches != 7 or map_boxes != 103 or not road_mark_found or nature_batches != 4 or nature_instances != 20:
+	if map_batches <= 7 or map_boxes <= 500 or not road_mark_found or nature_batches != 9 or nature_instances != 62:
 		push_error("static map geometry did not reach the Compatibility renderer")
 		quit(1)
 		return

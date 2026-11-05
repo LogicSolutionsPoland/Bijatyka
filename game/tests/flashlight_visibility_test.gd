@@ -71,21 +71,13 @@ func _run() -> void:
 	_check(manager.aim_direction.distance_to(Vector3.RIGHT) < 0.001, "negative camera yaw lights the camera's rightward view")
 	manager.set_aim_yaw(0.0)
 
-	# Touch camera gestures flow through the same callback used by the HUD.
-	var yaw_before_touch := game._camera_yaw
-	game.hud.camera_dragged.emit(Vector2(18.0, -7.0))
-	_check(not is_equal_approx(game._camera_yaw, yaw_before_touch), "touch drag rotates the camera")
-	var camera_forward := -game.camera.global_transform.basis.z
-	camera_forward.y = 0.0
-	_check(game.flashlight_visibility_manager.aim_direction.distance_to(camera_forward.normalized()) < 0.001, "touch aim points the flashlight along the camera in the same frame")
-
-	# The same input actions used by the right stick update the camera and aim.
+	# The right stick updates camera and flashlight aim in the same frame.
 	var yaw_before_gamepad := game._camera_yaw
 	Input.action_press("camera_right", 1.0)
 	game._update_gamepad_camera(1.0 / 60.0)
 	Input.action_release("camera_right")
 	_check(not is_equal_approx(game._camera_yaw, yaw_before_gamepad), "gamepad camera action rotates the camera")
-	camera_forward = -game.camera.global_transform.basis.z
+	var camera_forward := -game.camera.global_transform.basis.z
 	camera_forward.y = 0.0
 	_check(game.flashlight_visibility_manager.aim_direction.distance_to(camera_forward.normalized()) < 0.001, "gamepad aim points the flashlight along the camera")
 

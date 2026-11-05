@@ -54,7 +54,7 @@ func _run() -> void:
 	check(world.get_node_or_null("BrokenPillarA") is StaticBody3D and
 		(world.get_node("BrokenPillarA") as StaticBody3D).get_child(0) is CollisionShape3D,
 		"collidable cover is still physical")
-	check(world._spawn_blockers.size() == 35, "concealed spawn blockers include the unchanged skyline and tower")
+	check(world._spawn_blockers.size() == 67, "concealed spawn blockers include city cover, skyline and tower")
 	if not batches.is_empty():
 		var near := batches[0] as MultiMeshInstance3D
 		var at := (near.global_transform * near.multimesh.get_instance_transform(0)).origin
