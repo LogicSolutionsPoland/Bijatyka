@@ -371,10 +371,15 @@ func _test_elevator_ground_wave() -> void:
 	var all_batches_ready := true
 	for visual in arena._ground_map_visuals:
 		all_batches_ready = all_batches_ready and visual.visible
+	var map_is_single_instance := arena.arena_map.get_instance_id() == map_instance_id
+	var ground_sky_active := arena._environment.sky == arena._ground_sky
+	var elevator_doors_open := not elevator._car_enclosure.visible
 	check(arena._ground_map_ready and not arena._ground_map_preparing and all_batches_ready
-		and not elevator._car_enclosure.visible and arena._environment.sky == arena._ground_sky
-		and arena.arena_map.get_instance_id() == map_instance_id,
-		"ground map and render profile finish before doors open without a second map instance")
+		and elevator_doors_open and ground_sky_active and map_is_single_instance,
+		"ground map and render profile finish before doors open without a second map instance "
+		+ "[ready=%s, preparing=%s, batches=%s, doors_open=%s, ground_sky=%s, one_map=%s]"
+		% [arena._ground_map_ready, arena._ground_map_preparing, all_batches_ready,
+			elevator_doors_open, ground_sky_active, map_is_single_instance])
 	check(director.population_limit == 20 and director._initial_population_pending + director._live.size() == 4
 		and director._stored_population.is_empty() and director._pending.is_empty(),
 		"ground arrival activates exactly four stored entries with a twenty-zombie cap")
