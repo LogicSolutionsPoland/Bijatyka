@@ -928,7 +928,7 @@ func _on_hud_action(action: String) -> void:
 		"kick_left": player.request_attack("kick", "left")
 		"kick_right": player.request_attack("kick", "right")
 		"jump": player.try_jump()
-		"dash": player.try_dash()
+		"jump_forward": player.try_parabolic_jump()
 		"cast_spell": player.cast_spell()
 		"blast": player.cast_blast()
 		"spell_0", "spell_1", "spell_2", "spell_3": player.cast_spell_slot(int(action.get_slice("_", 1)))
