@@ -1,6 +1,7 @@
 extends SceneTree
 
 const Foundation := preload("res://scripts/foundation.gd")
+const FlashlightVisibility := preload("res://scripts/flashlight_visibility.gd")
 var failures := 0
 
 func _initialize() -> void:
@@ -18,8 +19,18 @@ func run() -> void:
 	arena.set_process(false)
 	arena.player.set_physics_process(false)
 	var backdrop: Node3D = arena.burning_horizon
-	check(backdrop.get_child_count() == 4, "four panels enclose all compass directions")
+	check(backdrop.get_child_count() == 1, "one circular mesh encloses all compass directions")
 	check(backdrop.find_children("*", "CollisionObject3D").is_empty(), "horde and camera cannot collide with scenery")
+	var horizon := backdrop.get_child(0) as MeshInstance3D
+	var ring := horizon.mesh as CylinderMesh if horizon != null else null
+	check(ring != null, "Zombie Horizon uses an open cylinder mesh")
+	if ring != null:
+		check(is_equal_approx(ring.top_radius, FlashlightVisibility.MAX_RADIUS)
+			and is_equal_approx(ring.bottom_radius, FlashlightVisibility.MAX_RADIUS),
+			"Zombie Horizon radius matches the flashlight maximum")
+		check(is_equal_approx(ring.height, 6.0) and ring.radial_segments == 96,
+			"circular fog wall keeps its six-meter height and 96-sided outline")
+		check(not ring.cap_top and not ring.cap_bottom, "fog ring has no horizontal cap surfaces")
 	var rooftop_sky := arena._rooftop_city_sky
 	var city_material := rooftop_sky.sky_material as ShaderMaterial
 	check(city_material != null, "rooftop sky uses a dedicated lower-hemisphere material")
@@ -51,14 +62,17 @@ func run() -> void:
 		check(backdrop.global_position.is_equal_approx(at), "backdrop follows walking, teleport and airborne dash")
 		for child in backdrop.get_children():
 			var wall := child as MeshInstance3D
-			check(wall.visible, "distance culling must not remove horizon panels")
-			check(wall.mesh.size == Vector2(40, 6), "each panel spans 60 m and stands 6 m tall")
+			check(wall.visible, "distance culling must not remove the horizon")
 			check(wall.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "backdrop has no shadows")
-		# Every horizontal ray must hit one of the four panels at 20..28.29 m.
-		for degrees in range(0, 360, 5):
-			var direction := Vector2(cos(deg_to_rad(float(degrees))), sin(deg_to_rad(float(degrees))))
-			var distance := 20.0 / maxf(absf(direction.x), absf(direction.y))
-			check(distance >= 19.99 and distance <= 28.29, "box covers the full horizontal view")
+		if ring != null:
+			var segment_angle := TAU / float(ring.radial_segments)
+			for degrees in range(0, 360, 5):
+				var angle := deg_to_rad(float(degrees))
+				var local_angle := fposmod(angle, segment_angle)
+				var radial_distance := ring.top_radius * cos(segment_angle * 0.5) / cos(local_angle - segment_angle * 0.5)
+				check(radial_distance >= FlashlightVisibility.MAX_RADIUS - 0.01
+					and radial_distance <= FlashlightVisibility.MAX_RADIUS + 0.01,
+					"the horizon stays at the 10 m flashlight limit in every direction")
 	var old_rotation := backdrop.global_rotation
 	arena._apply_camera_look(1.5, -0.1)
 	check(backdrop.global_rotation.is_equal_approx(old_rotation), "looking around does not rotate the skyline")
