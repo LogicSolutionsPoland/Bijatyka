@@ -721,6 +721,11 @@ func _physics_process(delta: float) -> void:
 	else:
 		_ai_interval = 0.10
 	if _ai_accumulator < _ai_interval:
+		# A stale chase velocity must not carry an unadmitted zombie into the
+		# local ring between staggered decisions.
+		if not is_boss and is_instance_valid(attack_director) and attack_director.has_method("is_local_formation_active") and bool(attack_director.call("is_local_formation_active")) and combat_target == _player and distance <= 4.2 and String(attack_director.call("formation_role_for", self)).is_empty() and state not in ["windup", "hit", "recovery"]:
+			velocity.x = 0.0
+			velocity.z = 0.0
 		_move_and_check_assault(delta)
 		return
 	var step := _ai_accumulator
@@ -895,6 +900,8 @@ func _update_ai(delta: float, distance: float) -> void:
 		if state_time <= 0.0:
 			state = "approach"
 	else:
+		if _follow_local_formation(delta, distance):
+			return
 		if distance <= attack_range and _clear_sight(combat_target):
 			if combat_target == _player and not is_boss and is_instance_valid(attack_director) and not attack_director.call("try_acquire_attacker", self):
 				# Waiters make room around the player instead of stacking inside
@@ -916,12 +923,65 @@ func _update_ai(delta: float, distance: float) -> void:
 			# CharacterBody collision handling or teleporting the zombie.
 			var crowd_separation := _crowd_separation_direction()
 			var desired_direction := direction
+			if not is_boss and is_instance_valid(attack_director) and attack_director.has_method("is_local_formation_active") and bool(attack_director.call("is_local_formation_active")) and combat_target == _player and String(attack_director.call("formation_role_for", self)) == "attacker":
+				var goal: Vector3 = attack_director.call("formation_target_for", self)
+				if goal.is_finite():
+					desired_direction = goal - global_position
+					desired_direction.y = 0.0
+					if desired_direction.length_squared() > 0.04:
+						desired_direction = desired_direction.normalized()
+					else:
+						desired_direction = direction
 			if crowd_separation.length_squared() > 0.001:
-				desired_direction = (direction + crowd_separation * CROWD_SEPARATION_STRENGTH).normalized()
+				desired_direction = (desired_direction + crowd_separation * CROWD_SEPARATION_STRENGTH).normalized()
 			var chase_direction := _pursuit_direction(desired_direction, delta, distance)
 			velocity.x = chase_direction.x * move_speed * slow_factor * (1.0 if is_boss else 1.45)
 			velocity.z = chase_direction.z * move_speed * slow_factor * (1.0 if is_boss else 1.45)
 			_play_animation("Sprint" if _is_high_speed_chase() else "Walk")
+
+func _follow_local_formation(delta: float, distance: float) -> bool:
+	if is_boss or combat_target != _player or not is_instance_valid(attack_director) or not attack_director.has_method("is_local_formation_active") or not bool(attack_director.call("is_local_formation_active")):
+		return false
+	var role: String = String(attack_director.call("formation_role_for", self))
+	if role == "attacker":
+		return false
+	if role.is_empty() and distance > 4.9:
+		return false
+	var goal := Vector3.INF
+	if role.is_empty():
+		# Unadmitted actors hold outside the ring; if the player crosses them,
+		# they walk back out through ordinary CharacterBody collision.
+		var away := global_position - _player.global_position
+		away.y = 0.0
+		if away.length_squared() < 0.01:
+			away = -_player.global_basis.z
+			away.y = 0.0
+		goal = _player.global_position + away.normalized() * 4.55
+	else:
+		goal = attack_director.call("formation_target_for", self)
+	state = "approach"
+	var to_goal := goal - global_position if goal.is_finite() else Vector3.ZERO
+	to_goal.y = 0.0
+	if to_goal.length_squared() < 0.12:
+		var separation := _crowd_separation_direction()
+		if separation.length_squared() > 0.04:
+			velocity.x = separation.x * CROWD_WAIT_SPEED
+			velocity.z = separation.z * CROWD_WAIT_SPEED
+		else:
+			velocity.x = 0.0
+			velocity.z = 0.0
+		_play_animation("Walk" if separation.length_squared() > 0.04 else "Idle")
+		return true
+	var desired := to_goal.normalized()
+	var crowd := _crowd_separation_direction()
+	if crowd.length_squared() > 0.001:
+		desired = (desired + crowd * CROWD_SEPARATION_STRENGTH).normalized()
+	var steering := _pursuit_direction(desired, delta, to_goal.length())
+	velocity.x = steering.x * move_speed * slow_factor
+	velocity.z = steering.z * move_speed * slow_factor
+	rotation.y = lerp_angle(rotation.y, atan2(-steering.x, -steering.z), minf(1.0, delta * 8.0))
+	_play_animation("Walk")
+	return true
 
 func _resolve_enemy_attack(distance: float) -> void:
 	var hit := false
@@ -929,7 +989,8 @@ func _resolve_enemy_attack(distance: float) -> void:
 	var target: Node3D = combat_target if _valid_target() else _player
 	if is_instance_valid(target):
 		distance = global_position.distance_to(target.global_position)
-		if distance <= attack_range + 0.18 and _clear_sight(target):
+		var local_attack_allowed := is_boss or target != _player or not is_instance_valid(attack_director) or not attack_director.has_method("can_resolve_player_attack") or bool(attack_director.call("can_resolve_player_attack", self))
+		if local_attack_allowed and distance <= attack_range + 0.18 and _clear_sight(target):
 			if target is FoundationEnemy:
 				target.receive_hit(12, (target.global_position - global_position).normalized())
 				if target.hp > 0 and target.combat_target != _player:

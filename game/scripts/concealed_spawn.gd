@@ -3,6 +3,7 @@ extends Node3D
 
 signal spawn_requested(at: Vector3)
 signal dormant_enemy_wake_requested(at: Vector3, health: int, kind: String)
+signal attacker_slot_released(enemy: FoundationEnemy)
 
 const MAX_CANDIDATES_PER_TICK := 8
 const MAX_SPAWNS_PER_TICK := 2
@@ -15,6 +16,8 @@ const RETRY_SECONDS := 0.25
 const REPLACEMENT_SECONDS := 1.0
 const MAX_PLAYER_ATTACKERS := 4
 const MAX_ORDINARY_POPULATION := 20
+const LOCAL_ATTACK_RADIUS_SQUARED := 4.0 * 4.0
+const FORMATION_SPACING_SQUARED := 1.15 * 1.15
 # Only unalerted, invisible actors can be stored as data (boss excluded).
 const DORMANT_SLEEP_DISTANCE_SQUARED := 10.0 * 10.0
 const DORMANT_WAKE_DISTANCE_SQUARED := 5.0 * 5.0
@@ -51,6 +54,9 @@ var dormancy_enabled := true
 var _dormant_scan_time := 0.0
 var _ground_active := true
 var _attackers: Dictionary = {}
+var _formation_active := false
+var _formation_roles: Dictionary = {}
+var _formation_targets: Dictionary = {}
 var _pending: Array[float] = []
 var _initial_population_pending := 0
 var _initial_sample_index := 0
@@ -59,6 +65,7 @@ var _clock := 0.0
 var _retry_time := 0.0
 var _sample_index := 0
 var _capsule := CapsuleShape3D.new()
+var _formation_capsule := CapsuleShape3D.new()
 var _mobile_spawn_cooldown := 0.0
 # Tunable ordinary-zombie policy; the population and placement checks below
 # remain authoritative even when an encounter Director requests more pressure.
@@ -69,6 +76,8 @@ var director_flank_bias := 0.0
 func _init() -> void:
 	_capsule.radius = 0.55
 	_capsule.height = 1.95
+	_formation_capsule.radius = 0.5
+	_formation_capsule.height = 1.9
 
 func store_upstairs_population(count: int) -> void:
 	# Only data remains upstairs. The arena removes the actors before this reset.
@@ -76,6 +85,7 @@ func store_upstairs_population(count: int) -> void:
 	set_physics_process(false)
 	_live.clear()
 	_attackers.clear()
+	clear_local_formation()
 	_pending.clear()
 	_initial_population_pending = 0
 	_recent.clear()
@@ -179,6 +189,8 @@ func _on_removed(id: int, replacements: int = 1) -> void:
 	if is_instance_valid(enemy):
 		enemy.attack_director = null
 	_attackers.erase(id)
+	_formation_roles.erase(id)
+	_formation_targets.erase(id)
 	_live.erase(id)
 	if _ground_active:
 		# Pending births reserve slots. A death at the cap therefore adds one;
@@ -232,6 +244,8 @@ func _update_dormant_population(delta: float) -> void:
 		})
 		_live.erase(id)
 		_attackers.erase(id)
+		_formation_roles.erase(id)
+		_formation_targets.erase(id)
 		enemy.attack_director = null
 		enemy.visible = false
 		enemy.set_physics_process(false)
@@ -244,10 +258,100 @@ func _update_dormant_population(delta: float) -> void:
 			break
 
 
+func set_local_formation(roles: Dictionary, targets: Dictionary) -> void:
+	# The local Director supplies admission and goals; this existing manager
+	# remains the only owner of attack locks and global population.
+	_formation_roles = roles
+	_formation_targets = targets
+	_formation_active = true
+
+func clear_local_formation() -> void:
+	_formation_active = false
+	_formation_roles.clear()
+	_formation_targets.clear()
+
+func is_local_formation_active() -> bool:
+	return _formation_active
+
+func formation_role_for(enemy: FoundationEnemy) -> String:
+	return String(_formation_roles.get(enemy.get_instance_id(), "")) if _formation_active else ""
+
+func formation_target_for(enemy: FoundationEnemy) -> Vector3:
+	return _formation_targets.get(enemy.get_instance_id(), Vector3.INF) if _formation_active else Vector3.INF
+
+func safe_formation_position(raw: Vector3, enemy: FoundationEnemy,
+		occupied: Array[Vector3], zone_radius: float) -> Vector3:
+	# Formation is close and visible, so the concealed-birth tests are not used.
+	# Reuse their ground, static-collision, blockers and optional navigation rules.
+	if not is_instance_valid(player) or not is_instance_valid(enemy):
+		return Vector3.INF
+	if absf(raw.x) > WORLD_LIMIT or absf(raw.z) > WORLD_LIMIT:
+		return Vector3.INF
+	var ray := PhysicsRayQueryParameters3D.create(
+		Vector3(raw.x, player.global_position.y + 6.0, raw.z),
+		Vector3(raw.x, minf(-8.0, player.global_position.y - 8.0), raw.z), 1
+	)
+	ray.exclude = [player.get_rid(), enemy.get_rid()]
+	var hit := get_world_3d().direct_space_state.intersect_ray(ray)
+	if hit.is_empty() or hit.normal.dot(Vector3.UP) < 0.85:
+		return Vector3.INF
+	var at: Vector3 = hit.position + Vector3.UP * 0.05
+	var offset := at - player.global_position
+	offset.y = 0.0
+	if offset.length_squared() > zone_radius * zone_radius or offset.length_squared() < 1.15 * 1.15:
+		return Vector3.INF
+	for goal in occupied:
+		var spacing := at - goal
+		spacing.y = 0.0
+		if spacing.length_squared() < FORMATION_SPACING_SQUARED:
+			return Vector3.INF
+	var envelope := AABB(at + Vector3(-0.5, 0.0, -0.5), Vector3(1.0, 1.95, 1.0))
+	for box in blocked_boxes:
+		if box.intersects(envelope):
+			return Vector3.INF
+	# Enemies do not collide with each other's layer. Reject already occupied
+	# goals and keep the existing ten-Hz crowd separation for movement.
+	for item in _live.values():
+		var other := item as FoundationEnemy
+		if not is_instance_valid(other) or other == enemy or other.hp <= 0:
+			continue
+		var separation: Vector3 = at - other.global_position
+		separation.y = 0.0
+		if separation.length_squared() < 0.95 * 0.95:
+			return Vector3.INF
+	var shape_query := PhysicsShapeQueryParameters3D.new()
+	shape_query.shape = _formation_capsule
+	shape_query.transform = Transform3D(Basis.IDENTITY, at + Vector3.UP * 1.0)
+	shape_query.collision_mask = 1 | 4
+	shape_query.collide_with_areas = true
+	shape_query.exclude = [player.get_rid(), enemy.get_rid()]
+	if not get_world_3d().direct_space_state.intersect_shape(shape_query, 1).is_empty():
+		return Vector3.INF
+	var nav_map := get_world_3d().navigation_map
+	if not NavigationServer3D.map_get_regions(nav_map).is_empty():
+		if NavigationServer3D.map_get_closest_point(nav_map, at).distance_to(at) > 0.75:
+			return Vector3.INF
+		var route := NavigationServer3D.map_get_path(nav_map, enemy.global_position, at, true)
+		if route.size() < 2 or route[0].distance_to(enemy.global_position) > 0.75 or route[route.size() - 1].distance_to(at) > 0.75:
+			return Vector3.INF
+	else:
+		var travel := PhysicsRayQueryParameters3D.create(
+			enemy.global_position + Vector3.UP * 0.85, at + Vector3.UP * 0.85, 1 | 4
+		)
+		travel.exclude = [enemy.get_rid(), player.get_rid()]
+		if not get_world_3d().direct_space_state.intersect_ray(travel).is_empty():
+			return Vector3.INF
+	return at
+
 func try_acquire_attacker(enemy: FoundationEnemy) -> bool:
 	var id := enemy.get_instance_id()
 	if not _ground_active or enemy.hp <= 0 or not _live.has(id):
 		return false
+	if _formation_active:
+		var offset := enemy.global_position - player.global_position
+		offset.y = 0.0
+		if formation_role_for(enemy) != "attacker" or offset.length_squared() > LOCAL_ATTACK_RADIUS_SQUARED:
+			return false
 	if _attackers.has(id):
 		return true
 	if _attackers.size() >= mini(MAX_PLAYER_ATTACKERS, director_attacker_target):
@@ -255,8 +359,18 @@ func try_acquire_attacker(enemy: FoundationEnemy) -> bool:
 	_attackers[id] = true
 	return true
 
+func can_resolve_player_attack(enemy: FoundationEnemy) -> bool:
+	if not _formation_active:
+		return true
+	if not _attackers.has(enemy.get_instance_id()) or formation_role_for(enemy) != "attacker":
+		return false
+	var offset := enemy.global_position - player.global_position
+	offset.y = 0.0
+	return offset.length_squared() <= LOCAL_ATTACK_RADIUS_SQUARED
+
 func release_attacker(enemy: FoundationEnemy) -> void:
-	_attackers.erase(enemy.get_instance_id())
+	if _attackers.erase(enemy.get_instance_id()):
+		attacker_slot_released.emit(enemy)
 
 func _physics_process(delta: float) -> void:
 	if not _ground_active:

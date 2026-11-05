@@ -270,6 +270,12 @@ func _update_full_rig_selection() -> void:
 		elif enemy.state == "hit": score -= 7.0
 		elif enemy.state == "recovery": score -= 3.0
 		if enemy.combat_target == player: score -= 4.0
+		# Role handoffs use the existing seven-rig scheduler. Attackers win
+		# priority, then the nearest reserves; distant actors keep MultiMesh.
+		if is_instance_valid(dormant_source) and dormant_source.has_method("formation_role_for"):
+			var role: String = String(dormant_source.call("formation_role_for", enemy))
+			if role == "attacker": score -= 12.0
+			elif role == "reserve": score -= 5.0
 		if enemy._full_animation_selected: score -= 1.5
 		candidates.append({"enemy": enemy, "score": score})
 	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a.score) < float(b.score))
