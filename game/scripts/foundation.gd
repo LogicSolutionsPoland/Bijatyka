@@ -910,9 +910,11 @@ func _on_elevator_ride_started(destination_floor: StringName) -> void:
 		if _ground_wave_started:
 			_deactivate_ground_population()
 		return
+	if destination_floor == &"ground":
+		# Preparation must begin even if the map was already staged on the call.
+		spawn_director.begin_local_pool_preparation()
 	if destination_floor != &"ground" or _ground_map_preparing or _ground_map_ready:
 		return
-	spawn_director.begin_local_pool_preparation()
 	_ground_loading_coordinator.start_descent()
 
 func _on_elevator_rider_arrived(floor: StringName) -> void:
