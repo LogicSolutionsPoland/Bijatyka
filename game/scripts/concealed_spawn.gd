@@ -264,11 +264,23 @@ func set_local_formation(roles: Dictionary, targets: Dictionary) -> void:
 	_formation_roles = roles
 	_formation_targets = targets
 	_formation_active = true
+	# Only admitted local actors collide with other zombie bodies. This keeps
+	# moving reserves from passing through an occupied attack position.
+	for id in _live:
+		var enemy := _live[id] as FoundationEnemy
+		if is_instance_valid(enemy) and enemy.hp > 0:
+			var mask := enemy.collision_mask | 2 if roles.has(id) else enemy.collision_mask & ~2
+			if enemy.collision_mask != mask:
+				enemy.collision_mask = mask
 
 func clear_local_formation() -> void:
 	_formation_active = false
 	_formation_roles.clear()
 	_formation_targets.clear()
+	for item in _live.values():
+		var enemy := item as FoundationEnemy
+		if is_instance_valid(enemy) and enemy.hp > 0:
+			enemy.collision_mask &= ~2
 
 func is_local_formation_active() -> bool:
 	return _formation_active
@@ -309,16 +321,9 @@ func safe_formation_position(raw: Vector3, enemy: FoundationEnemy,
 	for box in blocked_boxes:
 		if box.intersects(envelope):
 			return Vector3.INF
-	# Enemies do not collide with each other's layer. Reject already occupied
-	# goals and keep the existing ten-Hz crowd separation for movement.
-	for item in _live.values():
-		var other := item as FoundationEnemy
-		if not is_instance_valid(other) or other == enemy or other.hp <= 0:
-			continue
-		var separation: Vector3 = at - other.global_position
-		separation.y = 0.0
-		if separation.length_squared() < 0.95 * 0.95:
-			return Vector3.INF
+	# A slot may be occupied while its previous attacker walks to reserve.
+	# Planned goals are separated above; local body collisions keep the actual
+	# handoff from overlapping as both actors move.
 	var shape_query := PhysicsShapeQueryParameters3D.new()
 	shape_query.shape = _formation_capsule
 	shape_query.transform = Transform3D(Basis.IDENTITY, at + Vector3.UP * 1.0)
