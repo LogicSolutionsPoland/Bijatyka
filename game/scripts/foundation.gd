@@ -778,6 +778,12 @@ func _spawn_enemies() -> void:
 	spawn_director.blocked_boxes = _spawn_blockers
 	spawn_director.spawn_requested.connect(_spawn_assault_zombie)
 	spawn_director.dormant_enemy_wake_requested.connect(_wake_dormant_zombie)
+	spawn_director.prepared_local_actor_requested.connect(_prepare_local_actor)
+	spawn_director.prepared_local_actor_activated.connect(_activate_prepared_local_actor)
+	if not player.parabolic_jump_started.is_connected(spawn_director.on_parabolic_jump_started):
+		player.parabolic_jump_started.connect(spawn_director.on_parabolic_jump_started)
+	if not player.parabolic_jump_landed.is_connected(spawn_director.on_parabolic_jump_landed):
+		player.parabolic_jump_landed.connect(spawn_director.on_parabolic_jump_landed)
 	add_child(spawn_director)
 	horde_far_visuals.dormant_source = spawn_director
 	# The four upstairs entries are data only; no ordinary enemy actors exist.
@@ -785,6 +791,8 @@ func _spawn_enemies() -> void:
 	ai_director = AI_DIRECTOR.new() as BijatykaAIDirector
 	ai_director.name = "LocalAIDirector"
 	ai_director.configure(player, spawn_director)
+	ai_director.local_reinforcement_requested.connect(_on_local_reinforcement_requested)
+	spawn_director.local_group_activated.connect(ai_director._refresh_formation)
 	add_child(ai_director)
 	horde_far_visuals.visible = false
 	horde_far_visuals.set_process(false)
@@ -793,6 +801,41 @@ func _spawn_enemies() -> void:
 	# the player moves beyond the 30 m render radius.
 	_spawn_enemy("boss", Vector3(0.6, 0.05, -16.2), true)
 	ai_director.boss = _boss_enemy
+
+func _prepare_local_actor() -> void:
+	# This runs once per frame during the elevator preparation. It never runs
+	# from the landing callback, and prepared actors have no physics or rig.
+	var enemy := _spawn_enemy("shambler", Vector3(0.0, -1000.0, 0.0))
+	enemy.visible = false
+	enemy.remove_from_group("enemies")
+	enemy.collision_layer = 0
+	enemy.collision_mask = 0
+	enemy.set_physics_process(false)
+	enemy.process_mode = Node.PROCESS_MODE_DISABLED
+	spawn_director.register_prepared_local_enemy(enemy)
+	horde_far_visuals.prewarm_one_rig(enemy)
+
+func _activate_prepared_local_actor(enemy: FoundationEnemy, at: Vector3) -> void:
+	if not is_instance_valid(enemy):
+		return
+	enemy.global_position = at
+	enemy.collision_layer = 2
+	enemy.collision_mask = 1 | 4
+	spawn_director.register_enemy(enemy)
+	if not spawn_director._live.has(enemy.get_instance_id()):
+		enemy.collision_layer = 0
+		enemy.collision_mask = 0
+		return
+	horde_far_visuals.register_enemy(enemy)
+	enemy.add_to_group("enemies")
+	enemy.visible = true
+	enemy.process_mode = Node.PROCESS_MODE_INHERIT
+	enemy.set_physics_process(true)
+	enemy.begin_spawn_assault(player)
+	enemy._finish_spawn_assault()
+
+func _on_local_reinforcement_requested(missing: int) -> void:
+	spawn_director.request_local_reinforcement(missing, ai_director.local_living_count)
 
 func _spawn_assault_zombie(at: Vector3) -> void:
 	var is_visual_sample := not _high_detail_zombie_sample_assigned
@@ -846,6 +889,7 @@ func _on_elevator_requested() -> void:
 func _on_elevator_called(destination_floor: StringName) -> void:
 	# CALL LIFT with an empty car is the earliest useful preparation event.
 	if destination_floor == &"roof" and player.global_position.y >= ROOFTOP_SKY_MIN_HEIGHT:
+		spawn_director.begin_local_pool_preparation()
 		_ground_loading_coordinator.start_call()
 
 
@@ -868,6 +912,7 @@ func _on_elevator_ride_started(destination_floor: StringName) -> void:
 		return
 	if destination_floor != &"ground" or _ground_map_preparing or _ground_map_ready:
 		return
+	spawn_director.begin_local_pool_preparation()
 	_ground_loading_coordinator.start_descent()
 
 func _on_elevator_rider_arrived(floor: StringName) -> void:
@@ -889,6 +934,7 @@ func _on_elevator_rider_arrived(floor: StringName) -> void:
 	spawn_director.initial_spawn_min_distance = 34.0
 	spawn_director.initial_spawn_max_distance = 45.0
 	spawn_director.activate_ground_population(GROUND_ZOMBIE_HORDE_SIZE)
+	spawn_director.begin_local_pool_preparation()
 	ai_director.activate()
 	horde_far_visuals.visible = true
 	horde_far_visuals.set_process(true)

@@ -4,6 +4,9 @@ extends Node3D
 signal spawn_requested(at: Vector3)
 signal dormant_enemy_wake_requested(at: Vector3, health: int, kind: String)
 signal attacker_slot_released(enemy: FoundationEnemy)
+signal prepared_local_actor_requested
+signal prepared_local_actor_activated(enemy: FoundationEnemy, at: Vector3)
+signal local_group_activated
 
 const MAX_CANDIDATES_PER_TICK := 8
 const MAX_SPAWNS_PER_TICK := 2
@@ -18,6 +21,11 @@ const MAX_PLAYER_ATTACKERS := 4
 const MAX_ORDINARY_POPULATION := 20
 const LOCAL_ATTACK_RADIUS_SQUARED := 4.0 * 4.0
 const FORMATION_SPACING_SQUARED := 1.15 * 1.15
+const LOCAL_GROUP_SIZE := 11
+const LOCAL_POOL_SIZE := 14
+const LOCAL_RADIUS := 4.0
+const LOCAL_PLACEMENT_BUDGET := 8
+const LOCAL_LANDING_TOLERANCE_SQUARED := 0.45 * 0.45
 # Only unalerted, invisible actors can be stored as data (boss excluded).
 const DORMANT_SLEEP_DISTANCE_SQUARED := 10.0 * 10.0
 const DORMANT_WAKE_DISTANCE_SQUARED := 5.0 * 5.0
@@ -67,11 +75,32 @@ var _sample_index := 0
 var _capsule := CapsuleShape3D.new()
 var _formation_capsule := CapsuleShape3D.new()
 var _mobile_spawn_cooldown := 0.0
+var _prepared_local: Array[FoundationEnemy] = []
+var _local_pool_reservations := 0
+var _skip_preparation_through_frame := -1
+var _local_members: Dictionary = {}
+var _initial_horde_activated := false
+var _local_reinforcement_pending := false
+var _local_reinforcement_delay := 0.0
+var _jump_preparing := false
+var _jump_blocked := false
+var _jump_origin := Vector3.ZERO
+var _jump_direction := Vector3.ZERO
+var _jump_predicted_at := Vector3.ZERO
+var _jump_desired: Array[Vector3] = []
+var _jump_candidates: Array[Vector3] = []
+var _jump_ordered: Array[Vector3] = []
+var _jump_slots: Array[Vector3] = []
+var _jump_slot_index := 0
+var _jump_candidate_index := 0
 # Tunable ordinary-zombie policy; the population and placement checks below
 # remain authoritative even when an encounter Director requests more pressure.
 var director_attacker_target := MAX_PLAYER_ATTACKERS
 var director_replacement_delay := REPLACEMENT_SECONDS
 var director_flank_bias := 0.0
+
+func _ready() -> void:
+	set_process(false)
 
 func _init() -> void:
 	_capsule.radius = 0.55
@@ -83,6 +112,7 @@ func store_upstairs_population(count: int) -> void:
 	# Only data remains upstairs. The arena removes the actors before this reset.
 	_ground_active = false
 	set_physics_process(false)
+	reset_local_horde()
 	_live.clear()
 	_attackers.clear()
 	clear_local_formation()
@@ -113,6 +143,7 @@ func activate_ground_population(cap: int) -> void:
 	set_physics_process(true)
 
 func activate_profiling_population(cap: int) -> void:
+	reset_local_horde()
 	_stored_population.clear()
 	_dormant_population.clear()
 	dormancy_enabled = false # Profiling still measures the full active load.
@@ -123,12 +154,12 @@ func activate_profiling_population(cap: int) -> void:
 
 func ordinary_population_count() -> int:
 	if not _ground_active:
-		return _stored_population.size()
+		return _stored_population.size() + _prepared_local.size() + _local_pool_reservations
 	var living := 0
 	for enemy in _live.values():
 		if is_instance_valid(enemy) and enemy.hp > 0:
 			living += 1
-	return living + _dormant_population.size()
+	return living + _dormant_population.size() + _prepared_local.size() + _local_pool_reservations
 
 func dormant_population_count() -> int:
 	return _dormant_population.size() if _ground_active else 0
@@ -141,19 +172,19 @@ func get_dormant_visual_records() -> Array[Dictionary]:
 func request_initial_population() -> void:
 	if not _ground_active:
 		return
-	while _live.size() + _dormant_population.size() + _pending.size() + _initial_population_pending < population_limit:
+	while _population_claims() < population_limit:
 		_initial_population_pending += 1
 
 func request_population() -> void:
 	if not _ground_active:
 		return
-	while _live.size() + _dormant_population.size() + _pending.size() + _initial_population_pending < population_limit:
+	while _population_claims() < population_limit:
 		_queue_birth(_clock)
 
 func request_reinforcements(count: int) -> void:
 	if not _ground_active:
 		return
-	var available := maxi(0, population_limit - _live.size() - _dormant_population.size() - _pending.size() - _initial_population_pending)
+	var available := maxi(0, population_limit - _population_claims())
 	for index in mini(maxi(0, count), available):
 		_queue_birth(_clock + director_replacement_delay)
 
@@ -170,8 +201,16 @@ func _queue_birth(when: float) -> void:
 		index -= 1
 	_pending.insert(index, when)
 
+
+# Every reserved birth, sleeping record and pooled actor consumes one global slot.
+func _population_claims() -> int:
+	return _occupied_population_count() + _pending.size() + _initial_population_pending
+
+func _occupied_population_count() -> int:
+	return _live.size() + _dormant_population.size() + _prepared_local.size() + _local_pool_reservations
+
 func register_enemy(enemy: FoundationEnemy) -> void:
-	if not _ground_active or enemy.is_boss or _live.has(enemy.get_instance_id()) or _live.size() + _dormant_population.size() + _pending.size() + _initial_population_pending >= population_limit:
+	if not _ground_active or enemy.is_boss or _live.has(enemy.get_instance_id()) or _population_claims() >= population_limit:
 		return
 	var id := enemy.get_instance_id()
 	_live[id] = enemy
@@ -192,10 +231,14 @@ func _on_removed(id: int, replacements: int = 1) -> void:
 	_formation_roles.erase(id)
 	_formation_targets.erase(id)
 	_live.erase(id)
-	if _ground_active:
+	var was_local := _local_members.erase(id)
+	if _ground_active and _local_reinforcement_pending and _prepared_local.is_empty() and _local_pool_reservations == 0 and _population_claims() < population_limit:
+		_local_pool_reservations = 1
+		set_process(true)
+	if _ground_active and not was_local:
 		# Pending births reserve slots. A death at the cap therefore adds one;
 		# a death in the opening group can add both requested replacements.
-		var available := maxi(0, population_limit - _live.size() - _dormant_population.size() - _pending.size() - _initial_population_pending)
+		var available := maxi(0, population_limit - _population_claims())
 		for index in range(mini(replacements, available)):
 			_queue_birth(_clock + director_replacement_delay)
 
@@ -243,6 +286,7 @@ func _update_dormant_population(delta: float) -> void:
 			"visual_id": enemy.get_instance_id(),
 		})
 		_live.erase(id)
+		_local_members.erase(id)
 		_attackers.erase(id)
 		_formation_roles.erase(id)
 		_formation_targets.erase(id)
@@ -257,6 +301,258 @@ func _update_dormant_population(delta: float) -> void:
 		if changes >= MAX_DORMANT_CHANGES_PER_SCAN:
 			break
 
+
+
+# Reserve all fourteen slots before preparing actors. Three stay pooled after
+# the first eleven join the fight, so the first promotions have ready replacements.
+func begin_local_pool_preparation() -> void:
+	if _initial_horde_activated or _local_pool_reservations > 0 or not _prepared_local.is_empty():
+		return
+	var capacity := MAX_ORDINARY_POPULATION if not _ground_active else population_limit
+	var claimed := _population_claims() + (_stored_population.size() if not _ground_active else 0)
+	_local_pool_reservations = mini(LOCAL_POOL_SIZE, maxi(0, capacity - claimed))
+	if _local_pool_reservations > 0:
+		set_process(true)
+
+func register_prepared_local_enemy(enemy: FoundationEnemy) -> void:
+	if _local_pool_reservations <= 0 or not is_instance_valid(enemy) or enemy.is_boss:
+		return
+	_local_pool_reservations -= 1
+	_prepared_local.append(enemy)
+	if _local_pool_reservations == 0:
+		set_process(false)
+
+func reset_local_horde() -> void:
+	set_process(false)
+	for enemy in _prepared_local:
+		if is_instance_valid(enemy):
+			enemy.queue_free()
+	_prepared_local.clear()
+	_local_pool_reservations = 0
+	_local_members.clear()
+	_initial_horde_activated = false
+	_local_reinforcement_pending = false
+	_local_reinforcement_delay = 0.0
+	_discard_jump_plan()
+
+func _process(_delta: float) -> void:
+	if Engine.get_physics_frames() <= _skip_preparation_through_frame:
+		return
+	if _local_pool_reservations > 0:
+		# The arena constructs one lightweight, disabled actor per render frame.
+		# No GLB rig is attached to a prepared actor.
+		prepared_local_actor_requested.emit()
+
+func on_parabolic_jump_started(takeoff: Vector3, direction: Vector3) -> void:
+	if not _ground_active or not dormancy_enabled or _initial_horde_activated:
+		return
+	_discard_jump_plan()
+	_jump_preparing = true
+	_jump_origin = takeoff
+	_jump_direction = direction.normalized()
+	_jump_predicted_at = takeoff + _jump_direction * player.forward_jump_distance_m
+	var rear := -_jump_direction
+	for angle in [-75.0, -25.0, 25.0, 75.0]:
+		_jump_desired.append(rear.rotated(Vector3.UP, deg_to_rad(angle)) * 2.15)
+	for angle in [-80.0, -53.0, -27.0, 0.0, 27.0, 53.0, 80.0]:
+		_jump_desired.append(rear.rotated(Vector3.UP, deg_to_rad(angle)) * 3.6)
+	_jump_candidates.append_array(_jump_desired)
+	for radius in [2.15, 3.1, 3.8]:
+		for index in range(13):
+			_jump_candidates.append(rear.rotated(Vector3.UP, deg_to_rad(-84.0 + 14.0 * float(index))) * radius)
+	_order_jump_candidates()
+
+func _discard_jump_plan() -> void:
+	_jump_preparing = false
+	_jump_blocked = false
+	_jump_desired.clear()
+	_jump_candidates.clear()
+	_jump_ordered.clear()
+	_jump_slots.clear()
+	_jump_slot_index = 0
+	_jump_candidate_index = 0
+
+func _order_jump_candidates() -> void:
+	if _jump_slot_index >= LOCAL_GROUP_SIZE:
+		return
+	var desired := _jump_desired[_jump_slot_index]
+	_jump_ordered = _jump_candidates.duplicate()
+	_jump_ordered.sort_custom(func(a: Vector3, b: Vector3) -> bool:
+		return a.distance_squared_to(desired) < b.distance_squared_to(desired)
+	)
+	_jump_candidate_index = 0
+
+func _prepare_jump_positions() -> void:
+	if not _jump_preparing or _jump_blocked or _jump_slot_index >= LOCAL_GROUP_SIZE:
+		return
+	# Spread expensive ground, obstacle and optional navigation checks over
+	# the airborne physics ticks. A blocked slot never causes a landing burst.
+	for unused in range(LOCAL_PLACEMENT_BUDGET):
+		if _jump_candidate_index >= _jump_ordered.size():
+			return
+		var raw := _jump_predicted_at + _jump_ordered[_jump_candidate_index]
+		_jump_candidate_index += 1
+		var at := _safe_local_birth_position(raw, _jump_predicted_at, _jump_slots)
+		if at.is_finite():
+			_jump_slots.append(at)
+			_jump_slot_index += 1
+			_order_jump_candidates()
+			if _jump_slot_index >= LOCAL_GROUP_SIZE:
+				return
+
+func _safe_local_birth_position(raw: Vector3, center: Vector3, occupied: Array[Vector3]) -> Vector3:
+	if absf(raw.x) > WORLD_LIMIT or absf(raw.z) > WORLD_LIMIT:
+		return Vector3.INF
+	var ray := PhysicsRayQueryParameters3D.create(
+		Vector3(raw.x, center.y + 6.0, raw.z),
+		Vector3(raw.x, minf(-8.0, center.y - 8.0), raw.z), 1
+	)
+	ray.exclude = [player.get_rid()]
+	var space := get_world_3d().direct_space_state
+	var hit := space.intersect_ray(ray)
+	if hit.is_empty() or hit.normal.dot(Vector3.UP) < 0.85:
+		return Vector3.INF
+	var at: Vector3 = hit.position + Vector3.UP * 0.05
+	if absf(at.y - center.y) > 1.0 or not _local_spacing_clear(at, center, occupied):
+		return Vector3.INF
+	var envelope := AABB(at + Vector3(-0.5, 0.0, -0.5), Vector3(1.0, 1.95, 1.0))
+	for box in blocked_boxes:
+		if box.intersects(envelope):
+			return Vector3.INF
+	if not _local_body_clear(at, true):
+		return Vector3.INF
+	var nav_map := get_world_3d().navigation_map
+	if not NavigationServer3D.map_get_regions(nav_map).is_empty():
+		if NavigationServer3D.map_get_closest_point(nav_map, at).distance_to(at) > 0.75:
+			return Vector3.INF
+		var route := NavigationServer3D.map_get_path(nav_map, at, center, true)
+		if route.size() < 2 or route[0].distance_to(at) > 0.75 or route[route.size() - 1].distance_to(center) > 1.0:
+			return Vector3.INF
+	else:
+		var travel := PhysicsRayQueryParameters3D.create(at + Vector3.UP * 0.85, center + Vector3.UP * 0.85, 1 | 4)
+		travel.exclude = [player.get_rid()]
+		if not space.intersect_ray(travel).is_empty():
+			return Vector3.INF
+	return at
+
+func _local_spacing_clear(at: Vector3, center: Vector3, occupied: Array[Vector3]) -> bool:
+	var offset := at - center
+	offset.y = 0.0
+	if offset.length_squared() > LOCAL_RADIUS * LOCAL_RADIUS or offset.length_squared() < 1.35 * 1.35:
+		return false
+	for other in occupied:
+		var spacing := at - other
+		spacing.y = 0.0
+		if spacing.length_squared() < FORMATION_SPACING_SQUARED:
+			return false
+	return true
+
+func _local_body_clear(at: Vector3, exclude_player: bool) -> bool:
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = _formation_capsule
+	query.transform = Transform3D(Basis.IDENTITY, at + Vector3.UP * 1.0)
+	query.collision_mask = 1 | 2 | 4
+	query.collide_with_areas = true
+	if exclude_player:
+		query.exclude = [player.get_rid()]
+	return get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty()
+
+func on_parabolic_jump_landed(at: Vector3, direction: Vector3) -> void:
+	_skip_preparation_through_frame = Engine.get_physics_frames()
+	if not _jump_preparing:
+		return
+	var displacement := at - _jump_origin
+	displacement.y = 0.0
+	var predicted_error := at - _jump_predicted_at
+	predicted_error.y = 0.0
+	var valid := not _jump_blocked and not player.is_on_wall() and displacement.dot(_jump_direction) > 0.5 * player.forward_jump_distance_m
+	valid = valid and direction.dot(_jump_direction) > 0.99 and predicted_error.length_squared() <= LOCAL_LANDING_TOLERANCE_SQUARED
+	valid = valid and absf(at.y - _jump_predicted_at.y) <= 0.7
+	valid = valid and _jump_slots.size() == LOCAL_GROUP_SIZE and _prepared_local.size() >= LOCAL_GROUP_SIZE
+	if not valid or _nearby_living_count(at, 6.0) + LOCAL_GROUP_SIZE > BijatykaAIDirector.LOCAL_LIVING_LIMIT:
+		_discard_jump_plan()
+		return
+	# Static floor/path checks were spread across the flight. Recheck only the
+	# dynamic capsules against the actual landed player and moving enemies.
+	var no_occupied: Array[Vector3] = []
+	for point in _jump_slots:
+		var behind := point - at
+		behind.y = 0.0
+		if behind.dot(_jump_direction) >= 0.0 or not _local_spacing_clear(point, at, no_occupied) or not _local_body_clear(point, false):
+			_discard_jump_plan()
+			return
+	for index in range(LOCAL_GROUP_SIZE):
+		if not is_instance_valid(_prepared_local[index]) or _prepared_local[index].is_queued_for_deletion():
+			_discard_jump_plan()
+			return
+	# Arm the one-shot guard before the synchronous activation callbacks.
+	_initial_horde_activated = true
+	_jump_preparing = false
+	for point in _jump_slots:
+		_activate_prepared_local(point)
+	_discard_jump_plan()
+	local_group_activated.emit()
+
+func _nearby_living_count(at: Vector3, radius: float = LOCAL_RADIUS) -> int:
+	var total := 0
+	for item in _live.values():
+		var enemy := item as FoundationEnemy
+		if is_instance_valid(enemy) and enemy.hp > 0:
+			var offset := enemy.global_position - at
+			offset.y = 0.0
+			if offset.length_squared() <= radius * radius:
+				total += 1
+	return total
+
+func _activate_prepared_local(at: Vector3) -> void:
+	if _prepared_local.is_empty():
+		return
+	var enemy: FoundationEnemy = _prepared_local.pop_front()
+	prepared_local_actor_activated.emit(enemy, at)
+	if _live.has(enemy.get_instance_id()):
+		_local_members[enemy.get_instance_id()] = true
+	else:
+		_prepared_local.push_front(enemy)
+
+func request_local_reinforcement(_missing: int, current_local_count: int) -> void:
+	if not _initial_horde_activated or _local_reinforcement_pending or current_local_count >= BijatykaAIDirector.LOCAL_LIVING_LIMIT:
+		return
+	if _local_members.size() >= BijatykaAIDirector.LOCAL_LIVING_LIMIT or _nearby_living_count(player.global_position) >= BijatykaAIDirector.LOCAL_LIVING_LIMIT:
+		return
+	_local_reinforcement_pending = true
+	_local_reinforcement_delay = director_replacement_delay
+	if _prepared_local.is_empty() and _population_claims() < population_limit:
+		_local_pool_reservations = 1
+		set_process(true)
+
+func _update_local_reinforcement(delta: float) -> void:
+	if not _local_reinforcement_pending:
+		return
+	_local_reinforcement_delay = maxf(0.0, _local_reinforcement_delay - delta)
+	if _local_members.size() >= BijatykaAIDirector.LOCAL_LIVING_LIMIT or _nearby_living_count(player.global_position) >= BijatykaAIDirector.LOCAL_LIVING_LIMIT:
+		_local_reinforcement_pending = false
+		return
+	if _prepared_local.is_empty() and _local_pool_reservations == 0 and _population_claims() < population_limit:
+		_local_pool_reservations = 1
+		set_process(true)
+	if _local_reinforcement_delay > 0.0 or _prepared_local.is_empty():
+		return
+	var rear := -forward_direction()
+	var candidates: Array[Vector3] = [
+		rear * 3.65, rear.rotated(Vector3.UP, 0.4) * 3.65,
+		rear.rotated(Vector3.UP, -0.4) * 3.65,
+		rear.rotated(Vector3.UP, 0.8) * 3.65,
+		rear.rotated(Vector3.UP, -0.8) * 3.65,
+	]
+	var no_occupied: Array[Vector3] = []
+	for offset in candidates:
+		var point := _safe_local_birth_position(player.global_position + offset, player.global_position, no_occupied)
+		if point.is_finite():
+			_local_reinforcement_pending = false
+			_activate_prepared_local(point)
+			local_group_activated.emit()
+			return
+	_local_reinforcement_delay = RETRY_SECONDS
 
 func set_local_formation(roles: Dictionary, targets: Dictionary) -> void:
 	# The local Director supplies admission and goals; this existing manager
@@ -381,6 +677,10 @@ func _physics_process(delta: float) -> void:
 	if not _ground_active:
 		return
 	_clock += delta
+	if _jump_preparing:
+		_jump_blocked = _jump_blocked or player.is_on_wall()
+		_prepare_jump_positions()
+	_update_local_reinforcement(delta)
 	_update_dormant_population(delta)
 	_retry_time = maxf(0.0, _retry_time - delta)
 	last_candidate_count = 0
@@ -390,7 +690,7 @@ func _physics_process(delta: float) -> void:
 		_mobile_spawn_cooldown = maxf(0.0, _mobile_spawn_cooldown - delta)
 	if not is_instance_valid(player) or not is_instance_valid(camera):
 		return
-	if _retry_time > 0.0 or (_pending.is_empty() and _initial_population_pending <= 0) or _live.size() + _dormant_population.size() >= population_limit:
+	if _retry_time > 0.0 or (_pending.is_empty() and _initial_population_pending <= 0) or _occupied_population_count() >= population_limit:
 		return
 	if mobile_budget_enabled and _mobile_spawn_cooldown > 0.0:
 		return
@@ -403,7 +703,7 @@ func _physics_process(delta: float) -> void:
 		var initial_spawn := _initial_population_pending > 0
 		if not initial_spawn and (_pending.is_empty() or _pending.front() > _clock):
 			break
-		if _live.size() + _dormant_population.size() >= population_limit:
+		if _occupied_population_count() >= population_limit:
 			break
 		last_candidate_count += 1
 		var candidate := _sample_initial_candidate() if initial_spawn else _sample_candidate()

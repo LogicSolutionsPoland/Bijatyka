@@ -8,6 +8,7 @@ signal health_changed(current: int, maximum: int)
 signal magic_changed(current: float, maximum: float, school: String)
 signal interrupted(duration: float)
 signal jump_impact(target: Node)
+signal parabolic_jump_started(takeoff_position: Vector3, travel_direction: Vector3)
 signal parabolic_jump_landed(landing_position: Vector3, travel_direction: Vector3)
 signal respawned
 
@@ -632,6 +633,7 @@ func try_parabolic_jump() -> bool:
 	velocity.y = GRAVITY * duration * 0.5
 	_parabolic_jump_direction = direction
 	_parabolic_jump_active = true
+	parabolic_jump_started.emit(global_position, direction)
 	jump_impact_armed = false
 	_was_airborne = true
 	return true

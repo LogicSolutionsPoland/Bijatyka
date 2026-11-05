@@ -312,6 +312,11 @@ func _refresh_formation() -> void:
 	_assign_ring(attackers, "attacker", ATTACKER_COUNT, ATTACKER_RING_RADIUS, forward, roles, targets, occupied)
 	_assign_ring(reserves, "reserve", RESERVE_COUNT, RESERVE_RING_RADIUS, forward, roles, targets, occupied)
 	_assign_ring(perimeter, "perimeter", 3, PERIMETER_RING_RADIUS, forward, roles, targets, occupied)
+	var promoted_reserve := false
+	for enemy in attackers:
+		if spawns.formation_role_for(enemy) == "reserve":
+			promoted_reserve = true
+			break
 	spawns.set_local_formation(roles, targets)
 	local_living_count = roles.size()
 	attacker_role_count = 0
@@ -326,6 +331,10 @@ func _refresh_formation() -> void:
 		_last_requested_deficit = deficit
 		if deficit > 0:
 			local_reinforcement_requested.emit(deficit)
+	elif promoted_reserve and local_living_count < LOCAL_LIVING_LIMIT:
+		# A reserve taking an attack slot asks for one new back-line member.
+		# The spawn owner coalesces requests while one is already pending.
+		local_reinforcement_requested.emit(1)
 
 func _assign_ring(members: Array[FoundationEnemy], role: String, slot_count: int,
 		radius: float, forward: Vector3, roles: Dictionary, targets: Dictionary,

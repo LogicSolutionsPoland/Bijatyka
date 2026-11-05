@@ -132,6 +132,21 @@ func _acquire_rig(enemy: FoundationEnemy) -> bool:
 	enemy._adopt_detailed_model(model)
 	return enemy._model != null
 
+# Warm one shared rig per preparation frame, within the same resident budget.
+# It stays invisible in the existing spare pool until the scheduler assigns it.
+func prewarm_one_rig(enemy: FoundationEnemy) -> void:
+	if get_resident_rig_count() >= rig_budget:
+		return
+	var model := enemy._instantiate_detailed_model()
+	if model != null:
+		_rig_creations += 1
+		# Use the actor's normal setup to cache animation and materials ahead
+		# of combat, then return the rig to the existing spare pool.
+		enemy._rig_budget_owner = self
+		enemy._adopt_detailed_model(model)
+		enemy._release_detailed_model()
+		enemy._rig_budget_owner = null
+
 func _release_rig(model: Node3D) -> void:
 	if is_queued_for_deletion():
 		model.free()
