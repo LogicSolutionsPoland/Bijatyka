@@ -45,7 +45,7 @@ func _run() -> void:
 	_check_airborne_strikes(player)
 
 	_check_locomotion_does_not_restart(animator, player)
-	for action in ["jump", "dash", "attack_punch", "attack_kick", "pad_jump", "pad_dash", "pad_punch_left", "pad_blast", "pad_kick_left", "pad_kick_right"]:
+	for action in ["jump", "dash", "attack_punch", "attack_kick", "pad_jump", "pad_dash", "pad_punch_left", "pad_blast", "pad_magic_left", "pad_magic_right"]:
 		_check(InputMap.has_action(action), "existing input action remains present: %s" % action)
 
 	_finish(player, null)

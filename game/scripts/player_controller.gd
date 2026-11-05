@@ -284,14 +284,7 @@ func set_camera_yaw(yaw: float) -> void:
 	_camera_yaw = yaw
 
 func move_input() -> Vector2:
-	var keyboard := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
-	var touch := Vector2.ZERO
-	var controls := get_tree().get_first_node_in_group("mobile_controls")
-	if controls != null and controls.has_method("get_move_vector"):
-		touch = controls.get_move_vector()
-	if touch.length() > keyboard.length():
-		return touch
-	return keyboard
+	return Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 
 func _update_movement(delta: float) -> void:
 	if attack_phase == "approach" and is_instance_valid(_engagement_target) and _engagement_target.hp > 0:

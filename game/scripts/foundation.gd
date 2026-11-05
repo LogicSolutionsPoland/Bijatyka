@@ -53,8 +53,6 @@ const ROOFTOP_CAMERA_BLEND_SPEED := 3.0
 const CAMERA_TARGET_SCREEN_X := 0.35
 const CAMERA_VERTICAL_FOV := 66.0
 const CAMERA_PITCH_DEGREES := -16.0
-const CAMERA_YAW_RADIANS_PER_PIXEL := 0.006
-const CAMERA_PITCH_RADIANS_PER_PIXEL := 0.004
 const GAMEPAD_LOOK_DEADZONE := 0.12
 const CAMERA_GAMEPAD_YAW_RADIANS_PER_SECOND := 2.4
 const CAMERA_GAMEPAD_PITCH_RADIANS_PER_SECOND := 1.8
@@ -224,7 +222,8 @@ func _process(delta: float) -> void:
 	camera_arm.rotation.x = _effective_camera_pitch()
 	_update_camera_framing()
 	_update_gamepad_camera(delta)
-	if not _ground_loading_coordinator.is_active() and Input.is_action_just_pressed("interact_elevator"):
+	var aura_selection_open := hud != null and hud._selection_panel != null
+	if not _ground_loading_coordinator.is_active() and not aura_selection_open and Input.is_action_just_pressed("interact_elevator"):
 		_on_elevator_requested()
 	if hud != null and is_instance_valid(starting_tower) and is_instance_valid(starting_tower.elevator):
 		hud.set_elevator_prompt(starting_tower.elevator.get_prompt_for_player(player))
@@ -721,18 +720,10 @@ func _effective_camera_pitch() -> float:
 
 func _build_hud() -> void:
 	hud = HUD_SCRIPT.new() as FoundationHUD
-	hud.name = "MobileCombatHUD"
+	hud.name = "GamepadCombatHUD"
 	hud.action_requested.connect(_on_hud_action)
-	hud.elevator_requested.connect(_on_elevator_requested)
 	hud.aura_chosen.connect(_on_aura_chosen)
-	hud.camera_dragged.connect(_on_camera_dragged)
 	add_child(hud)
-
-func _on_camera_dragged(relative: Vector2) -> void:
-	_apply_camera_look(
-		-relative.x * CAMERA_YAW_RADIANS_PER_PIXEL,
-		-relative.y * CAMERA_PITCH_RADIANS_PER_PIXEL
-	)
 
 func _update_gamepad_camera(delta: float) -> void:
 	if get_tree().paused or (hud != null and hud._selection_panel != null):
@@ -919,8 +910,8 @@ func _on_hud_action(action: String) -> void:
 	match action:
 		"punch_left": player.request_attack("punch", "left")
 		"punch_right": player.request_attack("punch", "right")
-		"kick_left": player.request_attack("kick", "left")
-		"kick_right": player.request_attack("kick", "right")
+		"magic_left": player.cast_spell_slot(0)
+		"magic_right": player.cast_spell_slot(1 if player.rage.unlocked_spells.size() > 1 else 0)
 		"jump": player.try_jump()
 		"dash": player.try_dash()
 		"cast_spell": player.cast_spell()
