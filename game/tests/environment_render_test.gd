@@ -1,6 +1,7 @@
 extends SceneTree
 
 const Foundation := preload("res://scripts/foundation.gd")
+const FlashlightVisibility := preload("res://scripts/flashlight_visibility.gd")
 var failures: Array[String] = []
 
 func _initialize() -> void:
@@ -25,8 +26,13 @@ func _run() -> void:
 	_check(flames.size() == 2, "both brazier flames use one prepared material")
 	# The starting tower adds two shared finishes to the original arena set.
 	_check(game._ruin_materials.size() <= 10, "arena and rooftop tower use a small set of shared ruin materials")
-	_check(game.burning_horizon.get_child_count() == 4, "Burning Horizon retains four panels")
-	_check(game.burning_horizon.get_child(0).material_override == game.burning_horizon.get_child(1).material_override, "horizon panels share their material")
+	_check(game.burning_horizon.get_child_count() == 1, "Zombie Horizon uses one circular backdrop")
+	var horizon := game.burning_horizon.get_child(0) as MeshInstance3D
+	var ring := horizon.mesh as CylinderMesh if horizon != null else null
+	_check(ring != null and is_equal_approx(ring.top_radius, FlashlightVisibility.MAX_RADIUS),
+		"circular backdrop matches the shared flashlight range")
+	_check(horizon != null and horizon.material_override is ShaderMaterial,
+		"circular backdrop retains its fog shader")
 	_check(game.get_node("QuarantineCourtyardGround") != null, "ground and collision remain")
 	var district := game.get_node("AshenQuarantineMap")
 	var district_batches := 0
