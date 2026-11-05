@@ -92,6 +92,8 @@ var _previous_engagement_target: FoundationEnemy
 var _grabbed_target: FoundationEnemy # Player-to-zombie melee grapple.
 var _limb_grab_candidate: FoundationEnemy # Zombie-to-player grab windup.
 var _limb_grab_owner: FoundationEnemy
+var _limb_grab_limb := ""
+var _escape_limb_grab_requested := false
 var _limb_grab_time := 0.0
 var _limb_grab_cooldown := 0.0
 var flashlight_visibility_manager: Node
@@ -684,6 +686,7 @@ func begin_limb_grab(enemy: FoundationEnemy, limb: String) -> bool:
 	_desktop_attack_repeat_timers.clear()
 	_finish_attack()
 	_limb_grab_owner = enemy
+	_limb_grab_limb = limb
 	_limb_grab_time = clampf(limb_grab_hold_seconds, 0.5, 3.0)
 	velocity.x = 0.0
 	velocity.z = 0.0
@@ -699,6 +702,7 @@ func begin_limb_grab(enemy: FoundationEnemy, limb: String) -> bool:
 func try_escape_limb_grab() -> bool:
 	if _limb_grab_owner == null:
 		return false
+	_escape_limb_grab_requested = true
 	cancel_limb_grab()
 	return true
 
@@ -708,12 +712,21 @@ func end_limb_grab(enemy: FoundationEnemy) -> void:
 	_clear_limb_grab()
 
 func _clear_limb_grab() -> void:
+	var escaped := _escape_limb_grab_requested
+	var limb := _limb_grab_limb
 	_limb_grab_owner = null
+	_limb_grab_limb = ""
+	_escape_limb_grab_requested = false
 	_limb_grab_time = 0.0
 	_limb_grab_cooldown = maxf(_limb_grab_cooldown, limb_grab_regrab_seconds)
 	_character_action_time = 0.0
 	if health > 0 and not rage.current_soul_condemned:
-		_set_locomotion_animation("Idle")
+		if escaped:
+			# Twist away from the caught arm using an existing turn/pivot clip.
+			var action := "Turn_Right" if limb == "LEFT ARM" else "Turn_Left"
+			_play_character_action(action, float(CHARACTER_MOTION.ACTIONS.get(action, 0.28)))
+		else:
+			_set_locomotion_animation("Idle")
 	limb_grab_ended.emit()
 
 func cancel_limb_grab() -> void:
@@ -765,8 +778,8 @@ func take_boss_damage(amount: int) -> void:
 	health = maxi(0, health - amount)
 	health_changed.emit(health, MAX_HEALTH)
 	if was_alive:
+		cancel_limb_grab()
 		if health == 0:
-			cancel_limb_grab()
 			_play_character_action("Defeat", float(CHARACTER_MOTION.ACTIONS.get("Defeat", 1.25)))
 		else:
 			_play_character_action("Hit", float(CHARACTER_MOTION.ACTIONS.get("Hit", 0.34)))

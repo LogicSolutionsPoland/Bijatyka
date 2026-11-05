@@ -536,19 +536,19 @@ func show_enemy_telegraph(is_boss: bool) -> void:
 	show_notice("BOSS STRIKE — EVADE" if is_boss else "ZOMBIE WINDING UP — EVADE", Color(1.0, 0.42, 0.24))
 
 func show_limb_grab_windup(limb: String) -> void:
-	show_notice("ZOMBIE REACHING FOR %s — EVADE" % limb, Color(1.0, 0.42, 0.24))
+	show_notice("%s GRAB — EVADE" % limb, Color(1.0, 0.42, 0.24))
 
 func show_limb_grab(limb: String) -> void:
 	if _limb_grab_button == null:
 		return
 	_notice.visible = false
-	_limb_grab_button.text = "%s HELD  •  TAP / R3 / R TO ESCAPE" % limb
+	_limb_grab_button.text = "%s HELD — TAP / R3 / R" % limb
 	_limb_grab_button.visible = true
 
 func hide_limb_grab() -> void:
 	if _limb_grab_button != null:
 		_limb_grab_button.visible = false
-	if _notice != null and _notice.text.begins_with("ZOMBIE REACHING"):
+	if _notice != null and _notice.text.ends_with("GRAB — EVADE"):
 		_notice.visible = false
 
 	show_notice("A soul run ends when RAGE falls below its threshold.", Color(0.82, 0.52, 1.0))
