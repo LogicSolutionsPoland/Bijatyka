@@ -2,6 +2,7 @@ extends SceneTree
 ## Isolated Compatibility pixel probe for the six texture sectors, alpha and motion.
 
 const Horizon := preload("res://scripts/burning_horizon.gd")
+const FlashlightVisibility := preload("res://scripts/flashlight_visibility.gd")
 const SECTOR_TEXTURES := [0, 1, 2, 3, 2, 1]
 const SWATCHES := [Color.RED, Color.GREEN, Color.BLUE, Color(1.0, 1.0, 0.0)]
 var failures: Array[String] = []
@@ -22,6 +23,7 @@ func _run() -> void:
 	var wall := backdrop.get_child(0) as MeshInstance3D
 	var material := wall.material_override as ShaderMaterial
 	var originals: Array[Texture2D] = []
+	var swatch_textures: Array[Texture2D] = []
 	for index in range(4):
 		var parameter := "zombie_fog_texture_%d" % index
 		var original := material.get_shader_parameter(parameter) as Texture2D
@@ -31,7 +33,9 @@ func _run() -> void:
 		var swatch := Image.create(4, 4, false, Image.FORMAT_RGBA8)
 		swatch.fill(SWATCHES[index])
 		swatch.generate_mipmaps()
-		material.set_shader_parameter(parameter, ImageTexture.create_from_image(swatch))
+		var swatch_texture := ImageTexture.create_from_image(swatch)
+		swatch_textures.append(swatch_texture)
+		material.set_shader_parameter(parameter, swatch_texture)
 
 	var camera := Camera3D.new()
 	camera.position = Vector3(0.0, 3.0, 0.0)
@@ -101,6 +105,38 @@ func _run() -> void:
 			maximum_delta = maxf(maximum_delta,
 				absf(first.r - second.r) + absf(first.g - second.g) + absf(first.b - second.b))
 	_check(maximum_delta > 0.003, "supplied fog image visibly drifts over time")
+
+	# The real ground-floor blackout is rendered after most transparents.
+	# Check that the 10 m artwork still reaches the screen at its range edge.
+	for index in range(4):
+		material.set_shader_parameter("zombie_fog_texture_%d" % index, swatch_textures[0])
+	var edge_target := wall.to_global(vertices[nearest_index_for_uv(uvs, vertices, 1.0 / 12.0)])
+	edge_target.y = camera.global_position.y
+	camera.look_at(edge_target)
+	var player := Node3D.new()
+	root.add_child(player)
+	var flashlight := FlashlightVisibility.new()
+	flashlight.configure(player, camera, true)
+	root.add_child(flashlight)
+	flashlight.set_process(false)
+	flashlight.spotlight.visible = false
+	backdrop.visible = false
+	for frame in range(4):
+		await process_frame
+	await RenderingServer.frame_post_draw
+	var masked_image := root.get_texture().get_image()
+	var center := Vector2i(int(masked_image.get_width() / 2), int(masked_image.get_height() / 2))
+	var masked_red := masked_image.get_pixelv(center).r
+	backdrop.visible = true
+	for frame in range(4):
+		await process_frame
+	await RenderingServer.frame_post_draw
+	var horizon_red := root.get_texture().get_image().get_pixelv(center).r
+	print("ZOMBIE_FOG_MASK_SAMPLE " + JSON.stringify({
+		"mask_only_red": masked_red, "mask_and_horizon_red": horizon_red
+	}))
+	_check(horizon_red > masked_red + 0.12,
+		"ground-floor Zombie Horizon remains visible through the 10 m flashlight blackout")
 	_finish()
 
 func nearest_index_for_uv(uvs: PackedVector2Array, vertices: PackedVector3Array, target_u: float) -> int:
