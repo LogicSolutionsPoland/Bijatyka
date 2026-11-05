@@ -64,7 +64,8 @@ func _test_gamepad_input_map() -> void:
 					break
 		_check(found, "%s maps to the expected gamepad stick axis" % String(action))
 	var expected_buttons := {
-		&"pad_jump": [JOY_BUTTON_A], &"pad_dash": [JOY_BUTTON_X], &"pad_cast_spell": [JOY_BUTTON_B],
+		&"pad_jump": [JOY_BUTTON_A], &"pad_jump_forward": [JOY_BUTTON_X],
+		&"pad_escape_limb_grab": [JOY_BUTTON_RIGHT_STICK], &"pad_cast_spell": [JOY_BUTTON_B],
 		&"pad_punch_left": [JOY_BUTTON_LEFT_SHOULDER], &"pad_punch_right": [JOY_BUTTON_RIGHT_SHOULDER],
 		&"pad_blast": [JOY_BUTTON_Y],
 		&"pad_spell_0": [JOY_BUTTON_DPAD_UP], &"pad_spell_1": [JOY_BUTTON_DPAD_RIGHT],
@@ -74,7 +75,7 @@ func _test_gamepad_input_map() -> void:
 	for action: String in Hud.GAMEPAD_ACTIONS.values():
 		routed_actions.append(action)
 	_check(Hud.GAMEPAD_ACTIONS.size() == expected_buttons.size() + 2,
-		"gamepad routes ten buttons and two analog triggers without touch buttons")
+		"gamepad routes eleven buttons and two analog triggers")
 	var left_trigger_events := InputMap.action_get_events(&"pad_kick_left")
 	_check(left_trigger_events.size() == 1 and left_trigger_events[0] is InputEventJoypadMotion and (left_trigger_events[0] as InputEventJoypadMotion).axis == JOY_AXIS_TRIGGER_LEFT and is_equal_approx((left_trigger_events[0] as InputEventJoypadMotion).axis_value, 1.0), "L2 / LT maps to the left trigger axis")
 	var right_trigger_events := InputMap.action_get_events(&"pad_kick_right")
@@ -100,7 +101,7 @@ func _test_gamepad_input_map() -> void:
 	for buttons: Array in expected_buttons.values():
 		for button: int in buttons:
 			assigned_buttons[button] = true
-	_check(assigned_buttons.size() == 10 and not assigned_buttons.has(JOY_BUTTON_START) and not assigned_buttons.has(JOY_BUTTON_GUIDE), "ten physical gameplay buttons leave system buttons unassigned")
+	_check(assigned_buttons.size() == 11 and not assigned_buttons.has(JOY_BUTTON_START) and not assigned_buttons.has(JOY_BUTTON_GUIDE), "eleven gameplay buttons leave system buttons unassigned")
 
 func _test_rage_rules() -> void:
 	var rage := Rage.new(10.0, 1.0, 100.0) as RageProgression
@@ -334,8 +335,10 @@ func _test_no_touch_controls() -> void:
 	var hud := Hud.new() as FoundationHUD
 	root.add_child(hud)
 	await process_frame
-	_check(hud.find_children("*", "BaseButton", true, false).is_empty(),
-		"gameplay HUD has no on-screen action buttons")
+	var escape_buttons := hud.find_children("*", "BaseButton", true, false)
+	_check(escape_buttons.size() == 1 and escape_buttons[0].name == "EscapeLimbGrab"
+		and not escape_buttons[0].visible,
+		"gameplay HUD keeps only the hidden limb-grab escape button until a grab")
 	_check(hud.find_child("MovementStick", true, false) == null,
 		"gameplay HUD has no touch movement stick")
 	var emitted: Array[String] = []
@@ -366,7 +369,8 @@ func _test_gamepad_controls() -> void:
 	hud.action_requested.connect(func(action: String) -> void: routed.append(action))
 	var buttons := {
 		JOY_BUTTON_A: "jump", JOY_BUTTON_B: "cast_spell",
-		JOY_BUTTON_X: "dash", JOY_BUTTON_Y: "blast",
+		JOY_BUTTON_X: "jump_forward", JOY_BUTTON_RIGHT_STICK: "escape_limb_grab",
+		JOY_BUTTON_Y: "blast",
 		JOY_BUTTON_LEFT_SHOULDER: "punch_left", JOY_BUTTON_RIGHT_SHOULDER: "punch_right",
 		JOY_BUTTON_DPAD_UP: "spell_0", JOY_BUTTON_DPAD_RIGHT: "spell_1",
 		JOY_BUTTON_DPAD_DOWN: "spell_2", JOY_BUTTON_DPAD_LEFT: "spell_3"
@@ -386,10 +390,9 @@ func _test_gamepad_controls() -> void:
 			for step in range(4):
 				player._update_attack(1.0)
 
-	player.dash_time = 0.0
 	var energy_before_locked_b := player.magic_energy
 	_send_pad(JOY_BUTTON_B, true)
-	_check(player.dash_time == 0.0 and player.magic_energy == energy_before_locked_b, "B cannot dash or spend energy while magic is locked")
+	_check(not player._parabolic_jump_active and player.magic_energy == energy_before_locked_b, "B cannot start the forward jump or spend energy while magic is locked")
 	_send_pad(JOY_BUTTON_B, false)
 
 	var attacks_before_l1 := player.attack_count
@@ -494,7 +497,7 @@ func _test_gamepad_controls() -> void:
 	for step in range(4):
 		player._update_attack(1.0)
 
-	for button in [JOY_BUTTON_A, JOY_BUTTON_B, JOY_BUTTON_X, JOY_BUTTON_Y, JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_RIGHT, JOY_BUTTON_DPAD_DOWN, JOY_BUTTON_DPAD_LEFT]:
+	for button in [JOY_BUTTON_A, JOY_BUTTON_B, JOY_BUTTON_X, JOY_BUTTON_Y, JOY_BUTTON_RIGHT_STICK, JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_RIGHT, JOY_BUTTON_DPAD_DOWN, JOY_BUTTON_DPAD_LEFT]:
 		var before := routed.size()
 		_send_pad(button, true)
 		hud._process(1.0)
@@ -505,10 +508,10 @@ func _test_gamepad_controls() -> void:
 		_check(routed.size() == before + 2, "%s can activate on a new press" % buttons[button])
 		_send_pad(button, false)
 
-	player.dash_time = 0.0
-	var attacks_before_x := player.attack_count
+	var before_forward_jump_route := routed.size()
 	_send_pad(JOY_BUTTON_X, true)
-	_check(player.dash_time > 0.0 and player.attack_count == attacks_before_x, "Xbox X dashes without triggering left punch")
+	_check(routed.size() == before_forward_jump_route + 1 and routed.back() == "jump_forward",
+		"Xbox X reaches the forward-jump action without triggering left punch")
 	_send_pad(JOY_BUTTON_X, false)
 
 	player.rage.unlocked_spells.assign(["light"])
