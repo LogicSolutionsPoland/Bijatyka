@@ -609,6 +609,7 @@ func _release_unadmitted_grabs() -> void:
 		elif enemy.state == "limb_grab_windup":
 			enemy.cancel_limb_grab_windup(player)
 
+func is_local_formation_active() -> bool:
 	return _formation_active
 
 func formation_role_for(enemy: FoundationEnemy) -> String:
