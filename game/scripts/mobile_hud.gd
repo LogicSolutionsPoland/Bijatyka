@@ -11,7 +11,7 @@ const AURA_LABELS := {
 # L1 / LB and R1 / RB punch; L2 / LT and R2 / RT kick. B casts the
 # selected spell, while Y triggers the unlocked Fire-school Blast.
 const GAMEPAD_ACTIONS := {
-	&"pad_jump": "jump", &"pad_dash": "dash", &"pad_cast_spell": "cast_spell",
+	&"pad_jump": "jump", &"pad_jump_forward": "jump_forward", &"pad_cast_spell": "cast_spell",
 	&"pad_punch_left": "punch_left", &"pad_punch_right": "punch_right",
 	&"pad_blast": "blast",
 	&"pad_kick_left": "kick_left", &"pad_kick_right": "kick_right",
