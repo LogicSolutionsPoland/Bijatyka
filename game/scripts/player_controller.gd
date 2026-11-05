@@ -8,6 +8,7 @@ signal health_changed(current: int, maximum: int)
 signal magic_changed(current: float, maximum: float, school: String)
 signal interrupted(duration: float)
 signal jump_impact(target: Node)
+signal parabolic_jump_landed(landing_position: Vector3, travel_direction: Vector3)
 signal respawned
 
 const RAGE_SCRIPT := preload("res://scripts/rage_progression.gd")
@@ -22,8 +23,6 @@ const EXO_MIXAMO_OVERLAY_SCRIPT := preload("res://scripts/player_exo_mixamo_over
 const GRAVITY := 24.0
 const MAX_HEALTH := 100
 const MAX_MAGIC := 100.0
-const DASH_DISTANCE := 15.0
-const DASH_DURATION := 0.30
 const TARGET_MELEE_HITS_PER_SECOND := 5.0
 const TARGET_MELEE_CYCLE_SECONDS := 1.0 / TARGET_MELEE_HITS_PER_SECOND
 const MELEE_TIMER_EPSILON := 0.0001
@@ -46,6 +45,9 @@ const SPELLS := {
 	"shadow": {"cost": 20.0, "range": 18.0, "color": Color(0.68, 0.30, 1.0)}
 }
 
+@export_range(1.0, 8.0, 0.1) var forward_jump_distance_m := 5.0
+@export_range(0.8, 4.0, 0.1) var forward_jump_arc_height_m := 2.4
+
 var rage: RageProgression = RAGE_SCRIPT.new()
 var health := MAX_HEALTH
 var magic_energy := MAX_MAGIC
@@ -60,8 +62,8 @@ var _queued_attack_side := ""
 var _attack_recovery_locked := false
 var movement_slow_time := 0.0
 var movement_slow_factor := 1.0
-var dash_time := 0.0
-var dash_direction := Vector3.ZERO
+var _parabolic_jump_active := false
+var _parabolic_jump_direction := Vector3.ZERO
 var jump_impact_armed := false
 var _was_airborne := false
 var _animation_player: AnimationPlayer
@@ -225,15 +227,7 @@ func _physics_process(delta: float) -> void:
 		movement_slow_time = maxf(0.0, movement_slow_time - delta)
 		if movement_slow_time == 0.0:
 			movement_slow_factor = 1.0
-	if dash_time > 0.0:
-		dash_time = maxf(0.0, dash_time - delta)
-		# Explicit directed dashes may rise; the default camera dash stays level.
-		var vertical_velocity := velocity.y
-		velocity = dash_direction * (DASH_DISTANCE / DASH_DURATION)
-		if is_zero_approx(dash_direction.y) and (not is_on_floor() or vertical_velocity > 0.1):
-			# A level air dash must not cancel an upward jump or force a fall.
-			velocity.y = vertical_velocity
-	else:
+	if not _parabolic_jump_active:
 		_update_movement(delta)
 	if not is_on_floor():
 		velocity.y -= GRAVITY * delta
@@ -241,11 +235,19 @@ func _physics_process(delta: float) -> void:
 		velocity.y = 0.0
 	var started_airborne := not is_on_floor() or velocity.y > 0.1
 	move_and_slide()
+	if _parabolic_jump_active and is_on_wall():
+		# Keep vertical motion and landing intact while a wall stops forward travel.
+		velocity.x = 0.0
+		velocity.z = 0.0
 	if started_airborne:
 		_was_airborne = true
 	if _was_airborne and is_on_floor():
 		_was_airborne = false
 		_play_character_action("Landing", float(CHARACTER_MOTION.ACTIONS.get("Landing", 0.38)))
+		if _parabolic_jump_active:
+			_parabolic_jump_active = false
+			parabolic_jump_landed.emit(global_position, _parabolic_jump_direction)
+			_parabolic_jump_direction = Vector3.ZERO
 		if jump_impact_armed:
 			jump_impact_armed = false
 			_resolve_jump_impact()
@@ -273,8 +275,8 @@ func _read_desktop_input(delta: float) -> void:
 			_desktop_attack_repeat_timers.erase(input_action)
 	if Input.is_action_just_pressed("jump"):
 		try_jump()
-	if Input.is_action_just_pressed("dash"):
-		try_dash()
+	if Input.is_action_just_pressed("jump_forward"):
+		try_parabolic_jump()
 	if Input.is_action_just_pressed("cast_spell"):
 		cast_spell()
 	if Input.is_action_just_pressed("cycle_spell"):
@@ -610,29 +612,28 @@ func _resolve_jump_impact() -> void:
 		rage.record_effective_hit(float(dealt))
 		jump_impact.emit(target)
 
-func _camera_aim_direction() -> Vector3:
-	var aim_camera := get_tree().get_first_node_in_group("foundation_camera") as Camera3D
-	if aim_camera != null and is_instance_valid(aim_camera):
-		return -aim_camera.global_transform.basis.z.normalized()
-	return -global_transform.basis.z.normalized()
-
-func try_dash(direction: Vector3 = Vector3.ZERO) -> bool:
-	if dash_time > 0.0 or rage.current_soul_condemned:
+func try_parabolic_jump() -> bool:
+	if not is_on_floor() or _parabolic_jump_active or rage.current_soul_condemned:
 		return false
 	if attack_phase in ["approach", "grapple"]:
 		_finish_attack()
+	var direction := -global_transform.basis.z
+	direction.y = 0.0
 	if direction.length_squared() < 0.01:
-		direction = _camera_aim_direction()
-		# The camera looks down at the arena; do not drive the 15 m dash
-		# into the floor or shorten its horizontal reach.
-		direction.y = 0.0
-	if direction.length_squared() < 0.01:
-		direction = -global_transform.basis.z
-	dash_direction = direction.normalized()
-	if dash_direction.length_squared() < 0.01:
-		dash_direction = Vector3.FORWARD
-	dash_time = DASH_DURATION
-	_play_character_action("Dash", DASH_DURATION)
+		return false
+	direction = direction.normalized()
+	var arc_height := maxf(0.8, forward_jump_arc_height_m)
+	var duration := sqrt(8.0 * arc_height / GRAVITY)
+	if duration <= 0.0:
+		return false
+	var horizontal_speed := maxf(0.0, forward_jump_distance_m) / duration
+	velocity.x = direction.x * horizontal_speed
+	velocity.z = direction.z * horizontal_speed
+	velocity.y = GRAVITY * duration * 0.5
+	_parabolic_jump_direction = direction
+	_parabolic_jump_active = true
+	jump_impact_armed = false
+	_was_airborne = true
 	return true
 
 func interrupt_by_zombie(slow_seconds: float = 0.7, recovery_penalty: float = 0.45) -> void:
@@ -959,14 +960,8 @@ func _play_character_action(action_name: String, duration: float) -> void:
 		return
 	_character_action_time = maxf(0.0, duration)
 	_animation_player.play(clip, ATTACK_ANIMATION_BLEND_SECONDS)
-	if _exo_overlay != null:
-		# The Exo skin rolls over the same collision-safe 15m dash path.
-		# Airborne dash keeps the existing source animation.
-		if action_name == "Dash":
-			if not _exo_overlay.play_ground_roll():
-				_exo_overlay.stop_clip()
-		elif action_name in ["Landing", "Hit", "Defeat"]:
-			_exo_overlay.stop_clip()
+	if _exo_overlay != null and action_name in ["Landing", "Hit", "Defeat"]:
+		_exo_overlay.stop_clip()
 
 func _on_selection_resolved(_milestone: int, aura_id: String) -> void:
 	current_spell = aura_id
