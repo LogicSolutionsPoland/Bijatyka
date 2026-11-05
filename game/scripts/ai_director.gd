@@ -341,7 +341,7 @@ func _assign_ring(members: Array[FoundationEnemy], role: String, slot_count: int
 		occupied: Array[Vector3]) -> void:
 	if members.is_empty():
 		return
-	var available := members.duplicate()
+	var available: Array[FoundationEnemy] = members.duplicate()
 	for slot in range(slot_count):
 		if available.is_empty():
 			break
