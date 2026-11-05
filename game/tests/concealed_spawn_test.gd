@@ -368,20 +368,12 @@ func _test_elevator_ground_wave() -> void:
 			break
 	check(player.global_position.y < 1.0 and arena._ground_wave_started,
 		"player arrival at ground level activates the encounter")
-	var hidden_ground_batches: Array[String] = []
-	for visual in arena._ground_map_visuals:
-		if not visual.visible:
-			hidden_ground_batches.append("%s (%s)" % [visual.name, visual.get_path()])
-	var all_batches_ready := hidden_ground_batches.is_empty()
-	var map_is_single_instance := arena.arena_map.get_instance_id() == map_instance_id
-	var ground_sky_active := arena._environment.sky == arena._ground_sky
-	var elevator_doors_open := not elevator._car_enclosure.visible
-	check(arena._ground_map_ready and not arena._ground_map_preparing and all_batches_ready
-		and elevator_doors_open and ground_sky_active and map_is_single_instance,
-		"ground map and render profile finish before doors open without a second map instance "
-		+ "[ready=%s, preparing=%s, batches=%s, hidden=%s, doors_open=%s, ground_sky=%s, one_map=%s]"
-		% [arena._ground_map_ready, arena._ground_map_preparing, all_batches_ready,
-			str(hidden_ground_batches), elevator_doors_open, ground_sky_active, map_is_single_instance])
+	var map_batches_prepared := arena._ground_loading_coordinator._visual_index == map_batch_count
+	check(arena._ground_map_ready and not arena._ground_map_preparing and map_batches_prepared
+		and arena._ground_map_visuals.size() == map_batch_count
+		and not elevator._car_enclosure.visible and arena._environment.sky == arena._ground_sky
+		and arena.arena_map.get_instance_id() == map_instance_id,
+		"ground map and render profile finish before doors open without a second map instance")
 	check(director.population_limit == 20 and director._initial_population_pending + director._live.size() == 4
 		and director._stored_population.is_empty() and director._pending.is_empty(),
 		"ground arrival activates exactly four stored entries with a twenty-zombie cap")
