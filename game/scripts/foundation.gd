@@ -910,8 +910,8 @@ func _on_hud_action(action: String) -> void:
 	match action:
 		"punch_left": player.request_attack("punch", "left")
 		"punch_right": player.request_attack("punch", "right")
-		"kick_left": player.request_attack("kick", "left")
-		"kick_right": player.request_attack("kick", "right")
+		"magic_left": player.cast_spell_slot(0)
+		"magic_right": player.cast_spell_slot(1 if player.rage.unlocked_spells.size() > 1 else 0)
 		"jump": player.try_jump()
 		"dash": player.try_dash()
 		"cast_spell": player.cast_spell()
