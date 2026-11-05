@@ -251,8 +251,8 @@ func _process(delta: float) -> void:
 		_floor_material.set_shader_parameter("flashlight_forward", flashlight_visibility_manager.aim_direction)
 
 # The physical parapet stops regular movement. Confinement also catches
-# unusual aerial dashes or physics tunnelling; never move a grounded player
-# upward each tick, so normal floor contact and jumping keep working.
+# aerial jumps that escape the rooftop boundary or physics tunnelling; never
+# move a grounded player upward each tick, so normal floor contact keeps working.
 func _physics_process(_delta: float) -> void:
 	_enforce_rooftop_boundary()
 
