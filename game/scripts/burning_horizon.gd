@@ -17,6 +17,9 @@ func _ready() -> void:
 	add_to_group("distant_backdrop")
 	var material := ShaderMaterial.new()
 	material.shader = WALL_SHADER
+	# The flashlight blackout draws at priority 126. Keep the decorative fog
+	# visible at its 10 m edge without changing the flashlight's range or mask.
+	material.render_priority = 127
 	for index in range(ZOMBIE_FOG_TEXTURES.size()):
 		material.set_shader_parameter(
 			StringName("zombie_fog_texture_%d" % index),
