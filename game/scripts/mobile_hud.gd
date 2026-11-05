@@ -12,6 +12,7 @@ const AURA_LABELS := {
 # selected spell, while Y triggers the unlocked Fire-school Blast.
 const GAMEPAD_ACTIONS := {
 	&"pad_jump": "jump", &"pad_jump_forward": "jump_forward", &"pad_cast_spell": "cast_spell",
+	&"pad_escape_limb_grab": "escape_limb_grab",
 	&"pad_punch_left": "punch_left", &"pad_punch_right": "punch_right",
 	&"pad_blast": "blast",
 	&"pad_kick_left": "kick_left", &"pad_kick_right": "kick_right",
@@ -33,6 +34,7 @@ var _health_tag: Label
 var _rage_tag: Label
 var _magic_tag: Label
 var _notice: Label
+var _limb_grab_button: Button
 var _boss_marker: Label
 var _elevator_prompt_panel: PanelContainer
 var _elevator_prompt: Label
@@ -57,6 +59,7 @@ func _ready() -> void:
 	add_child(_root)
 	_build_status()
 	_build_notice()
+	_build_limb_grab_button()
 	_build_boss_marker()
 	_root.resized.connect(_layout)
 	_layout()
@@ -321,7 +324,27 @@ func _build_notice() -> void:
 	_notice.visible = false
 	_root.add_child(_notice)
 
-func _build_boss_marker() -> void:
+func _build_limb_grab_button() -> void:
+	_limb_grab_button = Button.new()
+	_limb_grab_button.name = "EscapeLimbGrab"
+	_limb_grab_button.focus_mode = Control.FOCUS_NONE
+	_limb_grab_button.mouse_filter = Control.MOUSE_FILTER_STOP
+	_limb_grab_button.add_theme_font_size_override("font_size", 19)
+	_limb_grab_button.add_theme_color_override("font_color", Color(1.0, 0.95, 0.86))
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.24, 0.04, 0.04, 0.94)
+	style.border_color = Color(1.0, 0.40, 0.22)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(12)
+	_limb_grab_button.add_theme_stylebox_override("normal", style)
+	_limb_grab_button.add_theme_stylebox_override("hover", style)
+	_limb_grab_button.pressed.connect(_on_limb_grab_button_pressed)
+	_limb_grab_button.visible = false
+	_root.add_child(_limb_grab_button)
+
+func _on_limb_grab_button_pressed() -> void:
+	_emit_action("escape_limb_grab")
+
 	_boss_marker = Label.new()
 	_boss_marker.name = "BossLocator"
 	_boss_marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -374,6 +397,9 @@ func _layout() -> void:
 	var scale_factor := minf(size.x / 1280.0, size.y / 720.0)
 	_notice.position = Vector2(size.x * 0.25, 28.0)
 	_notice.size = Vector2(size.x * 0.5, 52.0)
+	if _limb_grab_button != null:
+		_limb_grab_button.size = Vector2(minf(size.x - 36.0, 600.0 * scale_factor), 66.0 * scale_factor)
+		_limb_grab_button.position = Vector2((size.x - _limb_grab_button.size.x) * 0.5, size.y * 0.74)
 	if _boss_marker != null and not _boss_marker.visible:
 		_boss_marker.position = Vector2((size.x - 210.0 * scale_factor) * 0.5, 92.0 * scale_factor)
 		_boss_marker.size = Vector2(210.0 * scale_factor, 44.0 * scale_factor)
@@ -509,7 +535,22 @@ func close_aura_selection() -> void:
 func show_enemy_telegraph(is_boss: bool) -> void:
 	show_notice("BOSS STRIKE — EVADE" if is_boss else "ZOMBIE WINDING UP — EVADE", Color(1.0, 0.42, 0.24))
 
-func show_condemnation() -> void:
+func show_limb_grab_windup(limb: String) -> void:
+	show_notice("ZOMBIE REACHING FOR %s — EVADE" % limb, Color(1.0, 0.42, 0.24))
+
+func show_limb_grab(limb: String) -> void:
+	if _limb_grab_button == null:
+		return
+	_notice.visible = false
+	_limb_grab_button.text = "%s HELD  •  TAP / R3 / R TO ESCAPE" % limb
+	_limb_grab_button.visible = true
+
+func hide_limb_grab() -> void:
+	if _limb_grab_button != null:
+		_limb_grab_button.visible = false
+	if _notice != null and _notice.text.begins_with("ZOMBIE REACHING"):
+		_notice.visible = false
+
 	show_notice("A soul run ends when RAGE falls below its threshold.", Color(0.82, 0.52, 1.0))
 
 func set_player_action_state(_action: String) -> void:

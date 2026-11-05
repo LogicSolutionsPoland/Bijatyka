@@ -273,15 +273,17 @@ func _update_full_rig_selection() -> void:
 		var enemy := enemy_variant as FoundationEnemy
 		if enemy.hp <= 0 or enemy.is_boss:
 			continue
-		if is_instance_valid(visibility_manager) and not visibility_manager.is_visible_to_flashlight(enemy):
+		if enemy.state not in ["limb_grab_windup", "limb_hold"] and is_instance_valid(visibility_manager) and not visibility_manager.is_visible_to_flashlight(enemy):
 			continue
 		var distance_squared := enemy.global_position.distance_squared_to(player.global_position)
-		var active_combatant := enemy.state in ["windup", "hit", "recovery"] or enemy.combat_target == player
+		var active_combatant := enemy.state in ["windup", "limb_grab_windup", "limb_hold", "hit", "recovery"] or enemy.combat_target == player
 		var boundary := FULL_RIG_EXIT_DISTANCE_SQUARED if enemy._full_animation_selected or active_combatant else FULL_RIG_ENTRY_DISTANCE_SQUARED
 		if distance_squared > boundary:
 			continue
 		var score := sqrt(distance_squared)
-		if enemy.state == "windup": score -= 9.0
+		if enemy.state == "limb_hold": score -= 100.0
+		elif enemy.state == "limb_grab_windup": score -= 90.0
+		elif enemy.state == "windup": score -= 9.0
 		elif enemy.state == "hit": score -= 7.0
 		elif enemy.state == "recovery": score -= 3.0
 		if enemy.combat_target == player: score -= 4.0

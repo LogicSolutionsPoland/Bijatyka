@@ -356,6 +356,8 @@ func _set_rooftop_render_profile(on_roof: bool) -> void:
 
 func _restore_rooftop_map() -> void:
 	# Cancels any partial descent, including a respawn while the car is moving.
+	if is_instance_valid(player):
+		player.cancel_limb_grab()
 	_ground_map_preparing = false
 	_ground_map_ready = false
 	for visual in _ground_map_visuals:
@@ -733,6 +735,9 @@ func _build_hud() -> void:
 	hud.name = "GamepadCombatHUD"
 	hud.action_requested.connect(_on_hud_action)
 	hud.aura_chosen.connect(_on_aura_chosen)
+	player.limb_grab_windup.connect(hud.show_limb_grab_windup)
+	player.limb_grab_started.connect(hud.show_limb_grab)
+	player.limb_grab_ended.connect(hud.hide_limb_grab)
 	add_child(hud)
 
 func _update_gamepad_camera(delta: float) -> void:
@@ -899,6 +904,7 @@ func _on_elevator_call_arrived(destination_floor: StringName) -> void:
 
 
 func _on_elevator_ride_started(destination_floor: StringName) -> void:
+	player.cancel_limb_grab()
 	# The car is closed and the rider is inside before this signal is emitted.
 	# Keep the camera inside the enclosure throughout the reveal sequence.
 	camera_rig.global_position = player.global_position + Vector3.UP * CAMERA_PIVOT_HEIGHT
@@ -959,6 +965,8 @@ func _on_player_respawned() -> void:
 	_deactivate_ground_population()
 
 func _deactivate_ground_population() -> void:
+	if is_instance_valid(player):
+		player.cancel_limb_grab()
 	if is_instance_valid(ai_director):
 		ai_director.deactivate()
 	_ground_wave_started = false
@@ -980,6 +988,7 @@ func _on_hud_action(action: String) -> void:
 		"kick_right": player.request_attack("kick", "right")
 		"jump": player.try_jump()
 		"jump_forward": player.try_parabolic_jump()
+		"escape_limb_grab": player.try_escape_limb_grab()
 		"cast_spell": player.cast_spell()
 		"blast": player.cast_blast()
 		"spell_0", "spell_1", "spell_2", "spell_3": player.cast_spell_slot(int(action.get_slice("_", 1)))

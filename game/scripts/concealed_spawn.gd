@@ -226,6 +226,10 @@ func _on_removed(id: int, replacements: int = 1) -> void:
 		return
 	var enemy := _live[id] as FoundationEnemy
 	if is_instance_valid(enemy):
+		if enemy.state == "limb_hold":
+			enemy.release_limb_grab(player)
+		elif enemy.state == "limb_grab_windup":
+			enemy.cancel_limb_grab_windup(player)
 		enemy.attack_director = null
 	_attackers.erase(id)
 	_formation_roles.erase(id)
@@ -574,6 +578,7 @@ func set_local_formation(roles: Dictionary, targets: Dictionary) -> void:
 	_formation_roles = roles
 	_formation_targets = targets
 	_formation_active = true
+	_release_unadmitted_grabs()
 	# Only admitted local actors collide with other zombie bodies. This keeps
 	# moving reserves from passing through an occupied attack position.
 	for id in _live:
@@ -585,6 +590,7 @@ func set_local_formation(roles: Dictionary, targets: Dictionary) -> void:
 
 func clear_local_formation() -> void:
 	_formation_active = false
+	_release_unadmitted_grabs()
 	_formation_roles.clear()
 	_formation_targets.clear()
 	for item in _live.values():
@@ -592,7 +598,17 @@ func clear_local_formation() -> void:
 		if is_instance_valid(enemy) and enemy.hp > 0:
 			enemy.collision_mask &= ~2
 
-func is_local_formation_active() -> bool:
+func _release_unadmitted_grabs() -> void:
+	# Four locked attackers at most; release as soon as a role or encounter ends.
+	for id in _attackers.keys():
+		var enemy := _live.get(id) as FoundationEnemy
+		if not is_instance_valid(enemy) or can_maintain_limb_grab(enemy):
+			continue
+		if enemy.state == "limb_hold":
+			enemy.release_limb_grab(player)
+		elif enemy.state == "limb_grab_windup":
+			enemy.cancel_limb_grab_windup(player)
+
 	return _formation_active
 
 func formation_role_for(enemy: FoundationEnemy) -> String:
@@ -678,6 +694,17 @@ func can_resolve_player_attack(enemy: FoundationEnemy) -> bool:
 	if not _formation_active:
 		return true
 	if not _attackers.has(enemy.get_instance_id()) or formation_role_for(enemy) != "attacker":
+		return false
+	var offset := enemy.global_position - player.global_position
+	offset.y = 0.0
+	return offset.length_squared() <= LOCAL_ATTACK_RADIUS_SQUARED
+
+# A hold keeps its original attack lock and remains inside the local ring.
+func can_maintain_limb_grab(enemy: FoundationEnemy) -> bool:
+	if not _ground_active or not _formation_active or not is_instance_valid(player) or not is_instance_valid(enemy):
+		return false
+	var id := enemy.get_instance_id()
+	if enemy.hp <= 0 or not _live.has(id) or not _attackers.has(id) or formation_role_for(enemy) != "attacker":
 		return false
 	var offset := enemy.global_position - player.global_position
 	offset.y = 0.0

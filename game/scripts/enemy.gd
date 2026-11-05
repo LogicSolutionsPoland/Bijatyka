@@ -34,6 +34,7 @@ const PURSUIT_DETOUR_ANGLES := [35.0, -35.0, 60.0, -60.0, 90.0, -90.0, 125.0, -1
 @export_enum("shambler", "brute", "stalker", "boss") var enemy_variant := "shambler"
 @export var is_boss := false
 @export var starting_health := 90
+@export_range(0.45, 1.25, 0.05) var limb_grab_windup_seconds := 0.75
 
 var hp := 90
 var move_speed := 2.5
@@ -89,6 +90,8 @@ var _rig_budget_owner: Node
 var _low_poly_death_scale := 1.0
 var _player_grapple_owner: FoundationPlayer
 var _player_grapple_time := 0.0
+var _limb_grab_limb := ""
+var _limb_grab_hand := ""
 var _pursuit_avoid_direction := Vector3.ZERO
 var _pursuit_avoid_remaining := 0.0
 var _player_alert_shared := false
@@ -480,6 +483,10 @@ func _adopt_detailed_model(model: Node3D) -> void:
 	set_quality_shadow_enabled(_quality_shadows_enabled)
 
 func _release_detailed_model() -> void:
+	if state == "limb_hold":
+		release_limb_grab(_player)
+	elif state == "limb_grab_windup":
+		cancel_limb_grab_windup(_player)
 	if _model == null:
 		return
 	var model := _model
@@ -723,7 +730,7 @@ func _physics_process(delta: float) -> void:
 	if _ai_accumulator < _ai_interval:
 		# A stale chase velocity must not carry an unadmitted zombie into the
 		# local ring between staggered decisions.
-		if not is_boss and is_instance_valid(attack_director) and attack_director.has_method("is_local_formation_active") and bool(attack_director.call("is_local_formation_active")) and combat_target == _player and distance <= 4.2 and String(attack_director.call("formation_role_for", self)).is_empty() and state not in ["windup", "hit", "recovery"]:
+		if not is_boss and is_instance_valid(attack_director) and attack_director.has_method("is_local_formation_active") and bool(attack_director.call("is_local_formation_active")) and combat_target == _player and distance <= 4.2 and String(attack_director.call("formation_role_for", self)).is_empty() and state not in ["windup", "limb_grab_windup", "limb_hold", "hit", "recovery"]:
 			velocity.x = 0.0
 			velocity.z = 0.0
 		_move_and_check_assault(delta)
@@ -821,6 +828,14 @@ func _resume_animation_for_state() -> void:
 				_begin_attack_animation(target, global_position.distance_to(target.global_position), maxf(state_time, 0.01))
 			else:
 				_play_animation("Idle")
+		"limb_grab_windup", "limb_hold":
+			if not _limb_grab_hand.is_empty():
+				var clip := String(FIGHT_ANIMATION_BUILDER.clip_path("punch", _limb_grab_hand, ENEMY_FIGHT_LIBRARY))
+				if _animation_player.has_animation(clip):
+					_play_animation(clip, 1.0, 0.04, true)
+					if state == "limb_hold":
+						_animation_player.seek(_attack_contact_time, true)
+						_animation_player.pause()
 		"hit": _play_animation("Hit_React", 1.0, 0.04, true)
 		"assault": _play_animation("Sprint")
 		"wander": _play_animation("Walk")
@@ -828,6 +843,13 @@ func _resume_animation_for_state() -> void:
 		_: _play_animation("Idle")
 
 func _update_ai(delta: float, distance: float) -> void:
+	if state == "limb_hold":
+		velocity.x = 0.0
+		velocity.z = 0.0
+		state_time = maxf(0.0, state_time - delta)
+		if state_time <= 0.0 or not _can_keep_limb_grab():
+			release_limb_grab(_player)
+		return
 	if stun_time > 0.0:
 		stun_time = maxf(0.0, stun_time - delta)
 		velocity.x = move_toward(velocity.x, 0.0, delta * 9.0)
@@ -845,11 +867,13 @@ func _update_ai(delta: float, distance: float) -> void:
 	if _spawn_assault_time > 0.0 and _update_spawn_assault(delta):
 		return
 	_decision_time -= delta
-	if _decision_time <= 0.0 and state != "windup":
+	if _decision_time <= 0.0 and state not in ["windup", "limb_grab_windup"]:
 		_decision_time = randf_range(0.35, 0.55)
 		_choose_target()
 	if not _valid_target():
 		combat_target = null
+		if state == "limb_grab_windup":
+			cancel_limb_grab_windup(_player)
 		if state == "windup":
 			_release_player_attack_slot()
 			state = "recovery"
@@ -887,6 +911,13 @@ func _update_ai(delta: float, distance: float) -> void:
 		_play_animation("Hit_React")
 		if state_time <= 0.0:
 			state = "approach"
+	elif state == "limb_grab_windup":
+		velocity.x = 0.0
+		velocity.z = 0.0
+		if not _can_keep_limb_grab() or not _player.is_limb_grab_candidate(self):
+			cancel_limb_grab_windup(_player)
+		elif state_time <= 0.0:
+			_resolve_limb_grab(distance)
 	elif state == "windup":
 		velocity.x = 0.0
 		velocity.z = 0.0
@@ -910,9 +941,11 @@ func _update_ai(delta: float, distance: float) -> void:
 				velocity.x = queue_direction.x * CROWD_WAIT_SPEED
 				velocity.z = queue_direction.z * CROWD_WAIT_SPEED
 				return
+			_attack_sequence += 1
+			if _attack_sequence % 3 == 1 and _try_begin_limb_grab():
+				return
 			state = "windup"
 			state_time = telegraph_duration if is_boss else telegraph_duration * 0.55
-			_attack_sequence += 1
 			_attack_latched = true
 			velocity.x = 0.0
 			velocity.z = 0.0
@@ -983,6 +1016,120 @@ func _follow_local_formation(delta: float, distance: float) -> bool:
 	_play_animation("Walk")
 	return true
 
+# Only detailed local attackers can start a visible, side-specific reach.
+# Both rigs expose hand_l/hand_r; use live bone positions instead of assuming
+# that model yaw or imported rest axes correspond to world left/right.
+func _try_begin_limb_grab() -> bool:
+	if is_boss or combat_target != _player or not is_instance_valid(_player):
+		return false
+	if not _full_animation_selected or not _visual_root.visible or _animation_player == null or _skeleton == null or _player._skeleton == null:
+		return false
+	if not _can_keep_limb_grab():
+		return false
+	var nearest := _nearest_arm_and_hand()
+	if nearest.is_empty():
+		return false
+	var hand: String = nearest["hand"]
+	var clip := String(FIGHT_ANIMATION_BUILDER.clip_path("punch", hand, ENEMY_FIGHT_LIBRARY))
+	if not _animation_player.has_animation(clip):
+		# No compatible side-specific reach: continue with the ordinary strike.
+		return false
+	var limb: String = nearest["limb"]
+	if not _player.try_reserve_limb_grab(self, limb):
+		return false
+	_limb_grab_hand = hand
+	_limb_grab_limb = limb
+	_attack_animation = clip
+	_attack_contact_time = _attack_clip_contact_time(clip)
+	state = "limb_grab_windup"
+	state_time = clampf(limb_grab_windup_seconds, 0.45, 1.25)
+	_attack_latched = true
+	velocity.x = 0.0
+	velocity.z = 0.0
+	var speed := _attack_contact_time / state_time if _attack_contact_time > 0.0 else 1.0
+	if not _play_animation(clip, speed, 0.08, true):
+		cancel_limb_grab_windup(_player)
+		return false
+	return true
+
+func _nearest_arm_and_hand() -> Dictionary:
+	var nearest := {}
+	var best := INF
+	for arm in ["left", "right"]:
+		var player_bone := _player._skeleton.find_bone("hand_l" if arm == "left" else "hand_r")
+		if player_bone < 0:
+			continue
+		var arm_at := _player._skeleton.to_global(_player._skeleton.get_bone_global_pose(player_bone).origin)
+		for hand in ["left", "right"]:
+			var enemy_bone := _skeleton.find_bone("hand_l" if hand == "left" else "hand_r")
+			if enemy_bone < 0:
+				continue
+			var hand_at := _skeleton.to_global(_skeleton.get_bone_global_pose(enemy_bone).origin)
+			var distance_squared := arm_at.distance_squared_to(hand_at)
+			if distance_squared < best:
+				best = distance_squared
+				nearest = {"limb": "LEFT ARM" if arm == "left" else "RIGHT ARM", "hand": hand}
+	return nearest
+
+func _can_keep_limb_grab() -> bool:
+	return is_instance_valid(_player) and _player.health > 0 and is_instance_valid(attack_director) and attack_director.has_method("can_maintain_limb_grab") and bool(attack_director.call("can_maintain_limb_grab", self))
+
+func _resolve_limb_grab(distance: float) -> void:
+	var hit := false
+	if _can_keep_limb_grab() and is_instance_valid(_player):
+		distance = global_position.distance_to(_player.global_position)
+		if distance <= minf(attack_range + 0.18, 1.65) and _clear_sight(_player):
+			hit = _player.begin_limb_grab(self, _limb_grab_limb)
+	if hit:
+		state = "limb_hold"
+		state_time = clampf(_player.limb_grab_hold_seconds, 0.5, 3.0)
+		if _animation_player != null and _animation_player.current_animation == _attack_animation:
+			_animation_player.seek(_attack_contact_time, true)
+			_animation_player.pause()
+		_attack_latched = false
+		attack_resolved.emit(self, true)
+		return
+	attack_resolved.emit(self, false)
+	cancel_limb_grab_windup(_player)
+
+func cancel_limb_grab_windup(owner: FoundationPlayer) -> void:
+	if state != "limb_grab_windup" or owner != _player:
+		return
+	state = "recovery"
+	state_time = recovery_duration * 0.65
+	_limb_grab_limb = ""
+	_limb_grab_hand = ""
+	_attack_animation = ""
+	_attack_latched = false
+	velocity.x = 0.0
+	velocity.z = 0.0
+	if is_instance_valid(_player):
+		_player.cancel_pending_limb_grab(self)
+	_play_animation("Idle", 1.0, 0.08, true)
+	_release_player_attack_slot()
+
+func release_limb_grab(owner: FoundationPlayer) -> void:
+	if state != "limb_hold" or owner != _player:
+		return
+	state = "recovery"
+	state_time = recovery_duration * 0.65
+	_limb_grab_limb = ""
+	_limb_grab_hand = ""
+	_attack_animation = ""
+	_attack_latched = false
+	velocity.x = 0.0
+	velocity.z = 0.0
+	if is_instance_valid(_player):
+		_player.end_limb_grab(self)
+	_play_animation("Idle", 1.0, 0.08, true)
+	_release_player_attack_slot()
+
+func _exit_tree() -> void:
+	if state == "limb_hold":
+		release_limb_grab(_player)
+	elif state == "limb_grab_windup":
+		cancel_limb_grab_windup(_player)
+
 func _resolve_enemy_attack(distance: float) -> void:
 	var hit := false
 	# Legacy direct callers resolve against the player; active AI locks its target during windup.
@@ -1028,6 +1175,10 @@ func begin_player_grapple(owner: FoundationPlayer, duration: float) -> bool:
 	if hp <= 0 or is_boss or not is_instance_valid(owner) or duration <= 0.0:
 		return false
 	_finish_spawn_assault()
+	if state == "limb_hold":
+		release_limb_grab(_player)
+	elif state == "limb_grab_windup":
+		cancel_limb_grab_windup(_player)
 	_release_player_attack_slot()
 	_player_grapple_owner = owner
 	_player_grapple_time = duration
@@ -1049,6 +1200,10 @@ func end_player_grapple(owner: FoundationPlayer) -> void:
 func receive_hit(damage: int, hit_direction: Vector3 = Vector3.ZERO, is_jump_hit: bool = false) -> int:
 	if hp <= 0 or damage <= 0 or _death_started:
 		return 0
+	if state == "limb_hold":
+		release_limb_grab(_player)
+	elif state == "limb_grab_windup":
+		cancel_limb_grab_windup(_player)
 	_finish_spawn_assault()
 	_release_player_attack_slot()
 	var dealt := mini(hp, damage)
@@ -1084,6 +1239,10 @@ func receive_hit(damage: int, hit_direction: Vector3 = Vector3.ZERO, is_jump_hit
 	return dealt
 
 func apply_stun(duration: float) -> void:
+	if state == "limb_hold":
+		release_limb_grab(_player)
+	elif state == "limb_grab_windup":
+		cancel_limb_grab_windup(_player)
 	_finish_spawn_assault()
 	if state == "windup":
 		state = "approach"
