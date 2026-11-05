@@ -345,9 +345,10 @@ func _test_elevator_ground_wave() -> void:
 	check(arena._ground_loading_coordinator._visual_index == 0 and director._live.is_empty(),
 		"camera look cannot trigger map setup or zombie activation")
 	director._physics_process(1.0)
-	check(elevator._travelling and director.ordinary_population_count() == 4
+	check(elevator._travelling and director._stored_population.size() == 4
+		and director.ordinary_population_count() <= 20
 		and director._live.is_empty() and positions.is_empty(),
-		"camera and elevator movement cannot activate the four stored zombies")
+		"camera and elevator movement cannot activate the four stored zombies while the local pool prepares")
 	# Pause the dedicated coordinator, not Foundation._process: PR #53
 	# moved preparation into GroundLoadingCoordinator.
 	arena._ground_loading_coordinator.set_process(false)
@@ -357,8 +358,9 @@ func _test_elevator_ground_wave() -> void:
 			break
 	check(elevator._travelling and elevator.is_player_riding(player)
 		and elevator._car_enclosure.visible and not arena._ground_wave_started
-		and director.ordinary_population_count() == 4,
-		"bottom doors stay closed and four zombies stay stored while map preparation is incomplete")
+		and director._stored_population.size() == 4 and director._live.is_empty()
+		and director.ordinary_population_count() <= 20,
+		"bottom doors stay closed and four zombies stay stored while the local pool prepares")
 	arena._ground_loading_coordinator.set_process(true)
 	for frame in range(180):
 		await physics_frame
@@ -393,6 +395,11 @@ func _test_elevator_ground_wave() -> void:
 	elevator.rider_arrived.emit(&"ground")
 	check(director._live.size() == 4 and director._pending.is_empty() and director._initial_population_pending == 0,
 		"repeat ground arrival does not add a zombie")
+	check(director._prepared_local.size() == 14 and director.ordinary_population_count() <= 20,
+		"local horde is prepared within the twenty-zombie stage cap")
+	# The replacement ladder below isolates the original global spawn path.
+	# Landing activation and the prepared pool are exercised separately.
+	director.reset_local_horde()
 	var first_victim: FoundationEnemy = director._live.values()[0]
 	first_victim.receive_hit(10000)
 	first_victim._complete_death()

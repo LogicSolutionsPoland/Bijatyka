@@ -38,13 +38,18 @@ func _run() -> void:
 	for index in range(4):
 		var enemy := Enemy.new() as FoundationEnemy
 		enemy.configure("shambler")
-		enemy.position = Vector3(float(index), 0.05, -6.0)
+		enemy.position = Vector3(float(index), 0.05, -2.0)
 		enemy._player = player
 		fixture.add_child(enemy)
 		enemy.set_physics_process(false)
 		spawns.register_enemy(enemy)
 	_check(spawns.ordinary_population_count() == 4, "the stored opening four become four actors without duplication")
 	var actors: Array = spawns._live.values()
+	var assigned_roles: Dictionary = {}
+	for actor in actors:
+		assigned_roles[actor.get_instance_id()] = "attacker"
+	spawns.set_local_formation(assigned_roles, {})
+	_check(spawns.is_local_formation_active() and spawns.formation_role_for(actors[0]) == "attacker", "formation roles are available to zombie pursuit")
 	_check(spawns.try_acquire_attacker(actors[0]) and spawns.try_acquire_attacker(actors[1]) and spawns.try_acquire_attacker(actors[2]) and spawns.try_acquire_attacker(actors[3]), "PRESSURE fills the four ordinary attack slots")
 	var fifth := Enemy.new() as FoundationEnemy
 	fifth.configure("shambler")
@@ -67,7 +72,7 @@ func _run() -> void:
 	for actor in actors:
 		actor.position = Vector3(40, 0.05, -40)
 	director._evaluate(true)
-	_check(director.state == Director.State.SURGE and spawns.director_attacker_target == 4 and spawns._pending.size() == 2, "quiet combat triggers a bounded surge with two reserved reinforcements")
+	_check(director.state == Director.State.SURGE and spawns.director_attacker_target == 4 and spawns._pending.is_empty(), "quiet combat changes pacing without creating global birth reservations")
 	director._evaluate(true)
 	_check(spawns._pending.size() <= 4, "one-second decisions cannot duplicate existing reservations")
 	director._state_remaining = 0.0
