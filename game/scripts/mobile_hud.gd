@@ -345,6 +345,7 @@ func _build_limb_grab_button() -> void:
 func _on_limb_grab_button_pressed() -> void:
 	_emit_action("escape_limb_grab")
 
+func _build_boss_marker() -> void:
 	_boss_marker = Label.new()
 	_boss_marker.name = "BossLocator"
 	_boss_marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
