@@ -8,13 +8,13 @@ const PLAYER_CONTROLLER := preload("res://scripts/player_controller.gd")
 const AURA_LABELS := {
 	"light": "LIGHT", "judgment": "JUDGMENT", "fire": "FIRE", "shadow": "SHADOW"
 }
-# L1 / LB and R1 / RB punch; L2 / LT and R2 / RT kick. B casts the
-# selected spell, while Y triggers the unlocked Fire-school Blast.
+# L1 / LB and R1 / RB punch; L2 / LT and R2 / RT quick-cast magic.
+# B casts the selected spell, while Y triggers the unlocked Fire-school Blast.
 const GAMEPAD_ACTIONS := {
 	&"pad_jump": "jump", &"pad_dash": "dash", &"pad_cast_spell": "cast_spell",
 	&"pad_punch_left": "punch_left", &"pad_punch_right": "punch_right",
 	&"pad_blast": "blast",
-	&"pad_kick_left": "kick_left", &"pad_kick_right": "kick_right",
+	&"pad_magic_left": "kick_left", &"pad_magic_right": "kick_right",
 	&"pad_spell_0": "spell_0", &"pad_spell_1": "spell_1",
 	&"pad_spell_2": "spell_2", &"pad_spell_3": "spell_3"
 }
@@ -233,10 +233,10 @@ func _poll_trigger_axes() -> void:
 		_update_right_trigger(device, Input.get_joy_axis(device, JOY_AXIS_TRIGGER_RIGHT))
 
 func _update_left_trigger(device: int, axis_value: float) -> void:
-	_update_trigger_action(&"pad_kick_left", _left_trigger_rest_values, device, axis_value)
+	_update_trigger_action(&"pad_magic_left", _left_trigger_rest_values, device, axis_value)
 
 func _update_right_trigger(device: int, axis_value: float) -> void:
-	_update_trigger_action(&"pad_kick_right", _right_trigger_rest_values, device, axis_value)
+	_update_trigger_action(&"pad_magic_right", _right_trigger_rest_values, device, axis_value)
 
 func _update_trigger_action(input_action: StringName, rest_values: Dictionary, device: int, axis_value: float) -> void:
 	if not rest_values.has(device):
@@ -270,7 +270,7 @@ func _handle_gamepad_button(event: InputEventJoypadButton) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	for input_action: StringName in GAMEPAD_ACTIONS:
-		if input_action in [&"pad_kick_left", &"pad_kick_right"] or not event.is_action(input_action):
+		if input_action in [&"pad_magic_left", &"pad_magic_right"] or not event.is_action(input_action):
 			continue
 		_set_gamepad_action(input_action, event.device, event.pressed)
 		get_viewport().set_input_as_handled()
