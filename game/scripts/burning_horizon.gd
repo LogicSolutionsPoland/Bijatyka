@@ -1,15 +1,23 @@
 extends Node3D
-## Decorative moving backdrop: never participates in gameplay collision or culling.
+## Ground-level moving backdrop with four generated zombie-fog panels.
 const WALL_HEIGHT := 6.0
 const HALF_EXTENT := 20.0
 const WALL_SHADER := preload("res://shaders/burning_horizon.gdshader")
 const SKY_SHADER := preload("res://shaders/burning_sky.gdshader")
+const ZOMBIE_FOG_TEXTURES := [
+	preload("res://assets/environment/zombie_fog_01.webp"),
+	preload("res://assets/environment/zombie_fog_02.webp"),
+	preload("res://assets/environment/zombie_fog_03.webp"),
+	preload("res://assets/environment/zombie_fog_04.webp"),
+]
 
 func _ready() -> void:
 	add_to_group("distant_backdrop")
-	var material := ShaderMaterial.new()
-	material.shader = WALL_SHADER
 	for side in range(4):
+		var material := ShaderMaterial.new()
+		material.shader = WALL_SHADER
+		material.set_shader_parameter(&"zombie_fog_texture", ZOMBIE_FOG_TEXTURES[side])
+		material.set_shader_parameter(&"panel_phase", float(side))
 		var wall := MeshInstance3D.new()
 		wall.name = "HorizonWall%d" % side
 		var quad := QuadMesh.new()
@@ -23,7 +31,7 @@ func _ready() -> void:
 
 func follow_player(at: Vector3) -> void:
 	# Follow elevation as well: an airborne dash cannot cross the backdrop.
-	# Keep world yaw fixed so looking around does not rotate the painted city.
+	# Keep world yaw fixed so looking around does not rotate the painted fog.
 	global_position = at
 
 static func make_sky() -> Sky:

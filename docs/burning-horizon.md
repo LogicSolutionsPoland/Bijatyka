@@ -26,3 +26,12 @@ Manual check: walk and turn through 360 degrees, approach world boundaries, jump
 The 1536x768 burning-city photograph is the **bottom of the starting-tower skybox**, not a complete sphere. The image's skyline (roughly 45% of the picture height) is aligned with the sky horizon; the photo's fiery clouds occupy the lower part of the upper view and its zombie crowds occupy the downward view. The original procedural cloud sky fills higher elevations, with a soft transition from about 34° to 45° above the horizon. The panorama remains camera-direction-fixed, has no physics or simulated zombie instances, and does not change the foreground arena.
 
 On the roof, the flashlight shader now leaves sky pixels untouched, so the environment renders one consistent sky (rather than sampling the image again at a conflicting projection). At ground level, the original Burning Horizon and black flashlight sky remain. The rooftop-to-ground and respawn checks continue to cover this switch. A single 2:1 concept painting is not a true seamless 360° equirectangular photograph; its side join should be inspected on a physical phone.
+
+
+## Moving zombie-fog panels (5 November 2026)
+
+The ground-floor horizon panels now use the four generated fog images, each with a different image on one of the four existing 40 m by 6 m panels. The images repeat four times across each panel to preserve their widescreen proportions, with alternating mirroring and a subtle animated fog warp. The shader draws the fog and zombie silhouettes without adding scenery to the images.
+
+The existing placement and lifecycle are reused: the panels remain 20 m from the player along each side, follow player position including elevation, ignore camera yaw, and are shown only by the ground-floor render profile. The rooftop city panorama and rooftop visibility behavior are unchanged. Geometry remains four quads / eight triangles, with no colliders, shadows, lights, particles, or physics work. Texture import and Android GPU cost have not been measured in this change.
+
+The four source images were packaged as 1024 × 576 WebP textures for the mobile renderer. This feature change has not been tested in Godot or on an Android device; no APK was built.
