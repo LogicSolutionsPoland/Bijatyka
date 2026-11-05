@@ -351,6 +351,14 @@ func on_parabolic_jump_started(takeoff: Vector3, direction: Vector3) -> void:
 	_jump_origin = takeoff
 	_jump_direction = direction.normalized()
 	_jump_predicted_at = takeoff + _jump_direction * player.forward_jump_distance_m
+	var landing_ray := PhysicsRayQueryParameters3D.create(
+		_jump_predicted_at + Vector3.UP * 6.0,
+		_jump_predicted_at - Vector3.UP * 8.0, 1
+	)
+	landing_ray.exclude = [player.get_rid()]
+	var landing_ground := get_world_3d().direct_space_state.intersect_ray(landing_ray)
+	if not landing_ground.is_empty() and landing_ground.normal.dot(Vector3.UP) >= 0.85:
+		_jump_predicted_at.y = landing_ground.position.y + 0.05
 	var rear := -_jump_direction
 	for angle in [-75.0, -25.0, 25.0, 75.0]:
 		_jump_desired.append(rear.rotated(Vector3.UP, deg_to_rad(angle)) * 2.15)
@@ -468,28 +476,34 @@ func on_parabolic_jump_landed(at: Vector3, direction: Vector3) -> void:
 	var valid := not _jump_blocked and not player.is_on_wall() and displacement.dot(_jump_direction) > 0.5 * player.forward_jump_distance_m
 	valid = valid and direction.dot(_jump_direction) > 0.99 and predicted_error.length_squared() <= LOCAL_LANDING_TOLERANCE_SQUARED
 	valid = valid and absf(at.y - _jump_predicted_at.y) <= 0.7
-	valid = valid and _jump_slots.size() == LOCAL_GROUP_SIZE and _prepared_local.size() >= LOCAL_GROUP_SIZE
-	if not valid or _nearby_living_count(at, 6.0) + LOCAL_GROUP_SIZE > BijatykaAIDirector.LOCAL_LIVING_LIMIT:
+	# Existing ordinary zombies are already moving through the encounter. Use
+	# them as local members and fill only the missing positions to eleven.
+	var existing := _nearby_living_count(at, 6.0)
+	var needed := maxi(0, LOCAL_GROUP_SIZE - existing)
+	valid = valid and existing <= BijatykaAIDirector.LOCAL_LIVING_LIMIT
+	valid = valid and _jump_slots.size() >= needed and _prepared_local.size() >= needed
+	if not valid:
 		_discard_jump_plan()
 		return
 	# Static floor/path checks were spread across the flight. Recheck only the
 	# dynamic capsules against the actual landed player and moving enemies.
 	var no_occupied: Array[Vector3] = []
-	for point in _jump_slots:
+	for index in range(needed):
+		var point := _jump_slots[index]
 		var behind := point - at
 		behind.y = 0.0
 		if behind.dot(_jump_direction) >= 0.0 or not _local_spacing_clear(point, at, no_occupied) or not _local_body_clear(point, false):
 			_discard_jump_plan()
 			return
-	for index in range(LOCAL_GROUP_SIZE):
+	for index in range(needed):
 		if not is_instance_valid(_prepared_local[index]) or _prepared_local[index].is_queued_for_deletion():
 			_discard_jump_plan()
 			return
 	# Arm the one-shot guard before the synchronous activation callbacks.
 	_initial_horde_activated = true
 	_jump_preparing = false
-	for point in _jump_slots:
-		_activate_prepared_local(point)
+	for index in range(needed):
+		_activate_prepared_local(_jump_slots[index])
 	_discard_jump_plan()
 	local_group_activated.emit()
 
