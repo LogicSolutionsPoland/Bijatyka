@@ -130,7 +130,7 @@ func _run() -> void:
 	game.player.velocity.y = 6.0
 	game.player.global_position.y += 0.2
 	game._process(1.0 / 60.0)
-	_check(game.camera_rig.global_position.is_finite() and game.camera.global_position.is_finite(), "jump and dash height changes do not destabilize the camera")
+	_check(game.camera_rig.global_position.is_finite() and game.camera.global_position.is_finite(), "jump height changes do not destabilize the camera")
 
 	game.player.global_position = Foundation.PLAYER_BASE_POSITION
 	game.player.velocity = Vector3.ZERO
@@ -140,24 +140,37 @@ func _run() -> void:
 	game.camera_arm.rotation.x = game._effective_camera_pitch()
 	game.flashlight_visibility_manager.set_aim_yaw(0.0)
 	for frame in range(30):
+		await physics_frame
 		await process_frame
 	_check(game.player.try_jump(), "jump input starts while grounded")
-	_check(game.player.try_dash(), "dash input starts without replacing the jump state")
-	var level_camera_forward := -game.camera.global_transform.basis.z
-	level_camera_forward.y = 0.0
-	_check(is_zero_approx(game.player.dash_direction.y) and game.player.dash_direction.dot(level_camera_forward.normalized()) > 0.999, "downward combat camera keeps the default air dash level and forward")
-	game.player._physics_process(1.0 / 60.0)
-	_check(game.player.velocity.y > 0.0, "level air dash preserves upward jump velocity")
+	for frame in range(90):
+		await physics_frame
+		await process_frame
+		if frame > 3 and game.player.is_on_floor() and game.player.velocity.y <= 0.0:
+			break
+	_check(game.player.is_on_floor(), "ordinary Jump lands before the forward-jump check")
+	_check(game.player.try_parabolic_jump(), "forward Jump starts separately after ordinary Jump lands")
+	var player_facing := -game.player.global_transform.basis.z
+	player_facing.y = 0.0
+	_check(is_zero_approx(game.player._parabolic_jump_direction.y)
+		and game.player._parabolic_jump_direction.dot(player_facing.normalized()) > 0.999,
+		"forward Jump follows player facing horizontally under the downward camera")
 	for frame in range(18):
 		await physics_frame
 		await process_frame
-	_check(game.camera_rig.global_position.is_finite() and game.camera.global_position.is_finite(), "camera stays stable while jump and dash move the player")
+	_check(game.camera_rig.global_position.is_finite() and game.camera.global_position.is_finite(), "camera stays stable during the forward Jump")
+	for frame in range(90):
+		await physics_frame
+		await process_frame
+		if not game.player._parabolic_jump_active and game.player.is_on_floor():
+			break
+	_check(not game.player._parabolic_jump_active and game.player.is_on_floor(), "forward Jump lands before camera framing probes")
 	game.player.global_position = Foundation.PLAYER_BASE_POSITION
 	game.player.velocity = Vector3.ZERO
-	game.player.dash_time = 0.0
 	game.camera_rig.global_position = game.player.global_position + Vector3.UP * game._camera_pivot_height()
 	game.camera_rig.rotation.y = 0.0
 	for frame in range(30):
+		await physics_frame
 		await process_frame
 
 	var saved_size := root.size
@@ -172,7 +185,7 @@ func _run() -> void:
 		var normalized := Vector2(feet_screen.x / actual_viewport_size.x, feet_screen.y / actual_viewport_size.y)
 		print("FLASHLIGHT_CAMERA_FRAME " + JSON.stringify({"window": viewport_size, "viewport": actual_viewport_size, "shoulder_offset": game.camera_arm.position.x, "player_feet": normalized}))
 		_check(normalized.x >= 0.34 and normalized.x <= 0.42, "camera keeps player in the lower-left horizontal band at %s" % [viewport_size])
-		_check(normalized.y >= 0.75 and normalized.y <= 0.86, "camera keeps combat area ahead at %s" % [viewport_size])
+		_check(normalized.y >= 0.86 and normalized.y <= 0.91, "camera keeps combat area ahead at %s" % [viewport_size])
 	root.size = saved_size
 
 	game._set_rooftop_render_profile(true)
