@@ -1,29 +1,50 @@
 extends Node3D
-## Decorative moving backdrop: never participates in gameplay collision or culling.
+## Ground-level moving backdrop with a circular wall of generated zombie fog.
 const WALL_HEIGHT := 6.0
-const HALF_EXTENT := 20.0
+const FLASHLIGHT_VISIBILITY := preload("res://scripts/flashlight_visibility.gd")
+const HORIZON_RADIUS := FLASHLIGHT_VISIBILITY.MAX_RADIUS
+const RING_SEGMENTS := 96
 const WALL_SHADER := preload("res://shaders/burning_horizon.gdshader")
 const SKY_SHADER := preload("res://shaders/burning_sky.gdshader")
+const ZOMBIE_FOG_TEXTURES := [
+	preload("res://assets/environment/zombie_fog_01.webp"),
+	preload("res://assets/environment/zombie_fog_02.webp"),
+	preload("res://assets/environment/zombie_fog_03.webp"),
+	preload("res://assets/environment/zombie_fog_04.webp"),
+]
 
 func _ready() -> void:
 	add_to_group("distant_backdrop")
 	var material := ShaderMaterial.new()
 	material.shader = WALL_SHADER
-	for side in range(4):
-		var wall := MeshInstance3D.new()
-		wall.name = "HorizonWall%d" % side
-		var quad := QuadMesh.new()
-		quad.size = Vector2(HALF_EXTENT * 2.0, WALL_HEIGHT)
-		wall.mesh = quad
-		wall.material_override = material
-		wall.rotation.y = float(side) * PI * 0.5
-		wall.position = Vector3(0.0, WALL_HEIGHT * 0.5, -HALF_EXTENT).rotated(Vector3.UP, wall.rotation.y)
-		wall.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		add_child(wall)
+	# The flashlight blackout draws at priority 126. Keep the decorative fog
+	# visible at its 10 m edge without changing the flashlight's range or mask.
+	material.render_priority = 127
+	for index in range(ZOMBIE_FOG_TEXTURES.size()):
+		material.set_shader_parameter(
+			StringName("zombie_fog_texture_%d" % index),
+			ZOMBIE_FOG_TEXTURES[index]
+		)
+
+	var wall := MeshInstance3D.new()
+	wall.name = "ZombieFogHorizon"
+	var cylinder := CylinderMesh.new()
+	cylinder.top_radius = HORIZON_RADIUS
+	cylinder.bottom_radius = HORIZON_RADIUS
+	cylinder.height = WALL_HEIGHT
+	cylinder.radial_segments = RING_SEGMENTS
+	cylinder.rings = 1
+	cylinder.cap_top = false
+	cylinder.cap_bottom = false
+	wall.mesh = cylinder
+	wall.material_override = material
+	wall.position.y = WALL_HEIGHT * 0.5
+	wall.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(wall)
 
 func follow_player(at: Vector3) -> void:
 	# Follow elevation as well: an airborne dash cannot cross the backdrop.
-	# Keep world yaw fixed so looking around does not rotate the painted city.
+	# Keep the ring centered on the player without rotating it with the camera.
 	global_position = at
 
 static func make_sky() -> Sky:

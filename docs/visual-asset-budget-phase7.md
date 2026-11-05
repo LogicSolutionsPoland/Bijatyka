@@ -1,5 +1,11 @@
 # Phase 7: visual environment and lore asset budget
 
+This is a historical Phase 7 measurement record. The current ground-floor
+Zombie Horizon is a six-sector, four-texture circular mesh at the flashlight's
+shared 10 m maximum; see [burning-horizon.md](burning-horizon.md). The Phase 7
+square dimensions and texture-free cost assumptions below do not describe the
+current scene.
+
 ## Inspected scene and scope
 
 The Godot 4.7.2 Compatibility arena has a 220 m collision floor with a 30 m radial visual edge, one sun without shadows, two quarantine lamps and two braziers with local shadowless lights. The Burning Horizon is four 40 x 6 m translucent quads 20 m from the player, using one shared procedural shader. It follows player position and height with fixed world yaw; the camera may rotate freely. Sky smoke is procedural in the sky shader; there are no smoke particles. The ground, ruins, sky, and horizon make no texture reads. The ground has five value-noise evaluations per visible fragment, the sky has two, the horizon has one plus silhouette, window, and fire math. The ruin shader formerly evaluated nine noise projections and three crack projections per fragment, even on flat axis-aligned boxes. Most static boxes have flat axis-aligned faces. The 14 yaw-rotated rubble boxes retain full triplanar blending.
@@ -10,7 +16,7 @@ Existing GLB file sizes are about 4.3 MiB for the player and 616 KiB for the zom
 
 ## Guide for future lore assets
 
-| Area | Current reference and safe direction | Measure before setting a hard cap |
+| Area | Phase 7 reference and safe direction | Measure before setting a hard cap |
 | --- | --- | --- |
 | Materials | Reuse the existing ruin shader and the same `ShaderMaterial` for equal color/roughness/metal values. Reserve unique materials for visibly distinct props. | Material and draw-call deltas in the 20/100/200 scenarios on a phone. |
 | Textures | Current environment shaders use zero texture reads; keep new lore decals and atlases shared and mipmapped. Prefer a small atlas when many props share motifs. | Source dimensions, GPU compressed format, resident texture memory, and quality at the 18/30 m tiers. No fixed pixel size has been validated. |
