@@ -45,16 +45,10 @@ func _run() -> void:
 	var sample_point: Vector2 = effect.projected_center
 	var opacity := float(effect.material.get_shader_parameter("silhouette_opacity"))
 	_check(is_equal_approx(opacity, 0.40), "rendered shader is configured for 40 percent silhouette opacity")
-	var original_silhouette_color = effect.material.get_shader_parameter("silhouette_color")
-	var original_fog_color = effect.material.get_shader_parameter("fog_color")
 
 	# Freeze the shader phase while capturing the paired opacity frames so the
-	# animation cannot change the sampled silhouette between comparisons. Use
-	# white source colors so the linear readback directly measures alpha rather
-	# than the silhouette tint.
+	# animation cannot change the sampled silhouette between comparisons.
 	effect.material.set_shader_parameter("animation_time_scale", 0.0)
-	effect.material.set_shader_parameter("silhouette_color", Vector3.ONE)
-	effect.material.set_shader_parameter("fog_color", Vector3.ONE)
 	effect.set_effect_visible(false)
 	var hidden_frame := await _capture_frame()
 	effect.call("update_beam", manager.beam_origin, manager.beam_direction,
@@ -69,22 +63,39 @@ func _run() -> void:
 		visible_pixel.g - hidden_pixel.g,
 		visible_pixel.b - hidden_pixel.b
 	).length()
-	# Compare the 40% render with the same silhouette drawn at full opacity.
-	# Read back through the same Compatibility renderer and linearize its
-	# sRGB pixel values before estimating the blend alpha over the black mask.
-	effect.material.set_shader_parameter("silhouette_opacity", 1.0)
+	# Use a transparent offscreen viewport with the same shader to read the
+	# rendered alpha channel directly, independent of root viewport color space.
+	var alpha_probe := SubViewport.new()
+	alpha_probe.name = "FlashlightTipOpacityProbe"
+	alpha_probe.size = Vector2i(128, 128)
+	alpha_probe.transparent_bg = true
+	alpha_probe.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	var alpha_layer := CanvasLayer.new()
+	alpha_probe.add_child(alpha_layer)
+	var alpha_rect := ColorRect.new()
+	alpha_rect.size = Vector2(128.0, 128.0)
+	alpha_rect.color = Color.WHITE
+	var alpha_material := effect.material.duplicate() as ShaderMaterial
+	alpha_rect.material = alpha_material
+	alpha_layer.add_child(alpha_rect)
+	root.add_child(alpha_probe)
 	await process_frame
-	var opaque_frame := await _capture_frame()
-	var opaque_pixel := _sample(opaque_frame, sample_point)
-	var measured_opacity := _estimate_blend_opacity(hidden_pixel, visible_pixel, opaque_pixel)
-	effect.material.set_shader_parameter("silhouette_opacity", opacity)
+	await RenderingServer.frame_post_draw
+	var low_opacity_alpha := alpha_probe.get_texture().get_image().get_pixel(64, 64).a
+	alpha_material.set_shader_parameter("silhouette_opacity", 1.0)
+	await process_frame
+	await RenderingServer.frame_post_draw
+	var opaque_alpha := alpha_probe.get_texture().get_image().get_pixel(64, 64).a
+	var measured_opacity := low_opacity_alpha / maxf(opaque_alpha, 0.001)
+	alpha_probe.queue_free()
 	print("FLASHLIGHT_TIP_PIXEL " + JSON.stringify({
 		"renderer": "GL Compatibility software desktop",
 		"opacity_uniform": opacity,
 		"measured_opacity_vs_opaque_reference": measured_opacity,
+		"rendered_alpha_at_40_percent": low_opacity_alpha,
+		"rendered_alpha_at_full_opacity": opaque_alpha,
 		"hidden_pixel": hidden_pixel,
 		"visible_pixel": visible_pixel,
-		"opaque_reference_pixel": opaque_pixel,
 		"overlay_delta": overlay_delta,
 		"screen_rect": Rect2(effect.overlay.position, effect.overlay.size)
 	}))
@@ -96,8 +107,6 @@ func _run() -> void:
 		"rendered silhouette opacity is approximately 40 percent")
 
 	effect.material.set_shader_parameter("animation_time_scale", 1.0)
-	effect.material.set_shader_parameter("silhouette_color", original_silhouette_color)
-	effect.material.set_shader_parameter("fog_color", original_fog_color)
 	await process_frame
 	var motion_start_frame := await _capture_frame()
 	var moving_frame := await _capture_after_motion(0.8)
@@ -135,24 +144,6 @@ func _sample(image: Image, point: Vector2) -> Color:
 	var x := clampi(int(point.x), 0, image.get_width() - 1)
 	var y := clampi(int(point.y), 0, image.get_height() - 1)
 	return image.get_pixel(x, y)
-
-func _estimate_blend_opacity(background: Color, blended: Color, opaque: Color) -> float:
-	var background_linear := background.srgb_to_linear()
-	var blended_linear := blended.srgb_to_linear()
-	var opaque_linear := opaque.srgb_to_linear()
-	var total := 0.0
-	var channels := 0
-	for values in [
-		[background_linear.r, blended_linear.r, opaque_linear.r],
-		[background_linear.g, blended_linear.g, opaque_linear.g],
-		[background_linear.b, blended_linear.b, opaque_linear.b],
-	]:
-		var opaque_delta: float = values[2] - values[0]
-		if absf(opaque_delta) <= 0.01:
-			continue
-		total += (values[1] - values[0]) / opaque_delta
-		channels += 1
-	return total / float(channels) if channels > 0 else 0.0
 
 func _check(ok: bool, message: String) -> void:
 	checks += 1
