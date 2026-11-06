@@ -502,9 +502,9 @@ func _adopt_detailed_model(model: Node3D) -> void:
 
 func _release_detailed_model() -> void:
 	if state == "limb_hold":
-		release_limb_grab(_player)
+		release_limb_grab(_player, "model_released")
 	elif state == "limb_grab_windup":
-		cancel_limb_grab_windup(_player)
+		cancel_limb_grab_windup(_player, "model_released")
 	if _model == null:
 		return
 	var model := _model
@@ -864,9 +864,11 @@ func _update_ai(delta: float, distance: float) -> void:
 	if state == "limb_hold":
 		velocity.x = 0.0
 		velocity.z = 0.0
-		state_time = maxf(0.0, state_time - delta)
-		if state_time <= 0.0 or not _can_keep_limb_grab():
-			release_limb_grab(_player)
+		# The player's session timer is authoritative, not this AI clock.
+		if not _can_keep_limb_grab():
+			release_limb_grab(_player, "reservation_lost")
+		elif _player.get_active_grab_enemy() != self:
+			release_limb_grab(_player, "session_lost")
 		return
 	if stun_time > 0.0:
 		stun_time = maxf(0.0, stun_time - delta)
@@ -1097,20 +1099,23 @@ func _resolve_limb_grab(distance: float) -> void:
 	if _can_keep_limb_grab() and is_instance_valid(_player):
 		distance = global_position.distance_to(_player.global_position)
 		if distance <= minf(attack_range + 0.18, 1.65) and _clear_sight(_player):
+			# A synchronous escape callback can now release the tactical hold.
+			state = "limb_hold"
+			state_time = clampf(_player.limb_grab_hold_seconds, 0.5, 3.0)
 			hit = _player.begin_limb_grab(self, _limb_grab_limb)
+			if not hit and state == "limb_hold":
+				state = "limb_grab_windup"
 	if hit:
-		state = "limb_hold"
-		state_time = clampf(_player.limb_grab_hold_seconds, 0.5, 3.0)
-		if _animation_player != null and _animation_player.current_animation == _attack_animation:
+		if state == "limb_hold" and _animation_player != null and _animation_player.current_animation == _attack_animation:
 			_animation_player.seek(_attack_contact_time, true)
 			_animation_player.pause()
 		_attack_latched = false
 		attack_resolved.emit(self, true)
 		return
 	attack_resolved.emit(self, false)
-	cancel_limb_grab_windup(_player)
+	cancel_limb_grab_windup(_player, "contact_failed")
 
-func cancel_limb_grab_windup(owner: FoundationPlayer) -> void:
+func cancel_limb_grab_windup(owner: FoundationPlayer, reason: String = "windup_cancelled") -> void:
 	if state != "limb_grab_windup" or owner != _player:
 		return
 	state = "recovery"
@@ -1122,11 +1127,11 @@ func cancel_limb_grab_windup(owner: FoundationPlayer) -> void:
 	velocity.x = 0.0
 	velocity.z = 0.0
 	if is_instance_valid(_player):
-		_player.cancel_pending_limb_grab(self)
+		_player.cancel_pending_limb_grab(self, reason)
 	_play_animation("Idle", 1.0, 0.08, true)
 	_release_player_attack_slot()
 
-func release_limb_grab(owner: FoundationPlayer) -> void:
+func release_limb_grab(owner: FoundationPlayer, reason: String = "enemy_released") -> void:
 	if state != "limb_hold" or owner != _player:
 		return
 	state = "recovery"
@@ -1138,15 +1143,15 @@ func release_limb_grab(owner: FoundationPlayer) -> void:
 	velocity.x = 0.0
 	velocity.z = 0.0
 	if is_instance_valid(_player):
-		_player.end_limb_grab(self)
+		_player.end_limb_grab(self, reason)
 	_play_animation("Idle", 1.0, 0.08, true)
 	_release_player_attack_slot()
 
 func _exit_tree() -> void:
 	if state == "limb_hold":
-		release_limb_grab(_player)
+		release_limb_grab(_player, "enemy_despawned")
 	elif state == "limb_grab_windup":
-		cancel_limb_grab_windup(_player)
+		cancel_limb_grab_windup(_player, "enemy_despawned")
 
 func _resolve_enemy_attack(distance: float) -> void:
 	var hit := false
@@ -1218,10 +1223,11 @@ func end_player_grapple(owner: FoundationPlayer) -> void:
 func receive_hit(damage: int, hit_direction: Vector3 = Vector3.ZERO, is_jump_hit: bool = false) -> int:
 	if hp <= 0 or damage <= 0 or _death_started:
 		return 0
+	var interrupt_reason := "enemy_died" if damage >= hp else "enemy_hit"
 	if state == "limb_hold":
-		release_limb_grab(_player)
+		release_limb_grab(_player, interrupt_reason)
 	elif state == "limb_grab_windup":
-		cancel_limb_grab_windup(_player)
+		cancel_limb_grab_windup(_player, interrupt_reason)
 	_finish_spawn_assault()
 	_release_player_attack_slot()
 	var dealt := mini(hp, damage)

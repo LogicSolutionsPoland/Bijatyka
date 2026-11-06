@@ -1,0 +1,46 @@
+name: Bijatyka brutal grab Stage 1 validation
+
+on:
+  push:
+    branches:
+      - feat/jump-horde-stage1-20261105
+    paths:
+      - game/scripts/player_controller.gd
+      - game/scripts/enemy.gd
+      - game/tests/brutal_grab_state_machine_test.gd
+      - .github/workflows/brutal-grab-stage1-validation.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+      - name: Import game
+        run: |
+          set -euo pipefail
+          godot --headless --editor --path game --import --quit 2>&1 | tee grab-import.log
+          if grep -E 'SCRIPT ERROR:|ERROR: Failed to load' grab-import.log; then exit 1; fi
+      - name: Grab state, prior grab behavior, jump, combat and control regressions
+        run: |
+          set -euo pipefail
+          for script in brutal_grab_state_machine_test.gd stage6_integrated_headless_test.gd jump_state_regression_test.gd test_runner.gd; do
+            timeout 180s godot --headless --path game --script "res://tests/$script" 2>&1 | tee "$script.log"
+            grep -q 'PASS:' "$script.log"
+            if grep -E 'SCRIPT ERROR:|ERROR:' "$script.log"; then exit 1; fi
+          done
+      - name: Keep validation logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bijatyka-brutal-grab-stage1-logs
+          path: "*.log"
+          if-no-files-found: warn

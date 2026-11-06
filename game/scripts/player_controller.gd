@@ -14,6 +14,13 @@ signal respawned
 signal limb_grab_windup(limb: String)
 signal limb_grab_started(limb: String)
 signal limb_grab_ended
+signal grab_state_changed(state: int, enemy: FoundationEnemy, limb: String)
+signal grab_windup_started(enemy: FoundationEnemy, limb: String)
+signal grab_established(enemy: FoundationEnemy, limb: String)
+signal grab_interrupted(reason: String, enemy: FoundationEnemy, limb: String)
+signal grab_escaped(enemy: FoundationEnemy, limb: String)
+signal grab_failed(enemy: FoundationEnemy, limb: String)
+signal grab_fully_ended(reason: String)
 
 const RAGE_SCRIPT := preload("res://scripts/rage_progression.gd")
 const FIGHT_ANIMATION_BUILDER := preload("res://scripts/universal_base_combat.gd")
@@ -28,6 +35,7 @@ const GRAVITY := 24.0
 const MAX_HEALTH := 100
 const MAX_MAGIC := 100.0
 enum JumpState { READY, ORDINARY, FORWARD }
+enum GrabState { READY, WINDUP, GRABBED, ESCAPED, FAILED, RECOVERY }
 const TARGET_MELEE_HITS_PER_SECOND := 5.0
 const TARGET_MELEE_CYCLE_SECONDS := 1.0 / TARGET_MELEE_HITS_PER_SECOND
 const MELEE_TIMER_EPSILON := 0.0001
@@ -92,10 +100,11 @@ var _ring_attack_counts: Dictionary = {}
 var _engagement_target: FoundationEnemy
 var _previous_engagement_target: FoundationEnemy
 var _grabbed_target: FoundationEnemy # Player-to-zombie melee grapple.
-var _limb_grab_candidate: FoundationEnemy # Zombie-to-player grab windup.
+# The player is the only grab-session authority; enemy.state is a tactical phase.
+var grab_state: GrabState = GrabState.READY
+var _limb_grab_candidate: FoundationEnemy
 var _limb_grab_owner: FoundationEnemy
 var _limb_grab_limb := ""
-var _escape_limb_grab_requested := false
 var _limb_grab_time := 0.0
 var _limb_grab_cooldown := 0.0
 var flashlight_visibility_manager: Node
@@ -617,8 +626,10 @@ func _resolve_attack() -> void:
 		_spawn_attack_impact(target.global_position + Vector3(0.0, 1.0, 0.0), attack_kind)
 
 func try_jump() -> bool:
-	if _jump_state != JumpState.READY or not is_on_floor() or rage.current_soul_condemned or _limb_grab_owner != null:
+	if _jump_state != JumpState.READY or not is_on_floor() or rage.current_soul_condemned or grab_state == GrabState.GRABBED:
 		return false
+	if grab_state == GrabState.WINDUP:
+		cancel_limb_grab("jump_evaded")
 	if attack_phase in ["approach", "grapple"]:
 		_finish_attack()
 	_jump_state = JumpState.ORDINARY
@@ -641,8 +652,10 @@ func _resolve_jump_impact() -> void:
 		jump_impact.emit(target)
 
 func try_parabolic_jump() -> bool:
-	if _jump_state != JumpState.READY or not is_on_floor() or _parabolic_jump_active or rage.current_soul_condemned or _limb_grab_owner != null:
+	if _jump_state != JumpState.READY or not is_on_floor() or _parabolic_jump_active or rage.current_soul_condemned or grab_state == GrabState.GRABBED:
 		return false
+	if grab_state == GrabState.WINDUP:
+		cancel_limb_grab("jump_evaded")
 	if attack_phase in ["approach", "grapple"]:
 		_finish_attack()
 	var direction := -global_transform.basis.z
@@ -667,28 +680,57 @@ func try_parabolic_jump() -> bool:
 	return true
 
 # Enemy-to-player limb hold; independent from the player's melee grapple.
+# Stage 2 will replace the single escape action, not the session lifecycle.
+func get_grab_state() -> int:
+	return grab_state
+
+func get_active_grab_enemy() -> FoundationEnemy:
+	if grab_state == GrabState.WINDUP:
+		return _limb_grab_candidate if is_instance_valid(_limb_grab_candidate) else null
+	if grab_state == GrabState.GRABBED:
+		return _limb_grab_owner if is_instance_valid(_limb_grab_owner) else null
+	return null
+
+func get_grab_limb() -> String:
+	return _limb_grab_limb if grab_state in [GrabState.WINDUP, GrabState.GRABBED] else ""
+
+func _set_grab_state(next_state: GrabState) -> void:
+	if grab_state == next_state:
+		return
+	grab_state = next_state
+	grab_state_changed.emit(grab_state, get_active_grab_enemy(), get_grab_limb())
+
+func _grab_player_eligible() -> bool:
+	return health > 0 and not rage.current_soul_condemned and _jump_state == JumpState.READY and not _parabolic_jump_active and is_on_floor() and not get_tree().paused
+
+func _grab_enemy_eligible(enemy: FoundationEnemy) -> bool:
+	# Read-only admission: the spawn manager owns all attacker-slot locks.
+	return is_instance_valid(enemy) and not enemy.is_queued_for_deletion() and enemy.hp > 0 and not enemy.is_boss and is_instance_valid(enemy.attack_director) and enemy.attack_director.has_method("can_maintain_limb_grab") and bool(enemy.attack_director.call("can_maintain_limb_grab", enemy))
+
 func try_reserve_limb_grab(enemy: FoundationEnemy, limb: String) -> bool:
-	if _limb_grab_candidate != null and not is_instance_valid(_limb_grab_candidate):
-		_limb_grab_candidate = null
-	if not is_instance_valid(enemy) or _limb_grab_candidate != null or _limb_grab_owner != null:
+	if grab_state != GrabState.READY or _limb_grab_cooldown > 0.0 or not _grab_player_eligible() or not _grab_enemy_eligible(enemy):
 		return false
-	if _limb_grab_cooldown > 0.0 or health <= 0 or rage.current_soul_condemned or not is_on_floor() or _parabolic_jump_active:
-		return false
-	if attack_phase in ["approach", "grapple"] or get_tree().paused:
+	if limb not in ["LEFT ARM", "RIGHT ARM"] or attack_phase in ["approach", "grapple"]:
 		return false
 	_limb_grab_candidate = enemy
+	_limb_grab_limb = limb
+	_set_grab_state(GrabState.WINDUP)
 	limb_grab_windup.emit(limb)
+	grab_windup_started.emit(enemy, limb)
 	return true
 
 func is_limb_grab_candidate(enemy: FoundationEnemy) -> bool:
-	return _limb_grab_candidate == enemy
+	return grab_state == GrabState.WINDUP and _limb_grab_candidate == enemy
 
-func cancel_pending_limb_grab(enemy: FoundationEnemy) -> void:
-	if _limb_grab_candidate == enemy:
-		_limb_grab_candidate = null
+func cancel_pending_limb_grab(enemy: FoundationEnemy, reason: String = "windup_cancelled") -> void:
+	if grab_state == GrabState.WINDUP and _limb_grab_candidate == enemy:
+		_finish_limb_grab(reason)
 
 func begin_limb_grab(enemy: FoundationEnemy, limb: String) -> bool:
-	if _limb_grab_candidate != enemy or _limb_grab_owner != null or health <= 0 or rage.current_soul_condemned or not is_on_floor() or _parabolic_jump_active:
+	if grab_state != GrabState.WINDUP or _limb_grab_candidate != enemy:
+		return false
+	if limb != _limb_grab_limb or not _grab_player_eligible() or not _grab_enemy_eligible(enemy):
+		_finish_limb_grab("contact_ineligible")
 		return false
 	_limb_grab_candidate = null
 	_queued_attack_kind = ""
@@ -696,73 +738,104 @@ func begin_limb_grab(enemy: FoundationEnemy, limb: String) -> bool:
 	_desktop_attack_repeat_timers.clear()
 	_finish_attack()
 	_limb_grab_owner = enemy
-	_limb_grab_limb = limb
 	_limb_grab_time = clampf(limb_grab_hold_seconds, 0.5, 3.0)
 	velocity.x = 0.0
 	velocity.z = 0.0
 	_play_character_action("Hit", float(CHARACTER_MOTION.ACTIONS.get("Hit", 0.34)))
-	# Hold the existing hit reaction at its braced frame; Exo Gray follows the
-	# source skeleton through the existing retargeter. No new clip or rig.
 	if _character_motion_ready and _animation_player != null and _animation_player.current_animation == CHARACTER_MOTION.clip_path("Hit"):
 		_animation_player.seek(0.12, true)
 		_animation_player.pause()
+	_set_grab_state(GrabState.GRABBED)
 	limb_grab_started.emit(limb)
+	grab_established.emit(enemy, limb)
 	return true
 
 func try_escape_limb_grab() -> bool:
-	if _limb_grab_owner == null:
+	if grab_state != GrabState.GRABBED:
 		return false
-	_escape_limb_grab_requested = true
-	cancel_limb_grab()
+	_finish_limb_grab("escaped")
 	return true
 
-func end_limb_grab(enemy: FoundationEnemy) -> void:
-	if _limb_grab_owner != enemy:
-		return
-	_clear_limb_grab()
+func end_limb_grab(enemy: FoundationEnemy, reason: String = "enemy_released") -> void:
+	if grab_state == GrabState.GRABBED and _limb_grab_owner == enemy:
+		_finish_limb_grab(reason)
 
-func _clear_limb_grab() -> void:
-	var escaped := _escape_limb_grab_requested
+func _finish_limb_grab(reason: String) -> void:
+	if grab_state not in [GrabState.WINDUP, GrabState.GRABBED]:
+		return
+	var held := grab_state == GrabState.GRABBED
+	var zombie: FoundationEnemy = _limb_grab_owner if held else _limb_grab_candidate
+	if not is_instance_valid(zombie):
+		zombie = null
 	var limb := _limb_grab_limb
+	if held and reason == "escaped":
+		_set_grab_state(GrabState.ESCAPED)
+	elif held and reason == "timeout":
+		_set_grab_state(GrabState.FAILED)
+	else:
+		_set_grab_state(GrabState.RECOVERY)
+	# Clear before calling enemy release; it calls back into this player.
+	_limb_grab_candidate = null
 	_limb_grab_owner = null
 	_limb_grab_limb = ""
-	_escape_limb_grab_requested = false
 	_limb_grab_time = 0.0
-	_limb_grab_cooldown = maxf(_limb_grab_cooldown, limb_grab_regrab_seconds)
-	_character_action_time = 0.0
-	if health > 0 and not rage.current_soul_condemned:
-		if escaped:
-			# Twist away from the caught arm using an existing turn/pivot clip.
-			var action := "Turn_Right" if limb == "LEFT ARM" else "Turn_Left"
-			_play_character_action(action, float(CHARACTER_MOTION.ACTIONS.get(action, 0.28)))
+	if held:
+		_limb_grab_cooldown = maxf(_limb_grab_cooldown, limb_grab_regrab_seconds)
+		_character_action_time = 0.0
+	if is_instance_valid(zombie):
+		if held:
+			zombie.release_limb_grab(self, reason)
 		else:
+			zombie.cancel_limb_grab_windup(self, reason)
+	if held and reason == "escaped":
+		grab_escaped.emit(zombie, limb)
+	elif held and reason == "timeout":
+		grab_failed.emit(zombie, limb)
+	else:
+		grab_interrupted.emit(reason, zombie, limb)
+	if grab_state != GrabState.RECOVERY:
+		_set_grab_state(GrabState.RECOVERY)
+	if held:
+		if health > 0 and not rage.current_soul_condemned:
+			if reason == "escaped":
+				var action := "Turn_Right" if limb == "LEFT ARM" else "Turn_Left"
+				_play_character_action(action, float(CHARACTER_MOTION.ACTIONS.get(action, 0.28)))
+			else:
+				_set_locomotion_animation("Idle")
+		if _animation_player != null and not _animation_player.is_playing() and health > 0:
 			_set_locomotion_animation("Idle")
-	limb_grab_ended.emit()
+		limb_grab_ended.emit()
+	_set_grab_state(GrabState.READY)
+	grab_fully_ended.emit(reason)
 
-func cancel_limb_grab() -> void:
-	if is_instance_valid(_limb_grab_candidate):
-		_limb_grab_candidate.cancel_limb_grab_windup(self)
-	_limb_grab_candidate = null
-	if _limb_grab_owner != null:
-		var enemy := _limb_grab_owner
-		if is_instance_valid(enemy):
-			enemy.release_limb_grab(self)
-		if _limb_grab_owner != null:
-			_clear_limb_grab()
+func cancel_limb_grab(reason: String = "cancelled") -> void:
+	_finish_limb_grab(reason)
 
 func _update_limb_grab(delta: float) -> void:
+	if get_tree().paused:
+		return
 	_limb_grab_cooldown = maxf(0.0, _limb_grab_cooldown - delta)
-	if _limb_grab_owner == null:
+	if grab_state == GrabState.WINDUP:
+		if not _grab_enemy_eligible(_limb_grab_candidate) or not _grab_player_eligible():
+			_finish_limb_grab("windup_ineligible")
 		return
-	if not is_instance_valid(_limb_grab_owner) or _limb_grab_owner.is_queued_for_deletion() or _limb_grab_owner.hp <= 0 or health <= 0:
-		cancel_limb_grab()
+	if grab_state != GrabState.GRABBED:
 		return
-	_limb_grab_time = maxf(0.0, _limb_grab_time - delta)
-	if _limb_grab_time <= 0.0:
-		cancel_limb_grab()
+	if not is_instance_valid(_limb_grab_owner) or _limb_grab_owner.is_queued_for_deletion():
+		_finish_limb_grab("enemy_invalid")
+	elif _limb_grab_owner.hp <= 0:
+		_finish_limb_grab("enemy_died")
+	elif health <= 0 or rage.current_soul_condemned:
+		_finish_limb_grab("player_dead")
+	elif _jump_state != JumpState.READY or _parabolic_jump_active or not _grab_enemy_eligible(_limb_grab_owner):
+		_finish_limb_grab("reservation_lost")
+	else:
+		_limb_grab_time = maxf(0.0, _limb_grab_time - delta)
+		if _limb_grab_time <= 0.0:
+			_finish_limb_grab("timeout")
 
 func _exit_tree() -> void:
-	cancel_limb_grab()
+	cancel_limb_grab("scene_exit")
 
 func interrupt_by_zombie(slow_seconds: float = 0.7, recovery_penalty: float = 0.45) -> void:
 	if _limb_grab_owner != null:
@@ -788,13 +861,15 @@ func take_boss_damage(amount: int) -> void:
 	health = maxi(0, health - amount)
 	health_changed.emit(health, MAX_HEALTH)
 	if was_alive:
-		cancel_limb_grab()
+		cancel_limb_grab("player_dead" if health == 0 else "player_damaged")
 		if health == 0:
 			_play_character_action("Defeat", float(CHARACTER_MOTION.ACTIONS.get("Defeat", 1.25)))
 		else:
 			_play_character_action("Hit", float(CHARACTER_MOTION.ACTIONS.get("Hit", 0.34)))
 
 func cycle_spell() -> bool:
+	if grab_state == GrabState.GRABBED:
+		return false
 	var available: Array[String] = rage.unlocked_spells
 	if available.is_empty():
 		return false
@@ -854,6 +929,8 @@ func _cast_spell(school: String) -> bool:
 	return true
 
 func cast_spell_slot(slot: int) -> bool:
+	if grab_state == GrabState.GRABBED:
+		return false
 	if slot < 0 or slot >= rage.unlocked_spells.size() or rage.current_soul_condemned:
 		return false
 	current_spell = rage.unlocked_spells[slot]
@@ -1098,11 +1175,11 @@ func _on_selection_resolved(_milestone: int, aura_id: String) -> void:
 	current_spell = aura_id
 
 func _on_condemned(_threshold: float, _maximum: float) -> void:
-	cancel_limb_grab()
+	cancel_limb_grab("player_condemned")
 	call_deferred("_reset_at_safe_base")
 
 func _reset_at_safe_base() -> void:
-	cancel_limb_grab()
+	cancel_limb_grab("respawn")
 	_jump_state = JumpState.READY
 	_parabolic_jump_active = false
 	_parabolic_jump_direction = Vector3.ZERO
