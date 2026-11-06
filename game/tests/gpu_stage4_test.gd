@@ -57,14 +57,28 @@ func _run() -> void:
 	check(world._spawn_blockers.size() == 67, "concealed spawn blockers include city cover, skyline and tower")
 	if not batches.is_empty():
 		var near := batches[0] as MultiMeshInstance3D
-		var at := (near.global_transform * near.multimesh.get_instance_transform(0)).origin
+		var at := (near.global_transform * near.custom_aabb).get_center()
 		world.player.global_position = at
-		world._apply_distance_visibility(near)
+		world._update_distance_visibility()
 		check(near.visible, "batch stays visible when a player is next to one of its boxes")
 		world.player.global_position = Vector3(500.0, 0.0, 500.0)
-		world._apply_distance_visibility(near)
+		world._update_distance_visibility()
 		check(not near.visible, "offscreen cell is distance culled")
 	world.player.global_position = world.PLAYER_BASE_POSITION
+	var pool: FoundationCombatFxPool = world.combat_fx_pool
+	var burst := pool.acquire_effect("spell_burst")
+	var mesh := burst.find_children("*", "MeshInstance3D", true, false)[0] as MeshInstance3D
+	burst.begin_spell_burst(world.player.global_position + Vector3.RIGHT * 40.0, Color.WHITE)
+	world._update_distance_visibility()
+	check(not mesh.is_visible_in_tree(), "distant active spell is culled")
+	pool.release_effect(burst)
+	world._update_distance_visibility()
+	check(not mesh.is_visible_in_tree() and not burst.is_effect_visible(), "distance refresh keeps the pooled spell hidden")
+	var reused := pool.acquire_effect("spell_burst")
+	reused.begin_spell_burst(world.player.global_position, Color.WHITE)
+	world._update_distance_visibility()
+	check(reused == burst and mesh.is_visible_in_tree(), "reused nearby spell is visible")
+	pool.release_effect(reused)
 	check(not world._pencil_screen_pass.visible and not world.flashlight_visibility_manager.spotlight.visible,
 		"roof has neither Pencil Sketch nor flashlight")
 	# Match the profile to the player's floor. Otherwise the normal rooftop
@@ -75,6 +89,24 @@ func _run() -> void:
 	await process_frame
 	check(world._pencil_screen_pass.visible and world.flashlight_visibility_manager.spotlight.visible,
 		"ground restores both Pencil Sketch and the full 3D flashlight")
+	var city := get_first_node_in_group(&"static_map_batch") as MultiMeshInstance3D
+	check(city != null, "city contains a distance-culled map batch")
+	if city != null:
+		var bounds := city.global_transform * city.custom_aabb
+		world.player.global_position = Vector3(bounds.end.x + 32.9, bounds.get_center().y, bounds.get_center().z)
+		world._ground_map_ready = true
+		world._ground_map_preparing = true
+		city.visible = false
+		world._update_distance_visibility()
+		check(not city.visible, "city visibility remains with the elevator during preparation")
+		world._ground_map_preparing = false
+		world._update_distance_visibility()
+		check(city.visible, "a city cell is visible within 33 m of its nearest edge")
+		world.player.global_position.x += 0.2
+		world._update_distance_visibility()
+		check(not city.visible, "a city cell is hidden beyond 33 m of its nearest edge")
+		world.player.global_position = Vector3(0.0, 0.05, -5.2)
+		world._ground_map_ready = false
 	var sheets := world.flashlight_visibility_manager.spotlight.get_node_or_null("PlayerFlashlightBeamSheets") as MultiMeshInstance3D
 	check(sheets != null and sheets.multimesh.instance_count == 3, "all crossed 3D beam sheets remain")
 	check(BEAM_SECTIONS.code.contains("if (radial >= 1.0)") and BEAM_SECTIONS.code.contains("ALPHA = section_opacity"),
