@@ -1,0 +1,124 @@
+extends SceneTree
+## Software OpenGL pixel probe for the moving flashlight-tip overlay.
+
+const Foundation := preload("res://scripts/foundation.gd")
+const VisibilityManager := preload("res://scripts/flashlight_visibility.gd")
+
+var failures: Array[String] = []
+var checks := 0
+
+func _initialize() -> void:
+	call_deferred("_run")
+
+func _run() -> void:
+	var game := Foundation.new()
+	root.add_child(game)
+	for frame in range(12):
+		await process_frame
+
+	game.set_process(false)
+	game.player.set_physics_process(false)
+	game.hud._root.visible = false
+	game.player.global_position = Vector3(0.0, 0.05, -5.2)
+	game._rooftop_camera_blend = 0.0
+	game.camera_rig.global_position = game.player.global_position + Vector3.UP * Foundation.CAMERA_PIVOT_HEIGHT
+	game.camera_rig.rotation.y = 0.0
+	game.camera_arm.spring_length = Foundation.CAMERA_FOLLOW_DISTANCE
+	game.camera_arm.rotation.x = game._effective_camera_pitch()
+	game._update_camera_framing()
+	game._set_rooftop_render_profile(false)
+
+	var manager = game.flashlight_visibility_manager
+	manager.set_process(false)
+	manager.set_aim_yaw(0.0)
+	manager._upload_shader_parameters()
+	manager._sync_tip_silhouettes()
+	var effect = manager._tip_silhouettes
+	_check(effect != null and effect.overlay != null and effect.overlay.visible,
+		"ground profile displays one projected silhouette cluster")
+	if effect == null or effect.overlay == null:
+		_finish()
+		return
+	_check(manager._composite.visible, "the real ground-floor flashlight darkness pass is active")
+	var viewport_rect := game.camera.get_viewport().get_visible_rect()
+	_check(viewport_rect.has_point(effect.projected_center), "beam-tip cluster projects inside the viewport")
+	var sample_point: Vector2 = effect.projected_center
+	var opacity := float(effect.material.get_shader_parameter("silhouette_opacity"))
+	_check(is_equal_approx(opacity, 0.40), "rendered shader is configured for 40 percent silhouette opacity")
+
+	effect.set_effect_visible(false)
+	var hidden_frame := await _capture_frame()
+	effect.call("update_beam", manager.beam_origin, manager.beam_direction,
+		VisibilityManager.MAX_RADIUS, VisibilityManager.BEAM_TANGENT, true)
+	for frame in range(4):
+		await process_frame
+	var visible_frame := await _capture_frame()
+	var hidden_pixel := _sample(hidden_frame, sample_point)
+	var visible_pixel := _sample(visible_frame, sample_point)
+	var overlay_delta := Vector3(
+		visible_pixel.r - hidden_pixel.r,
+		visible_pixel.g - hidden_pixel.g,
+		visible_pixel.b - hidden_pixel.b
+	).length()
+	print("FLASHLIGHT_TIP_PIXEL " + JSON.stringify({
+		"renderer": "GL Compatibility software desktop",
+		"opacity_uniform": opacity,
+		"hidden_pixel": hidden_pixel,
+		"visible_pixel": visible_pixel,
+		"overlay_delta": overlay_delta,
+		"screen_rect": Rect2(effect.overlay.position, effect.overlay.size)
+	}))
+	_check(maxf(hidden_pixel.r, maxf(hidden_pixel.g, hidden_pixel.b)) < 0.25,
+		"beam-tip sample remains in the dark outer edge before the overlay")
+	_check(overlay_delta > 0.08 and overlay_delta < 0.65,
+		"translucent silhouettes are visible over the darkness mask without becoming opaque")
+
+	var moving_frame := await _capture_after_motion(0.8)
+	var motion_delta := _region_delta(visible_frame, moving_frame, sample_point, effect.projected_size)
+	_check(motion_delta > 0.006, "zombie silhouettes and fog visibly move over time")
+	print("FLASHLIGHT_TIP_MOTION " + JSON.stringify({"max_pixel_delta": motion_delta, "wait_seconds": 0.8}))
+
+	game.queue_free()
+	await process_frame
+	_finish()
+
+func _capture_frame() -> Image:
+	await RenderingServer.frame_post_draw
+	return root.get_texture().get_image()
+
+func _capture_after_motion(seconds: float) -> Image:
+	await create_timer(seconds).timeout
+	return await _capture_frame()
+
+func _region_delta(first: Image, second: Image, center: Vector2, footprint: Vector2) -> float:
+	var radius := Vector2i(
+		maxi(8, int(footprint.x * 0.45)),
+		maxi(8, int(footprint.y * 0.45))
+	)
+	var maximum := 0.0
+	for y in range(-radius.y, radius.y + 1, 3):
+		for x in range(-radius.x, radius.x + 1, 3):
+			var point := Vector2(center.x + x, center.y + y)
+			var a := _sample(first, point)
+			var b := _sample(second, point)
+			maximum = maxf(maximum, Vector3(a.r - b.r, a.g - b.g, a.b - b.b).length())
+	return maximum
+
+func _sample(image: Image, point: Vector2) -> Color:
+	var x := clampi(int(point.x), 0, image.get_width() - 1)
+	var y := clampi(int(point.y), 0, image.get_height() - 1)
+	return image.get_pixel(x, y)
+
+func _check(ok: bool, message: String) -> void:
+	checks += 1
+	if not ok:
+		failures.append(message)
+
+func _finish() -> void:
+	if failures.is_empty():
+		print("PASS: flashlight tip silhouette Compatibility render (%d checks)" % checks)
+	else:
+		for failure in failures:
+			push_error(failure)
+		print("FAIL: flashlight tip silhouette Compatibility render (%d failures)" % failures.size())
+	quit(0 if failures.is_empty() else 1)

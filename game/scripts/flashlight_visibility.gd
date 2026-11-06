@@ -16,6 +16,7 @@ const VISIBILITY_SHADER := preload("res://shaders/flashlight_visibility.gdshader
 const BEAM_VOLUME_SHADER := preload("res://shaders/flashlight_beam_volume.gdshader")
 const BEAM_SECTIONS_SHADER := preload("res://shaders/flashlight_beam_sections.gdshader")
 const DISTANT_TEETH_OVERLAY := preload("res://scripts/distant_zombie_teeth.gd")
+const TIP_SILHOUETTES := preload("res://scripts/flashlight_tip_silhouettes.gd")
 const MAX_RADIUS := 10.0
 const BRIGHT_RADIUS := 7.333333
 const CLOSE_COMBAT_RADIUS := FoundationEnemy.DETAILED_RADIUS
@@ -51,6 +52,7 @@ var _classification_timer := 0.0
 var _teeth_timer := 0.0
 var _teeth_canvas: CanvasLayer
 var _teeth_overlay: Control
+var _tip_silhouettes: Variant
 var _counts := {}
 var _last_upload_state: Array = []
 var _uploaded_uniforms: Dictionary = {}
@@ -65,7 +67,13 @@ func configure(player_node: Node3D, camera_node: Camera3D, is_enabled: bool) -> 
 	_uploaded_uniforms.clear()
 	_build_composite()
 	_build_beam_light()
+	if enabled and is_instance_valid(camera):
+		_tip_silhouettes = TIP_SILHOUETTES.new()
+		_tip_silhouettes.name = "FlashlightTipSilhouettes"
+		add_child(_tip_silhouettes)
+		_tip_silhouettes.call("configure", camera)
 	_upload_shader_parameters()
+	_sync_tip_silhouettes()
 	_classify_enemies()
 
 func set_aim_yaw(yaw: float) -> void:
@@ -95,6 +103,7 @@ func set_rooftop_sky_visible(is_visible: bool) -> void:
 	_sync_rooftop_render_visibility()
 	if not is_visible:
 		_upload_shader_parameters()
+		_sync_tip_silhouettes()
 
 
 func _sync_rooftop_render_visibility() -> void:
@@ -105,6 +114,8 @@ func _sync_rooftop_render_visibility() -> void:
 		spotlight.visible = should_draw
 	if is_instance_valid(_teeth_canvas):
 		_teeth_canvas.visible = should_draw
+	if is_instance_valid(_tip_silhouettes):
+		_tip_silhouettes.call("set_effect_visible", should_draw and is_instance_valid(spotlight) and spotlight.visible)
 
 func track_enemy(enemy: Node3D) -> void:
 	if not is_instance_valid(enemy):
@@ -183,6 +194,7 @@ func _process(delta: float) -> void:
 	# Uniforms update each frame for immediate aiming response. Actor classes are
 	# refreshed at 8.3 Hz, shared across both render queues.
 	_upload_shader_parameters()
+	_sync_tip_silhouettes()
 	_classification_timer += delta
 	if _classification_timer >= CLASSIFICATION_INTERVAL:
 		_classification_timer = 0.0
@@ -376,6 +388,13 @@ func _set_uniform_if_changed(parameter: StringName, value: Variant) -> void:
 	_material.set_shader_parameter(parameter, value)
 	_uploaded_uniforms[parameter] = value
 	_uniform_writes += 1
+
+func _sync_tip_silhouettes() -> void:
+	if not is_instance_valid(_tip_silhouettes):
+		return
+	var should_draw := enabled and not _rooftop_mode \
+		and is_instance_valid(spotlight) and spotlight.visible
+	_tip_silhouettes.call("update_beam", beam_origin, beam_direction, MAX_RADIUS, BEAM_TANGENT, should_draw)
 
 func get_parameter_update_stats() -> Dictionary:
 	return {"updates": _parameter_updates, "uniform_writes": _uniform_writes}
