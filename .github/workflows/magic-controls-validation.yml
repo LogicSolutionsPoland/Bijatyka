@@ -9,6 +9,7 @@ on:
       - game/scripts/foundation.gd
       - game/scripts/mobile_hud.gd
       - game/scripts/player_controller.gd
+      - game/tests/jump_state_regression_test.gd
       - game/tests/player_animation_test.gd
       - game/tests/stage6_integrated_headless_test.gd
       - game/tests/test_runner.gd
@@ -47,6 +48,12 @@ jobs:
           timeout 180s godot --headless --path game --script res://tests/player_animation_test.gd 2>&1 | tee build/magic-controls/animation.log
           grep -q 'PASS: player martial animation' build/magic-controls/animation.log
           if grep -E 'SCRIPT ERROR:|ERROR:' build/magic-controls/animation.log; then exit 1; fi
+      - name: Verify exclusive jump state and wall collision
+        run: |
+          set -euo pipefail
+          timeout 180s godot --headless --path game --script res://tests/jump_state_regression_test.gd 2>&1 | tee build/magic-controls/jump.log
+          grep -q 'PASS: jump-state regression' build/magic-controls/jump.log
+          if grep -E 'SCRIPT ERROR:|ERROR:' build/magic-controls/jump.log; then exit 1; fi
       - name: Verify the integrated Stage 6 headless loop
         run: |
           set -euo pipefail

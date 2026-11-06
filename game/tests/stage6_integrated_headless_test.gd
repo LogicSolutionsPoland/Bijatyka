@@ -30,6 +30,16 @@ func _run() -> void:
 	var player: FoundationPlayer = world.player
 	var spawns = world.spawn_director
 	var director: BijatykaAIDirector = world.ai_director
+	var jump_signals := {"started": [], "landed": [], "impact_count": 0}
+	player.parabolic_jump_started.connect(func(takeoff: Vector3, _direction: Vector3) -> void:
+		jump_signals["started"].append(takeoff)
+	)
+	player.parabolic_jump_landed.connect(func(landing: Vector3, _direction: Vector3) -> void:
+		jump_signals["landed"].append(landing)
+	)
+	player.jump_impact.connect(func(_target: Node) -> void:
+		jump_signals["impact_count"] = int(jump_signals["impact_count"]) + 1
+	)
 	_check(world.game_music_player.playing, "game music plays during the encounter")
 	_check(InputMap.has_action("jump") and InputMap.has_action("jump_forward")
 		and InputMap.has_action("pad_jump") and InputMap.has_action("pad_jump_forward")
@@ -64,6 +74,10 @@ func _run() -> void:
 			break
 	_check(player.is_on_floor() and not spawns._initial_horde_activated,
 		"ordinary Jump landing cannot activate the prepared group")
+	_check(jump_signals["started"].is_empty() and jump_signals["landed"].is_empty()
+		and int(jump_signals["impact_count"]) == 0,
+		"ordinary Jump emits no forward-jump signal or impact in the empty arena")
+	var forward_takeoff := player.global_position
 	_send_pad(JOY_BUTTON_X, true)
 	_check(player._parabolic_jump_active, "X/Square input starts the forward parabolic Jump")
 	_send_pad(JOY_BUTTON_X, false)
@@ -72,6 +86,13 @@ func _run() -> void:
 		if frame > 3 and not player._parabolic_jump_active:
 			break
 	_check(not player._parabolic_jump_active and player.is_on_floor(), "forward jump lands")
+	var forward_displacement := player.global_position - forward_takeoff
+	forward_displacement.y = 0.0
+	_check(absf(forward_displacement.length() - player.forward_jump_distance_m) <= 0.15,
+		"unobstructed forward jump preserves its intended 5 m travel")
+	_check(jump_signals["started"].size() == 1 and jump_signals["landed"].size() == 1
+		and int(jump_signals["impact_count"]) == 0,
+		"forward jump emits one start and landing and no ordinary impact")
 	_check(spawns._initial_horde_activated and spawns._local_members.size() == 11,
 		"confirmed forward landing activates eleven prepared local actors once")
 	_check(spawns.ordinary_population_count() <= 20, "stage-wide ordinary population stays within twenty")

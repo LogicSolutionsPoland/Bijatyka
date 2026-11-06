@@ -27,6 +27,7 @@ const EXO_MIXAMO_OVERLAY_SCRIPT := preload("res://scripts/player_exo_mixamo_over
 const GRAVITY := 24.0
 const MAX_HEALTH := 100
 const MAX_MAGIC := 100.0
+enum JumpState { READY, ORDINARY, FORWARD }
 const TARGET_MELEE_HITS_PER_SECOND := 5.0
 const TARGET_MELEE_CYCLE_SECONDS := 1.0 / TARGET_MELEE_HITS_PER_SECOND
 const MELEE_TIMER_EPSILON := 0.0001
@@ -68,6 +69,7 @@ var _queued_attack_side := ""
 var _attack_recovery_locked := false
 var movement_slow_time := 0.0
 var movement_slow_factor := 1.0
+var _jump_state: JumpState = JumpState.READY
 var _parabolic_jump_active := false
 var _parabolic_jump_direction := Vector3.ZERO
 var jump_impact_armed := false
@@ -257,13 +259,17 @@ func _physics_process(delta: float) -> void:
 	if _was_airborne and is_on_floor():
 		_was_airborne = false
 		_play_character_action("Landing", float(CHARACTER_MOTION.ACTIONS.get("Landing", 0.38)))
-		if _parabolic_jump_active:
+		if _jump_state == JumpState.FORWARD:
+			var landed_direction := _parabolic_jump_direction
 			_parabolic_jump_active = false
-			parabolic_jump_landed.emit(global_position, _parabolic_jump_direction)
+			jump_impact_armed = false
+			parabolic_jump_landed.emit(global_position, landed_direction)
 			_parabolic_jump_direction = Vector3.ZERO
-		if jump_impact_armed:
+		elif _jump_state == JumpState.ORDINARY and jump_impact_armed:
 			jump_impact_armed = false
 			_resolve_jump_impact()
+		_jump_state = JumpState.READY
+		jump_impact_armed = false
 	_update_locomotion_animation()
 	_update_attack_pose()
 	rage.advance(delta, true)
@@ -284,6 +290,8 @@ func _read_desktop_input(delta: float) -> void:
 		_desktop_attack_repeat_timers[&"attack_punch"] = repeat_time
 	else:
 		_desktop_attack_repeat_timers.erase(&"attack_punch")
+	# The first accepted request owns this jump cycle. When both desktop actions
+	# arrive together, this stable sampling order gives ordinary Jump priority.
 	if Input.is_action_just_pressed("jump"):
 		try_jump()
 	if Input.is_action_just_pressed("jump_forward"):
@@ -609,10 +617,11 @@ func _resolve_attack() -> void:
 		_spawn_attack_impact(target.global_position + Vector3(0.0, 1.0, 0.0), attack_kind)
 
 func try_jump() -> bool:
-	if not is_on_floor() or rage.current_soul_condemned or _limb_grab_owner != null:
+	if _jump_state != JumpState.READY or not is_on_floor() or rage.current_soul_condemned or _limb_grab_owner != null:
 		return false
 	if attack_phase in ["approach", "grapple"]:
 		_finish_attack()
+	_jump_state = JumpState.ORDINARY
 	velocity.y = 8.2
 	jump_impact_armed = true
 	_was_airborne = true
@@ -632,7 +641,7 @@ func _resolve_jump_impact() -> void:
 		jump_impact.emit(target)
 
 func try_parabolic_jump() -> bool:
-	if not is_on_floor() or _parabolic_jump_active or rage.current_soul_condemned or _limb_grab_owner != null:
+	if _jump_state != JumpState.READY or not is_on_floor() or _parabolic_jump_active or rage.current_soul_condemned or _limb_grab_owner != null:
 		return false
 	if attack_phase in ["approach", "grapple"]:
 		_finish_attack()
@@ -650,6 +659,7 @@ func try_parabolic_jump() -> bool:
 	velocity.z = direction.z * horizontal_speed
 	velocity.y = GRAVITY * duration * 0.5
 	_parabolic_jump_direction = direction
+	_jump_state = JumpState.FORWARD
 	_parabolic_jump_active = true
 	parabolic_jump_started.emit(global_position, direction)
 	jump_impact_armed = false
@@ -1093,6 +1103,11 @@ func _on_condemned(_threshold: float, _maximum: float) -> void:
 
 func _reset_at_safe_base() -> void:
 	cancel_limb_grab()
+	_jump_state = JumpState.READY
+	_parabolic_jump_active = false
+	_parabolic_jump_direction = Vector3.ZERO
+	jump_impact_armed = false
+	_was_airborne = false
 	_limb_grab_cooldown = limb_grab_regrab_seconds
 	if _exo_overlay != null:
 		_exo_overlay.stop_clip()
