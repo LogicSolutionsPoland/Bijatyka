@@ -2,9 +2,17 @@ extends SceneTree
 ## Deterministic host functional check. This is not Android performance acceptance.
 
 const FOUNDATION_SCENE := preload("res://scenes/foundation.tscn")
+const HUD := preload("res://scripts/mobile_hud.gd")
 
 var _checks := 0
 var _failures: Array[String] = []
+
+func _send_pad(button: int, pressed: bool) -> void:
+	var event := InputEventJoypadButton.new()
+	event.device = 0
+	event.button_index = button
+	event.pressed = pressed
+	root.push_input(event, true)
 
 func _initialize() -> void:
 	call_deferred("_run")
@@ -27,7 +35,11 @@ func _run() -> void:
 		and InputMap.has_action("pad_jump") and InputMap.has_action("pad_jump_forward")
 		and not InputMap.has_action("dash") and not InputMap.has_action("pad_dash"),
 		"ordinary and forward jumps have separate controls")
-	_check(InputMap.has_action("pad_escape_limb_grab"), "gamepad escape action is configured")
+	_check(InputMap.has_action("pad_escape_limb_grab")
+		and HUD.GAMEPAD_ACTIONS.get(&"pad_jump") == "jump"
+		and HUD.GAMEPAD_ACTIONS.get(&"pad_jump_forward") == "jump_forward"
+		and HUD.GAMEPAD_ACTIONS.get(&"pad_escape_limb_grab") == "escape_limb_grab",
+		"A/Cross, X/Square and R3 remain routed to jump, forward jump and grab escape")
 	spawns.activate_ground_population(20)
 	spawns.begin_local_pool_preparation()
 	director.activate()
@@ -42,14 +54,19 @@ func _run() -> void:
 		"four opening zombies and fourteen prepared actors fit the stage cap")
 	world._apply_camera_look(0.2, 0.0)
 	_check(not spawns._initial_horde_activated, "camera movement cannot activate the prepared group")
-	_check(player.try_jump(), "ordinary Jump starts independently")
+	_send_pad(JOY_BUTTON_A, true)
+	_check(player.velocity.y > 0.0 and not player._parabolic_jump_active,
+		"A/Cross input starts ordinary Jump independently")
+	_send_pad(JOY_BUTTON_A, false)
 	for frame in range(120):
 		await physics_frame
 		if frame > 3 and player.is_on_floor() and player.velocity.y <= 0.0:
 			break
 	_check(player.is_on_floor() and not spawns._initial_horde_activated,
 		"ordinary Jump landing cannot activate the prepared group")
-	_check(player.try_parabolic_jump(), "former Dash control starts the forward jump")
+	_send_pad(JOY_BUTTON_X, true)
+	_check(player._parabolic_jump_active, "X/Square input starts the forward parabolic Jump")
+	_send_pad(JOY_BUTTON_X, false)
 	for frame in range(130):
 		await physics_frame
 		if frame > 3 and not player._parabolic_jump_active:
@@ -83,8 +100,9 @@ func _run() -> void:
 		_check(player.try_reserve_limb_grab(grabber, "LEFT ARM")
 			and player.begin_limb_grab(grabber, "LEFT ARM"), "zombie can hold one arm")
 		grabber.state = "limb_hold"
-		_check(player.try_escape_limb_grab() and player._limb_grab_owner == null,
-			"escape clears the hold and returns control")
+		_send_pad(JOY_BUTTON_RIGHT_STICK, true)
+		_check(player._limb_grab_owner == null, "R3 input escapes the grab and returns control")
+		_send_pad(JOY_BUTTON_RIGHT_STICK, false)
 		player._limb_grab_cooldown = 0.0
 		_check(player.try_reserve_limb_grab(grabber, "RIGHT ARM")
 			and player.begin_limb_grab(grabber, "RIGHT ARM"), "new hold can start after cooldown")

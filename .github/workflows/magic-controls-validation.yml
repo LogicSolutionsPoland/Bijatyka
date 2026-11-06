@@ -1,0 +1,62 @@
+name: Bijatyka magic controls validation
+
+on:
+  push:
+    branches:
+      - feat/jump-horde-stage1-20261105
+    paths:
+      - game/project.godot
+      - game/scripts/foundation.gd
+      - game/scripts/mobile_hud.gd
+      - game/scripts/player_controller.gd
+      - game/tests/player_animation_test.gd
+      - game/tests/stage6_integrated_headless_test.gd
+      - game/tests/test_runner.gd
+      - .github/workflows/magic-controls-validation.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Import, input, animation, and Stage 6 checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+      - name: Import the Godot project and assets
+        run: |
+          set -euo pipefail
+          mkdir -p build/magic-controls
+          godot --headless --editor --path game --import --quit 2>&1 | tee build/magic-controls/import.log
+          if grep -E 'SCRIPT ERROR:|ERROR: Failed to load' build/magic-controls/import.log; then exit 1; fi
+      - name: Verify input routing, spells, and locked spell behavior
+        run: |
+          set -euo pipefail
+          timeout 180s godot --headless --path game --script res://tests/test_runner.gd 2>&1 | tee build/magic-controls/input.log
+          grep -q 'PASS:' build/magic-controls/input.log
+          if grep -E 'SCRIPT ERROR:|ERROR:' build/magic-controls/input.log; then exit 1; fi
+      - name: Verify player animation library and input reachability
+        run: |
+          set -euo pipefail
+          timeout 180s godot --headless --path game --script res://tests/player_animation_test.gd 2>&1 | tee build/magic-controls/animation.log
+          grep -q 'PASS: player martial animation' build/magic-controls/animation.log
+          if grep -E 'SCRIPT ERROR:|ERROR:' build/magic-controls/animation.log; then exit 1; fi
+      - name: Verify the integrated Stage 6 headless loop
+        run: |
+          set -euo pipefail
+          timeout 180s godot --headless --path game --script res://tests/stage6_integrated_headless_test.gd 2>&1 | tee build/magic-controls/stage6.log
+          grep -q 'PASS: Stage 6 integrated host loop' build/magic-controls/stage6.log
+          if grep -E 'SCRIPT ERROR:|ERROR:' build/magic-controls/stage6.log; then exit 1; fi
+      - name: Retain validation logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bijatyka-magic-controls-validation
+          path: build/magic-controls/*.log
+          if-no-files-found: error

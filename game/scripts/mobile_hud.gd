@@ -8,14 +8,16 @@ const PLAYER_CONTROLLER := preload("res://scripts/player_controller.gd")
 const AURA_LABELS := {
 	"light": "LIGHT", "judgment": "JUDGMENT", "fire": "FIRE", "shadow": "SHADOW"
 }
-# L1 / LB and R1 / RB punch; L2 / LT and R2 / RT kick. B casts the
+# L1 / LB and R1 / RB punch. L2 / LT quick-casts the first unlocked spell;
+# R2 / RT quick-casts the second, falling back to the first. B casts the
 # selected spell, while Y triggers the unlocked Fire-school Blast.
+const CONTROL_HINT_TEXT := "A / CROSS: JUMP  •  X / SQUARE: FORWARD JUMP\nR3: GRAB ESCAPE  •  L1 / LB + R1 / RB: PUNCH\nL2 / LT: FIRST SPELL  •  R2 / RT / K: SECOND SPELL*\nB / CIRCLE / L: SELECTED SPELL  •  Y / TRIANGLE: BLAST\n*R2 / RT / K uses the first spell until a second is unlocked."
 const GAMEPAD_ACTIONS := {
 	&"pad_jump": "jump", &"pad_jump_forward": "jump_forward", &"pad_cast_spell": "cast_spell",
 	&"pad_escape_limb_grab": "escape_limb_grab",
 	&"pad_punch_left": "punch_left", &"pad_punch_right": "punch_right",
 	&"pad_blast": "blast",
-	&"pad_kick_left": "kick_left", &"pad_kick_right": "kick_right",
+	&"pad_magic_left": "magic_left", &"pad_magic_right": "magic_right",
 	&"pad_spell_0": "spell_0", &"pad_spell_1": "spell_1",
 	&"pad_spell_2": "spell_2", &"pad_spell_3": "spell_3"
 }
@@ -27,6 +29,7 @@ const TRIGGER_RELEASE_THRESHOLD := 0.35
 var _root: Control
 var _status_panel: PanelContainer
 var _status: Label
+var _controls_hint: Label
 var _health_bar: ProgressBar
 var _rage_bar: ProgressBar
 var _magic_bar: ProgressBar
@@ -82,14 +85,14 @@ func _process(delta: float) -> void:
 		held.timer = repeat_time
 
 func _is_melee_action(action: String) -> bool:
-	return action.begins_with("punch_") or action.begins_with("kick_")
+	return action.begins_with("punch_")
 
 func _build_status() -> void:
 	var panel := PanelContainer.new()
 	_status_panel = panel
 	panel.name = "StatusPanel"
 	panel.position = Vector2(18.0, 16.0)
-	panel.custom_minimum_size = Vector2(332.0, 138.0)
+	panel.custom_minimum_size = Vector2(420.0, 205.0)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.018, 0.026, 0.038, 0.88)
 	style.border_color = Color(0.72, 0.23, 0.15, 0.95)
@@ -120,6 +123,13 @@ func _build_status() -> void:
 	column.add_child(hp_row["row"])
 	column.add_child(rage_row["row"])
 	column.add_child(magic_row["row"])
+	_controls_hint = Label.new()
+	_controls_hint.name = "CombatControlHint"
+	_controls_hint.text = CONTROL_HINT_TEXT
+	_controls_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_controls_hint.add_theme_font_size_override("font_size", 10)
+	_controls_hint.add_theme_color_override("font_color", Color(0.72, 0.77, 0.82))
+	column.add_child(_controls_hint)
 	_health_bar = hp_row["bar"] as ProgressBar
 	_rage_bar = rage_row["bar"] as ProgressBar
 	_magic_bar = magic_row["bar"] as ProgressBar
@@ -236,10 +246,10 @@ func _poll_trigger_axes() -> void:
 		_update_right_trigger(device, Input.get_joy_axis(device, JOY_AXIS_TRIGGER_RIGHT))
 
 func _update_left_trigger(device: int, axis_value: float) -> void:
-	_update_trigger_action(&"pad_kick_left", _left_trigger_rest_values, device, axis_value)
+	_update_trigger_action(&"pad_magic_left", _left_trigger_rest_values, device, axis_value)
 
 func _update_right_trigger(device: int, axis_value: float) -> void:
-	_update_trigger_action(&"pad_kick_right", _right_trigger_rest_values, device, axis_value)
+	_update_trigger_action(&"pad_magic_right", _right_trigger_rest_values, device, axis_value)
 
 func _update_trigger_action(input_action: StringName, rest_values: Dictionary, device: int, axis_value: float) -> void:
 	if not rest_values.has(device):
@@ -273,7 +283,7 @@ func _handle_gamepad_button(event: InputEventJoypadButton) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	for input_action: StringName in GAMEPAD_ACTIONS:
-		if input_action in [&"pad_kick_left", &"pad_kick_right"] or not event.is_action(input_action):
+		if input_action in [&"pad_magic_left", &"pad_magic_right"] or not event.is_action(input_action):
 			continue
 		_set_gamepad_action(input_action, event.device, event.pressed)
 		get_viewport().set_input_as_handled()

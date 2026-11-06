@@ -273,23 +273,23 @@ func _physics_process(delta: float) -> void:
 		magic_changed.emit(magic_energy, MAX_MAGIC, current_spell)
 
 func _read_desktop_input(delta: float) -> void:
-	for input_action in [&"attack_punch", &"attack_kick"]:
-		var kind := "punch" if input_action == &"attack_punch" else "kick"
-		if Input.is_action_just_pressed(input_action):
-			request_attack(kind)
-			_desktop_attack_repeat_timers[input_action] = TARGET_MELEE_CYCLE_SECONDS
-		elif Input.is_action_pressed(input_action):
-			var repeat_time := float(_desktop_attack_repeat_timers.get(input_action, TARGET_MELEE_CYCLE_SECONDS)) - minf(delta, TARGET_MELEE_CYCLE_SECONDS)
-			if repeat_time <= MELEE_TIMER_EPSILON:
-				request_attack(kind)
-				repeat_time = TARGET_MELEE_CYCLE_SECONDS
-			_desktop_attack_repeat_timers[input_action] = repeat_time
-		else:
-			_desktop_attack_repeat_timers.erase(input_action)
+	if Input.is_action_just_pressed("attack_punch"):
+		request_attack("punch")
+		_desktop_attack_repeat_timers[&"attack_punch"] = TARGET_MELEE_CYCLE_SECONDS
+	elif Input.is_action_pressed("attack_punch"):
+		var repeat_time := float(_desktop_attack_repeat_timers.get(&"attack_punch", TARGET_MELEE_CYCLE_SECONDS)) - minf(delta, TARGET_MELEE_CYCLE_SECONDS)
+		if repeat_time <= MELEE_TIMER_EPSILON:
+			request_attack("punch")
+			repeat_time = TARGET_MELEE_CYCLE_SECONDS
+		_desktop_attack_repeat_timers[&"attack_punch"] = repeat_time
+	else:
+		_desktop_attack_repeat_timers.erase(&"attack_punch")
 	if Input.is_action_just_pressed("jump"):
 		try_jump()
 	if Input.is_action_just_pressed("jump_forward"):
 		try_parabolic_jump()
+	if Input.is_action_just_pressed("quick_cast_spell"):
+		cast_spell_slot(1 if rage.unlocked_spells.size() > 1 else 0)
 	if Input.is_action_just_pressed("cast_spell"):
 		cast_spell()
 	if Input.is_action_just_pressed("cycle_spell"):

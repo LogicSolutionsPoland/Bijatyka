@@ -75,12 +75,17 @@ func _test_gamepad_input_map() -> void:
 	for action: String in Hud.GAMEPAD_ACTIONS.values():
 		routed_actions.append(action)
 	_check(Hud.GAMEPAD_ACTIONS.size() == expected_buttons.size() + 2,
-		"gamepad routes eleven buttons and two analog triggers")
-	var left_trigger_events := InputMap.action_get_events(&"pad_kick_left")
+		"gamepad routes eleven buttons and two analog magic triggers")
+	var left_trigger_events := InputMap.action_get_events(&"pad_magic_left")
 	_check(left_trigger_events.size() == 1 and left_trigger_events[0] is InputEventJoypadMotion and (left_trigger_events[0] as InputEventJoypadMotion).axis == JOY_AXIS_TRIGGER_LEFT and is_equal_approx((left_trigger_events[0] as InputEventJoypadMotion).axis_value, 1.0), "L2 / LT maps to the left trigger axis")
-	var right_trigger_events := InputMap.action_get_events(&"pad_kick_right")
+	var right_trigger_events := InputMap.action_get_events(&"pad_magic_right")
 	_check(right_trigger_events.size() == 1 and right_trigger_events[0] is InputEventJoypadMotion and (right_trigger_events[0] as InputEventJoypadMotion).axis == JOY_AXIS_TRIGGER_RIGHT and is_equal_approx((right_trigger_events[0] as InputEventJoypadMotion).axis_value, 1.0), "R2 / RT maps to the right trigger axis")
-	_check(Hud.GAMEPAD_ACTIONS.get(&"pad_kick_left", "") == "kick_left" and Hud.GAMEPAD_ACTIONS.get(&"pad_kick_right", "") == "kick_right", "L2 and R2 route to their matching touch kicks")
+	_check(Hud.GAMEPAD_ACTIONS.get(&"pad_magic_left", "") == "magic_left" and Hud.GAMEPAD_ACTIONS.get(&"pad_magic_right", "") == "magic_right", "L2 and R2 route to their quick-cast spell slots")
+	_check(not InputMap.has_action("attack_kick") and not InputMap.has_action("pad_kick_left") and not InputMap.has_action("pad_kick_right"), "no keyboard or gamepad kick input action is registered")
+	var quick_cast_events := InputMap.action_get_events(&"quick_cast_spell")
+	_check(quick_cast_events.size() == 1 and quick_cast_events[0] is InputEventKey and (quick_cast_events[0] as InputEventKey).physical_keycode == KEY_K, "the former keyboard kick key now quick-casts the second spell")
+	_check(not routed_actions.has("kick_left") and not routed_actions.has("kick_right"), "no user-facing HUD route can request a kick")
+	_check(Hud.CONTROL_HINT_TEXT.contains("L2 / LT: FIRST SPELL") and Hud.CONTROL_HINT_TEXT.contains("R2 / RT / K: SECOND SPELL") and Hud.CONTROL_HINT_TEXT.contains("until a second is unlocked"), "visible controls explain trigger and keyboard spell slots with the fallback")
 	for action: StringName in expected_buttons:
 		var events := InputMap.action_get_events(action)
 		var actual: Array[int] = []
@@ -179,7 +184,7 @@ func _test_manual_attack_and_hit_window() -> void:
 	_check(player.attack_phase == "grapple" and target._player_grapple_owner == player, "first enemy is grabbed before striking")
 	player._update_attack(Player.CHAIN_GRAB_SECONDS)
 	_check(player.attack_count == 1 and player.attack_phase == "windup", "grapple reaches into the first punch")
-	_check(player.request_attack("kick") and player._queued_attack_kind == "kick", "next input buffers during the current attack")
+	_check(player.request_attack("kick") and player._queued_attack_kind == "kick", "next internal attack request buffers during the current attack")
 	player._update_attack(float(Player.ATTACKS["punch"].windup))
 	_check(target.hp < target.starting_health, "punch hit window detects an in-range enemy")
 	_check(player.rage.rage == 3.0, "only a confirmed positive hit increases RAGE")
@@ -193,7 +198,7 @@ func _test_manual_attack_and_hit_window() -> void:
 	target.hp = target.starting_health
 	player._finish_attack()
 	target.position = Vector3(4.0, 0.0, 0.0)
-	_check(player.request_attack("kick"), "kick input starts its distinct action")
+	_check(player.request_attack("kick"), "internal kick attack request still exercises its animation path")
 	player._update_attack(0.24)
 	_check(target.hp == target.starting_health, "missed kick does not damage or build RAGE")
 	_check(player.rage.rage == rage_before_miss, "missed kick does not increase RAGE")
@@ -385,7 +390,7 @@ func _test_gamepad_controls() -> void:
 		_check(routed.size() == before + 1, "%s release stops held input" % buttons[button])
 		if str(buttons[button]).begins_with("spell_") or buttons[button] == "cast_spell" or buttons[button] == "blast":
 			_check(player.magic_energy == energy_before, "locked %s spends no energy" % buttons[button])
-		if str(buttons[button]).begins_with("punch_") or str(buttons[button]).begins_with("kick_"):
+		if str(buttons[button]).begins_with("punch_"):
 			_check(player.attack_kind == str(buttons[button]).get_slice("_", 0) or player._queued_attack_kind == str(buttons[button]).get_slice("_", 0), "%s uses the existing melee path" % buttons[button])
 			for step in range(4):
 				player._update_attack(1.0)
@@ -397,14 +402,14 @@ func _test_gamepad_controls() -> void:
 
 	var attacks_before_l1 := player.attack_count
 	_send_pad(JOY_BUTTON_LEFT_SHOULDER, true)
-	_check(player.attack_count == attacks_before_l1 + 1 and player.attack_kind == "punch" and player.attack_side == "left", "L1 triggers left punch and not left kick")
+	_check(player.attack_count == attacks_before_l1 + 1 and player.attack_kind == "punch" and player.attack_side == "left", "L1 triggers the left punch")
 	_send_pad(JOY_BUTTON_LEFT_SHOULDER, false)
 	for step in range(4):
 		player._update_attack(1.0)
 
 	var attacks_before_r1 := player.attack_count
 	_send_pad(JOY_BUTTON_RIGHT_SHOULDER, true)
-	_check(player.attack_count == attacks_before_r1 + 1 and player.attack_kind == "punch" and player.attack_side == "right", "R1 triggers right punch and not right kick")
+	_check(player.attack_count == attacks_before_r1 + 1 and player.attack_kind == "punch" and player.attack_side == "right", "R1 triggers the right punch")
 	_send_pad(JOY_BUTTON_RIGHT_SHOULDER, false)
 	for step in range(4):
 		player._update_attack(1.0)
@@ -436,66 +441,35 @@ func _test_gamepad_controls() -> void:
 		for step in range(4):
 			player._update_attack(1.0)
 
+	var attacks_before_triggers := player.attack_count
+	var locked_magic_before := player.magic_energy
+	var locked_spell_before := player.current_spell
 	var before_left_trigger := routed.size()
 	_send_trigger(0.4, 0, JOY_AXIS_TRIGGER_LEFT)
-	_check(routed.size() == before_left_trigger, "partial L2 pull below threshold does not kick")
+	_check(routed.size() == before_left_trigger, "partial L2 pull below threshold does not activate magic")
 	_send_trigger(0.7, 0, JOY_AXIS_TRIGGER_LEFT)
-	_check(routed.size() == before_left_trigger + 1 and routed.back() == "kick_left" and player.attack_kind == "kick" and player.attack_side == "left", "L2 starts one left kick")
+	_check(routed.size() == before_left_trigger + 1 and routed.back() == "magic_left"
+		and player.magic_energy == locked_magic_before and player.current_spell == locked_spell_before
+		and player.attack_count == attacks_before_triggers,
+		"L2 routes to locked spell slot 0 without casting or invoking a kick")
+	_send_trigger(0.8, 0, JOY_AXIS_TRIGGER_LEFT)
+	hud._process(0.5)
+	_check(routed.size() == before_left_trigger + 1, "holding L2 cannot repeat or spend magic")
 	_send_trigger(0.0, 0, JOY_AXIS_TRIGGER_LEFT)
-	hud._process(0.4)
-	_check(routed.size() == before_left_trigger + 1, "releasing L2 stops repeats")
-	for step in range(4):
-		player._update_attack(1.0)
 
-	var before_trigger := routed.size()
-	var attacks_before_trigger := player.attack_count
+	var before_right_trigger := routed.size()
 	_send_trigger(0.4)
-	_check(routed.size() == before_trigger, "partial R2 pull below threshold does not kick")
+	_check(routed.size() == before_right_trigger, "partial R2 pull below threshold does not activate magic")
 	_send_trigger(0.7)
-	_check(routed.size() == before_trigger + 1 and routed.back() == "kick_right" and player.attack_kind == "kick" and player.attack_side == "right", "R2 starts one right kick")
+	_check(routed.size() == before_right_trigger + 1 and routed.back() == "magic_right"
+		and player.magic_energy == locked_magic_before and player.current_spell == locked_spell_before
+		and player.attack_count == attacks_before_triggers,
+		"locked R2 slot 1 falls back to locked slot 0 without casting or invoking a kick")
 	_send_trigger(0.45)
 	_send_trigger(0.8)
-	_check(routed.size() == before_trigger + 1, "R2 trigger noise cannot double-strike")
-	hud._process(0.19)
-	player._update_attack(0.19)
-	_check(routed.size() == before_trigger + 1, "held R2 has no early repeat")
-	hud._process(0.01)
-	player._update_attack(0.01)
-	_check(routed.size() == before_trigger + 2, "held R2 repeats after 0.20 seconds")
-	for repeat in range(9):
-		for frame in range(20):
-			hud._process(0.01)
-			player._update_attack(0.01)
-	_check(routed.size() == before_trigger + 11 and player.attack_count < attacks_before_trigger + 11 and player._queued_attack_kind == "kick",
-		"held R2 delivers ten repeat inputs while completed kicks retain their native durations")
+	hud._process(0.5)
+	_check(routed.size() == before_right_trigger + 1, "R2 trigger noise and a held trigger cannot repeat magic")
 	_send_trigger(0.0)
-	hud._process(0.4)
-	_check(routed.size() == before_trigger + 11, "releasing R2 stops repeats")
-	for step in range(4):
-		player._update_attack(1.0)
-	_send_trigger(0.8)
-	_check(routed.size() == before_trigger + 12, "R2 makes a new kick after release and press")
-	_send_trigger(0.0)
-	for step in range(4):
-		player._update_attack(1.0)
-
-	var before_negative_rest := routed.size()
-	hud._left_trigger_rest_values[0] = -1.0
-	_send_trigger(0.0, 0, JOY_AXIS_TRIGGER_LEFT)
-	_check(routed.size() == before_negative_rest + 1 and routed.back() == "kick_left" and player.attack_side == "left", "L2 works on controllers whose trigger rests at -1")
-	_send_trigger(-1.0, 0, JOY_AXIS_TRIGGER_LEFT)
-	hud._left_trigger_rest_values[0] = 0.0
-	for step in range(4):
-		player._update_attack(1.0)
-
-	var before_right_negative_rest := routed.size()
-	hud._right_trigger_rest_values[0] = -1.0
-	_send_trigger(0.0)
-	_check(routed.size() == before_right_negative_rest + 1 and routed.back() == "kick_right" and player.attack_side == "right", "R2 works on controllers whose trigger rests at -1")
-	_send_trigger(-1.0)
-	hud._right_trigger_rest_values[0] = 0.0
-	for step in range(4):
-		player._update_attack(1.0)
 
 	for button in [JOY_BUTTON_A, JOY_BUTTON_B, JOY_BUTTON_X, JOY_BUTTON_Y, JOY_BUTTON_RIGHT_STICK, JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_RIGHT, JOY_BUTTON_DPAD_DOWN, JOY_BUTTON_DPAD_LEFT]:
 		var before := routed.size()
@@ -519,12 +493,28 @@ func _test_gamepad_controls() -> void:
 	var before_magic := player.magic_energy
 	_send_pad(JOY_BUTTON_DPAD_UP, true)
 	_send_pad(JOY_BUTTON_DPAD_UP, false)
-	_check(player.current_spell == "light" and player.magic_energy == before_magic - 20.0, "D-pad Up casts unlocked slot 1 via touch spell handler")
+	_check(player.current_spell == "light" and player.magic_energy == before_magic - 20.0, "D-pad Up casts unlocked spell slot 0 through the gamepad handler")
 	var before_selected_cast := player.magic_energy
 	_send_pad(JOY_BUTTON_B, true)
 	hud._process(0.4)
 	_check(player.current_spell == "light" and player.magic_energy == before_selected_cast - 20.0, "B casts the selected spell once while held")
 	_send_pad(JOY_BUTTON_B, false)
+	player.health = 50
+	player.magic_energy = 100.0
+	var before_l2_light := routed.size()
+	_send_trigger(0.7, 0, JOY_AXIS_TRIGGER_LEFT)
+	_check(routed.size() == before_l2_light + 1 and routed.back() == "magic_left"
+		and player.current_spell == "light" and player.health == 80 and player.magic_energy == 80.0,
+		"L2 / LT quick-casts unlocked slot 0 through the normal healing and energy rules")
+	_send_trigger(0.0, 0, JOY_AXIS_TRIGGER_LEFT)
+	player.health = 50
+	player.magic_energy = 100.0
+	var before_r2_fallback := routed.size()
+	_send_trigger(0.7)
+	_check(routed.size() == before_r2_fallback + 1 and routed.back() == "magic_right"
+		and player.current_spell == "light" and player.health == 80 and player.magic_energy == 80.0,
+		"R2 / RT falls back to unlocked slot 0 when it is the only spell")
+	_send_trigger(0.0)
 	for button in [JOY_BUTTON_DPAD_RIGHT, JOY_BUTTON_DPAD_DOWN, JOY_BUTTON_DPAD_LEFT]:
 		var energy_before := player.magic_energy
 		_send_pad(button, true)
@@ -538,6 +528,32 @@ func _test_gamepad_controls() -> void:
 	var blast_direction := -player.global_transform.basis.z
 	blast_direction.y = 0.0
 	blast_target.global_position = player.global_position + blast_direction.normalized() * 4.0
+	player.current_spell = "light"
+	player.magic_energy = 100.0
+	var second_spell_hp_before := blast_target.hp
+	var before_r2_second_spell := routed.size()
+	_send_trigger(0.7)
+	_check(routed.size() == before_r2_second_spell + 1 and routed.back() == "magic_right"
+		and player.current_spell == "fire" and blast_target.hp == second_spell_hp_before - 20
+		and player.magic_energy == 85.0,
+		"R2 / RT quick-casts unlocked slot 1 while preserving fire damage and energy cost")
+	_send_trigger(0.0)
+	player.current_spell = "light"
+	var before_left_negative_rest := routed.size()
+	hud._left_trigger_rest_values[0] = -1.0
+	_send_trigger(0.0, 0, JOY_AXIS_TRIGGER_LEFT)
+	_check(routed.size() == before_left_negative_rest + 1 and routed.back() == "magic_left"
+		and player.current_spell == "light", "L2 quick-cast works when a controller rests at -1")
+	_send_trigger(-1.0, 0, JOY_AXIS_TRIGGER_LEFT)
+	hud._left_trigger_rest_values[0] = 0.0
+	var before_right_negative_rest := routed.size()
+	hud._right_trigger_rest_values[0] = -1.0
+	_send_trigger(0.0)
+	_check(routed.size() == before_right_negative_rest + 1 and routed.back() == "magic_right"
+		and player.current_spell == "fire", "R2 quick-cast works when a controller rests at -1")
+	_send_trigger(-1.0)
+	hud._right_trigger_rest_values[0] = 0.0
+	player.current_spell = "light"
 	var blast_hp_before := blast_target.hp
 	var blast_energy_before := player.magic_energy
 	var blast_routes_before := routed.size()
@@ -594,7 +610,7 @@ func _test_gamepad_controls() -> void:
 	_check(routed.size() == before_menu + 1 and routed.back() == "blast", "a fresh Y press after the menu activates Blast")
 	_send_pad(JOY_BUTTON_Y, false)
 	_send_trigger(0.8)
-	_check(routed.size() == before_menu + 2 and routed.back() == "kick_right", "R2 requires a new press after the menu")
+	_check(routed.size() == before_menu + 2 and routed.back() == "magic_right", "R2 requires a new press after the menu")
 	_send_trigger(0.0)
 	arena.queue_free()
 	await process_frame

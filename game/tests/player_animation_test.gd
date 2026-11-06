@@ -45,8 +45,9 @@ func _run() -> void:
 	_check_airborne_strikes(player)
 
 	_check_locomotion_does_not_restart(animator, player)
-	for action in ["jump", "jump_forward", "escape_limb_grab", "attack_punch", "attack_kick", "pad_jump", "pad_jump_forward", "pad_escape_limb_grab", "pad_punch_left", "pad_blast", "pad_kick_left", "pad_kick_right"]:
+	for action in ["jump", "jump_forward", "escape_limb_grab", "attack_punch", "quick_cast_spell", "pad_jump", "pad_jump_forward", "pad_escape_limb_grab", "pad_punch_left", "pad_blast", "pad_magic_left", "pad_magic_right"]:
 		_check(InputMap.has_action(action), "combat input action remains present: %s" % action)
+	_check(not InputMap.has_action("attack_kick") and not InputMap.has_action("pad_kick_left") and not InputMap.has_action("pad_kick_right"), "broken player kick animation is unreachable through input actions")
 	_check(not InputMap.has_action("dash") and not InputMap.has_action("pad_dash"), "former Dash inputs have been replaced by forward Jump")
 
 	_finish(player, null)
