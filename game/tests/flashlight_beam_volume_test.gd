@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 1847)
-Total output lines: 154
-
 extends SceneTree
 ## Pixel check for the actual 3D flashlight shaft in the Compatibility renderer.
 
@@ -68,7 +65,36 @@ func _run() -> void:
 
 	# A black wall before the far sections should leave only the near sections
 	# visible. The beam must not draw through the opaque depth buffer.
-	var wall := MeshInstance3D.ne…347 tokens truncated… Rooftop now deliberately disables the entire flashlight, rather than
+	var wall := MeshInstance3D.new()
+	var wall_box := BoxMesh.new()
+	wall_box.size = Vector3(30.0, 30.0, 0.15)
+	wall.mesh = wall_box
+	var wall_material := StandardMaterial3D.new()
+	wall_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	wall_material.albedo_color = Color.BLACK
+	wall.material_override = wall_material
+	wall.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	world.add_child(wall)
+	wall.global_position = manager.beam_origin + manager.beam_direction * 5.0
+	wall.global_basis = Basis.looking_at(manager.beam_direction, Vector3.UP)
+	for frame in range(4):
+		await process_frame
+	await RenderingServer.frame_post_draw
+	var blocked_image := root.get_texture().get_image()
+	_save_stage6_capture(blocked_image, "beam-air-behind-wall.png")
+	var blocked_blue := _sample_blue_max(blocked_image, beam_screen, 4)
+	print("FLASHLIGHT_WALL_CUTOFF_PIXEL " + JSON.stringify({"before": visible_blue, "after": blocked_blue}))
+	_check(blocked_blue < visible_blue * 0.70, "opaque wall cuts off the far flashlight shaft")
+
+	# The real rooftop has a bright, warm city panorama. Probe the live
+	# composite and the entire beam against warm sky with the geometry off/on:
+	# a black-background probe alone cannot catch additive glow washing out.
+	wall.queue_free()
+	await process_frame
+	sections.visible = false
+	environment.background_color = Color(0.72, 0.46, 0.34)
+	manager.set_rooftop_sky_visible(true)
+	# Rooftop now deliberately disables the entire flashlight, rather than
 	# compositing a visible shaft over the panorama.
 	var off_axis := Vector2(image.get_width() * 0.85, image.get_height() * 0.3)
 	var near_axis := camera.unproject_position(manager.beam_origin + manager.beam_direction * 4.5) * Vector2(image.get_size()) / camera.get_viewport().get_visible_rect().size
