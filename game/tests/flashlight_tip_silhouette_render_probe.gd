@@ -60,18 +60,31 @@ func _run() -> void:
 		visible_pixel.g - hidden_pixel.g,
 		visible_pixel.b - hidden_pixel.b
 	).length()
+	# Compare the 40% render with the same silhouette drawn at full opacity.
+	# Read back through the same Compatibility renderer and linearize its
+	# sRGB pixel values before estimating the blend alpha over the black mask.
+	effect.material.set_shader_parameter("silhouette_opacity", 1.0)
+	await process_frame
+	var opaque_frame := await _capture_frame()
+	var opaque_pixel := _sample(opaque_frame, sample_point)
+	var measured_opacity := _estimate_blend_opacity(hidden_pixel, visible_pixel, opaque_pixel)
+	effect.material.set_shader_parameter("silhouette_opacity", opacity)
 	print("FLASHLIGHT_TIP_PIXEL " + JSON.stringify({
 		"renderer": "GL Compatibility software desktop",
 		"opacity_uniform": opacity,
+		"measured_opacity_vs_opaque_reference": measured_opacity,
 		"hidden_pixel": hidden_pixel,
 		"visible_pixel": visible_pixel,
+		"opaque_reference_pixel": opaque_pixel,
 		"overlay_delta": overlay_delta,
 		"screen_rect": Rect2(effect.overlay.position, effect.overlay.size)
 	}))
 	_check(maxf(hidden_pixel.r, maxf(hidden_pixel.g, hidden_pixel.b)) < 0.25,
 		"beam-tip sample remains in the dark outer edge before the overlay")
-	_check(overlay_delta > 0.08 and overlay_delta < 0.65,
-		"translucent silhouettes are visible over the darkness mask without becoming opaque")
+	_check(overlay_delta > 0.08,
+		"silhouettes are visible over the darkness mask")
+	_check(measured_opacity >= 0.30 and measured_opacity <= 0.50,
+		"rendered silhouette opacity is approximately 40 percent")
 
 	var moving_frame := await _capture_after_motion(0.8)
 	var motion_delta := _region_delta(visible_frame, moving_frame, sample_point, effect.projected_size)
@@ -108,6 +121,24 @@ func _sample(image: Image, point: Vector2) -> Color:
 	var x := clampi(int(point.x), 0, image.get_width() - 1)
 	var y := clampi(int(point.y), 0, image.get_height() - 1)
 	return image.get_pixel(x, y)
+
+func _estimate_blend_opacity(background: Color, blended: Color, opaque: Color) -> float:
+	var background_linear := background.srgb_to_linear()
+	var blended_linear := blended.srgb_to_linear()
+	var opaque_linear := opaque.srgb_to_linear()
+	var total := 0.0
+	var channels := 0
+	for values in [
+		[background_linear.r, blended_linear.r, opaque_linear.r],
+		[background_linear.g, blended_linear.g, opaque_linear.g],
+		[background_linear.b, blended_linear.b, opaque_linear.b],
+	]:
+		var opaque_delta: float = values[2] - values[0]
+		if absf(opaque_delta) <= 0.01:
+			continue
+		total += (values[1] - values[0]) / opaque_delta
+		channels += 1
+	return total / float(channels) if channels > 0 else 0.0
 
 func _check(ok: bool, message: String) -> void:
 	checks += 1
