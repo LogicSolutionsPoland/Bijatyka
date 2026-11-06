@@ -5,6 +5,7 @@ signal telegraph_started(enemy: Node, is_boss: bool)
 signal attack_resolved(enemy: Node, hit: bool)
 signal defeated(enemy: Node)
 
+const INFECTED_ALBEDO := preload("res://assets/characters/infected/Ashen_Worker.jpg")
 const ENEMY_MODEL_PATH := "res://assets/characters/universal_base/Universal_Base_Characters_Male.glb"
 const BOSS_MODEL_PATH := "res://assets/characters/universal_base/Universal_Base_Characters_Female.glb"
 const UNIVERSAL_BASE_MOTION := preload("res://scripts/universal_base_motion.gd")
@@ -84,6 +85,7 @@ var _quality_shadows_enabled := false
 # Rebuilt once per decision frame, shared by the whole population.
 static var _grid_frame := -1
 static var _grid: Dictionary = {}
+static var _infected_body_material: StandardMaterial3D
 static var _enemy_model_scene: PackedScene
 static var _boss_model_scene: PackedScene
 var _rig_budget_owner: Node
@@ -433,7 +435,23 @@ func _instantiate_detailed_model() -> Node3D:
 		return _boss_model_scene.instantiate() as Node3D if _boss_model_scene != null else null
 	if _enemy_model_scene == null and ResourceLoader.exists(ENEMY_MODEL_PATH):
 		_enemy_model_scene = load(ENEMY_MODEL_PATH) as PackedScene
-	return _enemy_model_scene.instantiate() as Node3D if _enemy_model_scene != null else null
+	if _enemy_model_scene == null:
+		return null
+	var rig := _enemy_model_scene.instantiate() as Node3D
+	# Style the body once at rig creation, before Pencil and flashlight
+	# variants are made. Eyes, eyebrows and the player's source rig stay independent.
+	for node in rig.find_children("*", "MeshInstance3D", true, false):
+		var mesh := node as MeshInstance3D
+		for surface in range(mesh.mesh.get_surface_count()):
+			var source := mesh.mesh.surface_get_material(surface) as StandardMaterial3D
+			if source == null or source.resource_name != "MI_Superhero_Male":
+				continue
+			if _infected_body_material == null:
+				_infected_body_material = source.duplicate() as StandardMaterial3D
+				_infected_body_material.albedo_texture = INFECTED_ALBEDO
+				_infected_body_material.vertex_color_use_as_albedo = false
+			mesh.set_surface_override_material(surface, _infected_body_material)
+	return rig
 
 func _adopt_detailed_model(model: Node3D) -> void:
 	if model == null or _model != null:

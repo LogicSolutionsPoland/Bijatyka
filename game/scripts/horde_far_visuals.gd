@@ -3,6 +3,7 @@ class_name HordeFarVisuals
 ## One shared draw for the fog-softened zombies between the animated combat ring
 ## and the 30 m visibility edge. The gameplay bodies continue to act normally.
 
+const CROWD_BODY := preload("res://assets/characters/infected/Ashen_Worker_Crowd.obj")
 const VIEW_DISTANCE_SQUARED := 30.0 * 30.0
 const FULL_RIG_ENTRY_DISTANCE_SQUARED := 16.0 * 16.0
 const FULL_RIG_EXIT_DISTANCE_SQUARED := 18.5 * 18.5
@@ -36,9 +37,12 @@ func configure(capacity: int) -> void:
 	rig_budget = mini(FULL_RIG_BUDGET, MOBILE_FULL_RIG_BUDGET) if OS.has_feature("mobile") else FULL_RIG_BUDGET
 	name = "FogHordeSilhouettes"
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var silhouette := _make_silhouette()
+	# The crowd uses a baked pose of the same body and the same jacket as
+	# the close rig. One indexed surface serves the whole MultiMesh.
+	var silhouette := CROWD_BODY.duplicate() as ArrayMesh
 	var animated_surface := ShaderMaterial.new()
 	animated_surface.shader = load("res://shaders/horde_crowd_animation.gdshader") as Shader
+	animated_surface.set_shader_parameter("body_albedo", FoundationEnemy.INFECTED_ALBEDO)
 	# The shared classifier submits only enemies touching the flashlight beam.
 	# Keep their complete low-poly bodies visible across the mask edge too.
 	silhouette.surface_set_material(0, FoundationEnemy.FLASHLIGHT_REVEAL.material_for(animated_surface))
@@ -54,36 +58,6 @@ func configure(capacity: int) -> void:
 	# The MultiMesh AABB must cover moving actors; the default mesh bounds only
 	# cover the origin and would let the renderer incorrectly cull the whole batch.
 	custom_aabb = AABB(Vector3(-110.0, -4.0, -110.0), Vector3(220.0, 12.0, 220.0))
-
-func _make_silhouette() -> ArrayMesh:
-	# One low-poly mesh per instance: a hunched torso, angular head, reaching
-	# arms and separated legs. Parts share a surface, so 200 figures still draw
-	# in one MultiMesh call instead of hundreds of animated rig surfaces.
-	var surface := SurfaceTool.new()
-	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
-	_append_box(surface, Vector3(0, 1.18, 0), Vector3(0.74, 0.88, 0.42), Vector3(-0.12, 0, 0), 0.0)
-	_append_box(surface, Vector3(0, 1.77, -0.17), Vector3(0.40, 0.42, 0.40), Vector3(-0.16, 0, 0.10), 3.0)
-	_append_box(surface, Vector3(-0.52, 1.18, -0.19), Vector3(0.24, 0.83, 0.25), Vector3(-0.54, 0, -0.25), 1.0)
-	_append_box(surface, Vector3(0.52, 1.20, -0.25), Vector3(0.24, 0.85, 0.25), Vector3(-0.67, 0, 0.27), 1.0)
-	_append_box(surface, Vector3(-0.21, 0.46, 0.03), Vector3(0.27, 0.93, 0.32), Vector3(0.10, 0, -0.10), 2.0)
-	_append_box(surface, Vector3(0.21, 0.46, 0.02), Vector3(0.27, 0.93, 0.32), Vector3(-0.12, 0, 0.11), 2.0)
-	surface.generate_normals()
-	return surface.commit()
-
-func _append_box(surface: SurfaceTool, center: Vector3, size: Vector3, tilt: Vector3, part: float) -> void:
-	var half := size * 0.5
-	var corners: Array[Vector3] = [
-		Vector3(-half.x, -half.y, -half.z), Vector3(half.x, -half.y, -half.z),
-		Vector3(half.x, half.y, -half.z), Vector3(-half.x, half.y, -half.z),
-		Vector3(-half.x, -half.y, half.z), Vector3(half.x, -half.y, half.z),
-		Vector3(half.x, half.y, half.z), Vector3(-half.x, half.y, half.z),
-	]
-	var pose := Basis.from_euler(tilt)
-	for face in [[0, 3, 2, 1], [4, 5, 6, 7], [4, 7, 3, 0],
-			[1, 2, 6, 5], [4, 0, 1, 5], [3, 7, 6, 2]]:
-		for index in [0, 1, 2, 0, 2, 3]:
-			surface.set_uv(Vector2(part, 0.0))
-			surface.add_vertex(center + pose * corners[face[index]])
 
 func register_enemy(enemy: FoundationEnemy) -> void:
 	if enemy.is_boss:
@@ -280,22 +254,25 @@ func _update_full_rig_selection() -> void:
 		var boundary := FULL_RIG_EXIT_DISTANCE_SQUARED if enemy._full_animation_selected or active_combatant else FULL_RIG_ENTRY_DISTANCE_SQUARED
 		if distance_squared > boundary:
 			continue
-		var score := sqrt(distance_squared)
-		if enemy.state == "limb_hold": score -= 100.0
-		elif enemy.state == "limb_grab_windup": score -= 90.0
-		elif enemy.state == "windup": score -= 9.0
-		elif enemy.state == "hit": score -= 7.0
-		elif enemy.state == "recovery": score -= 3.0
-		if enemy.combat_target == player: score -= 4.0
-		# Role handoffs use the existing seven-rig scheduler. Attackers win
-		# priority, then the nearest reserves; distant actors keep MultiMesh.
+		var role := ""
 		if is_instance_valid(dormant_source) and dormant_source.has_method("formation_role_for"):
-			var role: String = String(dormant_source.call("formation_role_for", enemy))
-			if role == "attacker": score -= 12.0
-			elif role == "reserve": score -= 5.0
-		if enemy._full_animation_selected: score -= 1.5
-		candidates.append({"enemy": enemy, "score": score})
-	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a.score) < float(b.score))
+			role = String(dormant_source.call("formation_role_for", enemy))
+		# Preserve a grab already in progress, then all visible attackers. A
+		# reserve taking a hit cannot displace an admitted attacker at 4 m.
+		var priority := 2
+		if enemy.state in ["limb_hold", "limb_grab_windup"]:
+			priority = 0
+		elif role == "attacker" or (role.is_empty() and enemy.state == "windup"):
+			priority = 1
+		# Half a metre of hysteresis prevents neighbours trading rigs every tick.
+		var distance := sqrt(distance_squared) - (0.5 if enemy._full_animation_selected else 0.0)
+		candidates.append({"enemy": enemy, "priority": priority, "distance": distance})
+	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		if a.priority != b.priority:
+			return int(a.priority) < int(b.priority)
+		if a.distance != b.distance:
+			return float(a.distance) < float(b.distance)
+		return a.enemy.get_instance_id() < b.enemy.get_instance_id())
 	var selected_ids: Dictionary = {}
 	# Dying detailed actors keep their rigs until the authored clip completes.
 	# They consume resident slots even though they are no longer selectable.

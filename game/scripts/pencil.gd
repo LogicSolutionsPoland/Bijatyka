@@ -46,6 +46,10 @@ static func from_material(source: BaseMaterial3D, outline := true) -> ShaderMate
 	m.set_shader_parameter(&"uv_scale", Vector2(source.uv1_scale.x, source.uv1_scale.y))
 	m.set_shader_parameter(&"uv_offset", Vector2(source.uv1_offset.x, source.uv1_offset.y))
 	m.set_shader_parameter(&"use_vertex_color", source.vertex_color_use_as_albedo)
+	if source.normal_enabled and source.normal_texture != null:
+		m.set_shader_parameter(&"use_normal_texture", true)
+		m.set_shader_parameter(&"normal_texture", source.normal_texture)
+		m.set_shader_parameter(&"normal_depth", source.normal_scale)
 	if source.emission_enabled:
 		m.set_shader_parameter(&"emission", source.emission * source.emission_energy_multiplier)
 	return m

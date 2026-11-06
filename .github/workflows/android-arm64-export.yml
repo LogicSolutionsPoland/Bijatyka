@@ -112,14 +112,6 @@ jobs:
           path: ${{ runner.temp }}/combat-visuals/
           if-no-files-found: warn
 
-      - name: Collect the source rig for the visual material pass
-        if: github.ref_name == 'feat/jump-horde-stage1-20261105'
-        uses: actions/upload-artifact@v4
-        with:
-          name: Bijatyka-visual-material-source
-          path: game/assets/characters/universal_base/Universal_Base_Characters_Male.glb
-          retention-days: 1
-
       - name: Render player attack poses
         run: |
           set -euo pipefail
@@ -187,6 +179,8 @@ jobs:
             assets/scenes/foundation.tscn.remap \
             assets/scenes/player.tscn.remap \
             assets/assets/characters/thornbound/Retribution_Player_Thornbound_Warrior_MOBILE.glb.import \
+            assets/assets/characters/infected/Ashen_Worker.jpg.import \
+            assets/assets/characters/infected/Ashen_Worker_Crowd.obj.import \
             assets/assets/characters/universal_base/Universal_Base_Characters_Male.glb.import \
             assets/assets/characters/universal_base/Universal_Base_Characters_Female.glb.import \
             assets/assets/environment/nature/DeadTree_1.gltf.import \

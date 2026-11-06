@@ -11,6 +11,10 @@ group_uniforms surface;
 uniform vec4 albedo : source_color = vec4(1.0);
 // The picture of the surface, multiplied by the colour. Without one the surface is plain white.
 uniform sampler2D albedo_texture : source_color, filter_linear_mipmap, repeat_enable, hint_default_white;
+// Preserve the creases in armour, cloth and faces when graphite is enabled.
+uniform bool use_normal_texture = false;
+uniform sampler2D normal_texture : hint_normal, filter_linear_mipmap, repeat_enable;
+uniform float normal_depth = 1.0;
 // How many times the picture repeats over the surface, across and down.
 uniform vec2 uv_scale = vec2(1.0);
 // Slides the picture over the surface, as a share of its size.
@@ -98,6 +102,10 @@ float rim_amount(vec3 normal, vec3 view) {
 
 void fragment() {
 	vec4 c = albedo * texture(albedo_texture, UV);
+	if (use_normal_texture) {
+		NORMAL_MAP = texture(normal_texture, UV).rgb;
+		NORMAL_MAP_DEPTH = normal_depth;
+	}
 	if (use_vertex_color) {
 		c *= COLOR;
 	}
@@ -126,9 +134,9 @@ vec2 rotate(vec2 p, float degrees) {
 }
 
 // 2D coordinates to lay the lines on: the screen, or the plane of the surface the point lies on.
-vec2 hatch_coords(vec2 frag, vec3 wp, vec3 wn) {
+vec2 hatch_coords(vec2 frag, vec3 wp, vec3 wn, float screen_height) {
 	if (hatch_space == 0) {
-		return frag / hatch_spacing;
+		return frag / max(2.0, hatch_spacing * screen_height / 720.0);
 	}
 	vec3 a = abs(wn);
 	vec2 plane = a.y >= a.x && a.y >= a.z ? wp.xz : (a.x >= a.z ? wp.zy : wp.xy);
@@ -161,10 +169,11 @@ void light() {
 	float facing = dot(NORMAL, LIGHT);
 	float shade = clamp((light_threshold - facing) / shade_reach, 0.0, 1.0);
 	shade = max(shade, 1.0 - reach);
-	float ink = hatching(hatch_coords(FRAGCOORD.xy, world_pos, world_normal), shade) * graphite_strength;
+	float ink = hatching(hatch_coords(FRAGCOORD.xy, world_pos, world_normal, VIEWPORT_SIZE.y), shade) * graphite_strength;
 	float solid = step(0.999, shade);
 	vec3 energy = LIGHT_COLOR / PI;
-	DIFFUSE_LIGHT += energy * (1.0 - solid) * (vec3(1.0) - shadow_color.rgb);
+	float shape = mix(0.26, 1.0, max(facing, 0.0)) * reach;
+	DIFFUSE_LIGHT += energy * shape * (1.0 - solid) * (vec3(1.0) - shadow_color.rgb);
 	if (LIGHT_IS_DIRECTIONAL) {
 		// the pencil is drawn by the sun: it pulls the colour already here towards graphite
 		vec3 base = ALBEDO * mix(vec3(1.0), shadow_color.rgb, solid);

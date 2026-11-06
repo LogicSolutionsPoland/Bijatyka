@@ -175,19 +175,19 @@ func _ready() -> void:
 	# flashlight's priority-126 black mask.
 	# Leave rooftop materials unstyled. Pencil conversion starts during descent.
 	var pencil_screen := PENCIL.add_screen_pass(camera)
-	pencil_screen.set_shader_parameter(&"line_color", Color(0.075, 0.075, 0.10))
-	pencil_screen.set_shader_parameter(&"line_width", 1.7)
-	pencil_screen.set_shader_parameter(&"depth_threshold", 0.015)
+	pencil_screen.set_shader_parameter(&"line_color", Color(0.085, 0.10, 0.13, 0.82))
+	pencil_screen.set_shader_parameter(&"line_width", 1.0)
+	pencil_screen.set_shader_parameter(&"depth_threshold", 0.025)
 	pencil_screen.set_shader_parameter(&"crease_threshold", 0.25)
-	pencil_screen.set_shader_parameter(&"creases", 0.60)
-	pencil_screen.set_shader_parameter(&"wobble", 1.2)
+	pencil_screen.set_shader_parameter(&"creases", 0.32)
+	pencil_screen.set_shader_parameter(&"wobble", 0.45)
 	pencil_screen.set_shader_parameter(&"line_roughness", 0.22)
 	pencil_screen.set_shader_parameter(&"fade_start", 19.0)
 	pencil_screen.set_shader_parameter(&"fade_end", 34.0)
-	pencil_screen.set_shader_parameter(&"saturation", 0.24)
-	pencil_screen.set_shader_parameter(&"contrast", 1.12)
+	pencil_screen.set_shader_parameter(&"saturation", 0.78)
+	pencil_screen.set_shader_parameter(&"contrast", 1.06)
 	pencil_screen.set_shader_parameter(&"paper_color", Color(0.91, 0.90, 0.86))
-	pencil_screen.set_shader_parameter(&"paper_amount", 0.36)
+	pencil_screen.set_shader_parameter(&"paper_amount", 0.16)
 	pencil_screen.set_shader_parameter(&"edge_fade", 0.0)
 	_pencil_screen_pass = camera.get_node_or_null("PencilScreenPass") as MeshInstance3D
 	if is_instance_valid(_pencil_screen_pass):
@@ -347,11 +347,23 @@ func _set_rooftop_render_profile(on_roof: bool) -> void:
 	# Keep the original four-panel Burning Horizon for ground-level play.
 	burning_horizon.visible = not on_roof
 	flashlight_visibility_manager.set_rooftop_sky_visible(on_roof)
+	if flashlight_visibility_enabled:
+		# A warm side light picks out shoulders and faces against cool shadow.
+		# The existing key and ambient fill require no additional light passes.
+		_environment.ambient_light_color = Color.WHITE if on_roof else Color(0.62, 0.72, 0.84)
+		_environment.ambient_light_energy = 0.72 if on_roof else 0.52
+		_key_light.light_color = Color.WHITE if on_roof else Color(1.0, 0.89, 0.76)
+		_key_light.light_energy = 1.0 if on_roof else 1.12
+	_sync_pencil_style()
+
+
+func _sync_pencil_style() -> void:
+	var enabled := not _rooftop_sky_active and _pencil_comparison_visible
 	if is_instance_valid(_pencil_screen_pass):
-		_pencil_screen_pass.visible = not on_roof and _pencil_comparison_visible
+		_pencil_screen_pass.visible = enabled
 	var style_manager := get_tree().root.get_node_or_null("PencilSketchStyle")
 	if style_manager != null:
-		style_manager.set_gameplay_pencil_enabled(not on_roof)
+		style_manager.set_gameplay_pencil_enabled(enabled)
 
 
 func _restore_rooftop_map() -> void:
@@ -1155,8 +1167,7 @@ func _set_debug_mask_visible(is_visible: bool) -> void:
 func _set_debug_pencil_visible(is_visible: bool) -> void:
 	if OS.is_debug_build():
 		_pencil_comparison_visible = is_visible
-		if is_instance_valid(_pencil_screen_pass):
-			_pencil_screen_pass.visible = is_visible and not _rooftop_sky_active
+		_sync_pencil_style()
 
 func _set_debug_floor_skip_enabled(is_enabled: bool) -> void:
 	if OS.is_debug_build():

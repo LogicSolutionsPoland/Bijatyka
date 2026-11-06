@@ -84,6 +84,14 @@ func _run() -> void:
 			game._set_debug_pencil_visible(pencil)
 			while not style.is_gameplay_style_ready():
 				await process_frame
+			_check(style.is_enabled() == pencil and game._pencil_screen_pass.visible == pencil,
+				"ground Pencil switch sets both the material and screen style")
+			_check((int(style.get_style_stats().styled_meshes) > 0) == pencil,
+				"turning Pencil off restores every styled mesh")
+			for enemy in zombies:
+				if enemy._model != null:
+					_check(_wears_visible_outfit(enemy, pencil),
+						"lit rig keeps its clothing and depth-tested flashlight reveal")
 			var name := "ground-%d-%s.png" % [roundi(scale * 100), "pencil" if pencil else "plain"]
 			await _save_frame(out.path_join(name))
 			print("COMBAT_VIEW ", name, " scale=", root.scaling_3d_scale,
@@ -92,11 +100,48 @@ func _run() -> void:
 	if game.horde_far_visuals.get_full_rig_count() != 7 or game.horde_far_visuals.multimesh.visible_instance_count < 1:
 		push_error("Combat capture must include seven detailed rigs and a visible crowd silhouette.")
 		failed = true
+	var newly_admitted := zombies.back() as FoundationEnemy
+	roles[zombies[0].get_instance_id()] = "reserve"
+	roles[newly_admitted.get_instance_id()] = "attacker"
+	for enemy in zombies:
+		if roles[enemy.get_instance_id()] == "reserve":
+			enemy.state = "hit"
+			enemy.combat_target = game.player
+	game.spawn_director.set_local_formation(roles, {})
+	game.horde_far_visuals._update_full_rig_selection()
+	for enemy in zombies:
+		if roles[enemy.get_instance_id()] == "attacker":
+			_check(enemy._full_animation_selected, "visible attacker wins a rig over a hit reserve")
+	_check(game.horde_far_visuals.get_resident_rig_count() == 7, "handoffs use the same seven rigs")
+	game._set_rooftop_render_profile(true)
+	game._set_rooftop_render_profile(false)
+	_check(not style.is_enabled() and not game._pencil_screen_pass.visible,
+		"a return to the ground respects the selected comparison")
 	game.queue_free()
 	await process_frame
 	if not failed:
 		print("PASS: close combat visual captures")
 	quit(1 if failed else 0)
+
+func _wears_visible_outfit(enemy: FoundationEnemy, pencil: bool) -> bool:
+	for mesh in enemy._base_visual_meshes:
+		for i in range(mesh.mesh.get_surface_count()):
+			var material := mesh.get_active_material(i)
+			if material == null or material.render_priority != FoundationEnemy.FLASHLIGHT_REVEAL.RENDER_PRIORITY:
+				continue
+			var source := FoundationEnemy.FLASHLIGHT_REVEAL.source_for(material)
+			if pencil and source is ShaderMaterial:
+				if source.get_shader_parameter("albedo_texture") == FoundationEnemy.INFECTED_ALBEDO:
+					return true
+			elif not pencil and source is StandardMaterial3D:
+				if source.albedo_texture == FoundationEnemy.INFECTED_ALBEDO:
+					return true
+	return false
+
+func _check(condition: bool, message: String) -> void:
+	if not condition:
+		push_error(message)
+		failed = true
 
 func _save_frame(path: String) -> void:
 	await process_frame
