@@ -612,7 +612,7 @@ func _test_gamepad_controls() -> void:
 	_send_trigger(0.8)
 	var last_menu_action: String = str(routed.back()) if not routed.is_empty() else "<none>"
 	_check(routed.size() == before_menu + 2 and last_menu_action == "magic_right",
-		"R2 requires a new press after the menu (action count delta %d, last %s)" % [routed.size() - before_menu, last_menu_action])
+		"R2 requires a new press after the menu (action count delta %d, last %s, held %s, rest %.2f, paused %s, menu %s)" % [routed.size() - before_menu, last_menu_action, str(hud._held_gamepad_actions.keys()), float(hud._right_trigger_rest_values.get(0, 99.0)), str(paused), str(hud._selection_panel != null)])
 	_send_trigger(0.0)
 	arena.queue_free()
 	await process_frame
