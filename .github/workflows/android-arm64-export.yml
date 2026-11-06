@@ -121,7 +121,7 @@ jobs:
           if-no-files-found: error
 
       - name: Export Android ARM64 debug APK
-        if: ${{ success() || github.ref_name == 'codex/roof-spawn-cage-30cm-20261029' }}
+        if: ${{ (github.event_name == 'workflow_dispatch' || github.ref_name != 'feat/jump-horde-stage1-20261105') && (success() || github.ref_name == 'codex/roof-spawn-cage-30cm-20261029') }}
         run: |
           set -o pipefail
           mkdir -p build
@@ -133,7 +133,7 @@ jobs:
           test -s "$GITHUB_WORKSPACE/build/Bijatyka-android-arm64.apk"
 
       - name: Verify architecture and packaged playable content
-        if: ${{ success() || github.ref_name == 'codex/roof-spawn-cage-30cm-20261029' }}
+        if: ${{ (github.event_name == 'workflow_dispatch' || github.ref_name != 'feat/jump-horde-stage1-20261105') && (success() || github.ref_name == 'codex/roof-spawn-cage-30cm-20261029') }}
         run: |
           set -euo pipefail
           apk="$GITHUB_WORKSPACE/build/Bijatyka-android-arm64.apk"
@@ -188,7 +188,7 @@ jobs:
           "$aapt_bin" dump badging "$apk" | grep -q "package: name='$package_name'"
 
       - name: Upload Android ARM64 APK artifact
-        if: ${{ success() || github.ref_name == 'codex/roof-spawn-cage-30cm-20261029' }}
+        if: ${{ (github.event_name == 'workflow_dispatch' || github.ref_name != 'feat/jump-horde-stage1-20261105') && (success() || github.ref_name == 'codex/roof-spawn-cage-30cm-20261029') }}
         uses: actions/upload-artifact@v4
         with:
           name: Bijatyka-android-arm64
