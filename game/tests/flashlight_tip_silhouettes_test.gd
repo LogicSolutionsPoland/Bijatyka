@@ -26,12 +26,12 @@ func _run() -> void:
 	if effect == null:
 		_finish()
 		return
-	_check(effect.overlay != null and effect.material != null, "effect uses one persistent CanvasItem and shader material")
-	_check(effect.canvas_layer.layer == 0, "effect draws over 3D blackout and beam passes below the HUD")
+	_check(effect.overlay is MeshInstance3D and effect.material != null, "effect uses one persistent depth-tested quad and shader material")
+	_check(effect.material.render_priority == 127, "effect draws after the 3D blackout composite")
 	_check(is_equal_approx(float(effect.material.get_shader_parameter("silhouette_opacity")), 0.40),
 		"solid silhouettes use 40 percent alpha")
-	_check(effect.find_children("*", "ColorRect", true, false).size() == 1,
-		"effect creates one reusable overlay instead of per-frame nodes")
+	_check(effect.find_children("*", "MeshInstance3D", true, false).size() == 1,
+		"effect creates one reusable quad instead of per-frame nodes")
 	_check(game.burning_horizon.get_child_count() == 4,
 		"the existing four-panel Zombie Horizon stays unchanged")
 

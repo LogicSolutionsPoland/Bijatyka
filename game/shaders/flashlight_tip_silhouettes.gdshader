@@ -1,5 +1,5 @@
-shader_type canvas_item;
-render_mode blend_mix;
+shader_type spatial;
+render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, fog_disabled;
 
 uniform float silhouette_opacity : hint_range(0.0, 1.0) = 0.40;
 uniform float animation_time_scale : hint_range(0.0, 2.0) = 1.0;
@@ -62,5 +62,6 @@ void fragment() {
 
 	vec3 color = mix(fog_color, silhouette_color, silhouettes);
 	float alpha = max(fog_alpha, silhouettes * silhouette_opacity);
-	COLOR = vec4(color, alpha);
+	ALBEDO = color;
+	ALPHA = alpha;
 }

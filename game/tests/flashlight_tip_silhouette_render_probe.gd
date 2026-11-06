@@ -32,13 +32,16 @@ func _run() -> void:
 	manager.set_process(false)
 	manager.set_aim_yaw(0.0)
 	manager._upload_shader_parameters()
-	manager._sync_tip_silhouettes()
 	var effect = manager._tip_silhouettes
-	_check(effect != null and effect.overlay != null and effect.overlay.visible,
-		"ground profile displays one projected silhouette cluster")
 	if effect == null or effect.overlay == null:
 		_finish()
 		return
+	# Hold the probe beam level so the depth-tested quad sits above the floor.
+	# The focused test separately covers tracking the game's live pitch.
+	var render_direction := Vector3.FORWARD
+	effect.call("update_beam", manager.beam_origin, render_direction,
+		VisibilityManager.MAX_RADIUS, VisibilityManager.BEAM_TANGENT, true)
+	_check(effect.overlay.visible, "ground profile displays one projected silhouette cluster")
 	_check(manager._composite.visible, "the real ground-floor flashlight darkness pass is active")
 	var viewport_rect := game.camera.get_viewport().get_visible_rect()
 	_check(viewport_rect.has_point(effect.projected_center), "beam-tip cluster projects inside the viewport")
@@ -51,7 +54,7 @@ func _run() -> void:
 	effect.material.set_shader_parameter("animation_time_scale", 0.0)
 	effect.set_effect_visible(false)
 	var hidden_frame := await _capture_frame()
-	effect.call("update_beam", manager.beam_origin, manager.beam_direction,
+	effect.call("update_beam", manager.beam_origin, render_direction,
 		VisibilityManager.MAX_RADIUS, VisibilityManager.BEAM_TANGENT, true)
 	for frame in range(4):
 		await process_frame
@@ -63,21 +66,26 @@ func _run() -> void:
 		visible_pixel.g - hidden_pixel.g,
 		visible_pixel.b - hidden_pixel.b
 	).length()
-	# Use a transparent offscreen viewport with the same shader to read the
+	# Use a transparent offscreen 3D viewport with the same shader to read the
 	# rendered alpha channel directly, independent of root viewport color space.
 	var alpha_probe := SubViewport.new()
 	alpha_probe.name = "FlashlightTipOpacityProbe"
 	alpha_probe.size = Vector2i(128, 128)
 	alpha_probe.transparent_bg = true
 	alpha_probe.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-	var alpha_layer := CanvasLayer.new()
-	alpha_probe.add_child(alpha_layer)
-	var alpha_rect := ColorRect.new()
-	alpha_rect.size = Vector2(128.0, 128.0)
-	alpha_rect.color = Color.WHITE
+	var probe_world := Node3D.new()
+	var probe_camera := Camera3D.new()
+	probe_world.add_child(probe_camera)
+	probe_camera.current = true
+	var alpha_quad := MeshInstance3D.new()
+	var alpha_mesh := QuadMesh.new()
+	alpha_mesh.size = Vector2(2.0, 2.0)
+	alpha_quad.mesh = alpha_mesh
+	alpha_quad.position = Vector3(0.0, 0.0, -2.0)
 	var alpha_material := effect.material.duplicate() as ShaderMaterial
-	alpha_rect.material = alpha_material
-	alpha_layer.add_child(alpha_rect)
+	alpha_quad.material_override = alpha_material
+	probe_world.add_child(alpha_quad)
+	alpha_probe.add_child(probe_world)
 	root.add_child(alpha_probe)
 	await process_frame
 	await RenderingServer.frame_post_draw
@@ -97,7 +105,9 @@ func _run() -> void:
 		"hidden_pixel": hidden_pixel,
 		"visible_pixel": visible_pixel,
 		"overlay_delta": overlay_delta,
-		"screen_rect": Rect2(effect.overlay.position, effect.overlay.size)
+		"screen_rect": Rect2(effect.projected_center - effect.projected_size * 0.5,
+			effect.projected_size),
+		"world_tip": effect.beam_tip
 	}))
 	_check(maxf(hidden_pixel.r, maxf(hidden_pixel.g, hidden_pixel.b)) < 0.25,
 		"beam-tip sample remains in the dark outer edge before the overlay")

@@ -1,14 +1,13 @@
-extends Node
-## Screen-space artwork anchored to the live end cross-section of the 3D flashlight.
-## It is decorative only: this node never creates or queries gameplay actors.
+extends Node3D
+## Depth-tested, non-gameplay artwork anchored to the live flashlight endpoint.
 
 const TIP_SHADER := preload("res://shaders/flashlight_tip_silhouettes.gdshader")
 const SILHOUETTE_OPACITY := 0.40
 const CLUSTER_FOOTPRINT_SCALE := 0.34
+const RENDER_PRIORITY := 127 # After the flashlight blackout composite.
 
 var camera: Camera3D
-var canvas_layer: CanvasLayer
-var overlay: ColorRect
+var overlay: MeshInstance3D
 var material: ShaderMaterial
 var beam_tip := Vector3.ZERO
 var projected_center := Vector2.ZERO
@@ -20,33 +19,28 @@ func configure(camera_node: Camera3D) -> void:
 	camera = camera_node
 	if not is_instance_valid(camera):
 		return
-	canvas_layer = CanvasLayer.new()
-	canvas_layer.name = "FlashlightTipSilhouettesLayer"
-	# Layer 0 renders after the 3D blackout and beam passes, but below the HUD.
-	canvas_layer.layer = 0
-	add_child(canvas_layer)
-
-	overlay = ColorRect.new()
+	var quad := QuadMesh.new()
+	quad.size = Vector2.ONE
+	overlay = MeshInstance3D.new()
 	overlay.name = "MovingZombieSilhouettes"
-	overlay.color = Color.WHITE
-	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.mesh = quad
+	overlay.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	overlay.visible = false
 	material = ShaderMaterial.new()
 	material.shader = TIP_SHADER
+	material.render_priority = RENDER_PRIORITY
 	material.set_shader_parameter("silhouette_opacity", SILHOUETTE_OPACITY)
-	overlay.material = material
-	canvas_layer.add_child(overlay)
+	overlay.material_override = material
+	add_child(overlay)
 
 func set_effect_visible(is_visible: bool) -> void:
 	if not is_instance_valid(overlay):
 		return
+	effect_active = is_visible
+	if overlay.visible != is_visible:
+		overlay.visible = is_visible
 	if not is_visible:
-		effect_active = false
-		if overlay.visible:
-			overlay.visible = false
 		_last_projection_state.clear()
-	elif effect_active and not overlay.visible:
-		overlay.visible = true
 
 func update_beam(
 	origin: Vector3,
@@ -64,12 +58,21 @@ func update_beam(
 
 	var normalized_direction := direction.normalized()
 	beam_tip = origin + normalized_direction * beam_range
+	var visible_tip := beam_tip
+	var visible_range := beam_range
+	# If the beam reaches the arena floor before its nominal range, place the
+	# fog cluster just above that visible surface instead of behind the floor.
+	if normalized_direction.y < -0.01:
+		var floor_distance := -origin.y / normalized_direction.y
+		if floor_distance > 0.0 and floor_distance < beam_range:
+			visible_range = maxf(1.0, floor_distance - 0.15)
+			visible_tip = origin + normalized_direction * visible_range + Vector3.UP * 1.6
 	var viewport := camera.get_viewport()
 	if not is_instance_valid(viewport):
 		set_effect_visible(false)
 		return
 	var visible_rect := viewport.get_visible_rect()
-	if visible_rect.size.x <= 1.0 or visible_rect.size.y <= 1.0 or camera.is_position_behind(beam_tip):
+	if visible_rect.size.x <= 1.0 or visible_rect.size.y <= 1.0 or camera.is_position_behind(visible_tip):
 		set_effect_visible(false)
 		return
 
@@ -79,19 +82,19 @@ func update_beam(
 		return
 	_last_projection_state = state
 
-	# Project the actual circular beam cross-section at its range limit. The
-	# displayed cluster stays a small fixed fraction of that live screen footprint.
+	# Project the live circular beam cross-section. Keep the cluster footprint
+	# proportional to the cone while placing it on a real depth-tested 3D quad.
 	var right := normalized_direction.cross(Vector3.UP)
 	if right.length_squared() < 0.0001:
 		right = camera.global_basis.x
 	right = right.normalized()
 	var up := right.cross(normalized_direction).normalized()
-	var beam_radius := beam_range * beam_tangent
+	var beam_radius := visible_range * beam_tangent
 	var edge_points: Array[Vector3] = [
-		beam_tip + right * beam_radius,
-		beam_tip - right * beam_radius,
-		beam_tip + up * beam_radius,
-		beam_tip - up * beam_radius,
+		visible_tip + right * beam_radius,
+		visible_tip - right * beam_radius,
+		visible_tip + up * beam_radius,
+		visible_tip - up * beam_radius,
 	]
 	var minimum := Vector2(INF, INF)
 	var maximum := Vector2(-INF, -INF)
@@ -105,14 +108,27 @@ func update_beam(
 		maximum.x = maxf(maximum.x, screen_point.x)
 		maximum.y = maxf(maximum.y, screen_point.y)
 
-	projected_center = camera.unproject_position(beam_tip)
+	projected_center = camera.unproject_position(visible_tip)
 	projected_size = (maximum - minimum) * CLUSTER_FOOTPRINT_SCALE
 	if projected_size.x < 2.0 or projected_size.y < 2.0:
 		set_effect_visible(false)
 		return
-	overlay.position = projected_center - projected_size * 0.5
-	overlay.size = projected_size
-	var effect_rect := Rect2(overlay.position, overlay.size)
+	var effect_rect := Rect2(projected_center - projected_size * 0.5, projected_size)
 	effect_active = visible_rect.intersects(effect_rect)
-	if overlay.visible != effect_active:
-		overlay.visible = effect_active
+	if not effect_active:
+		set_effect_visible(false)
+		return
+
+	# Size the camera-facing quad to the same projected footprint, but let the
+	# 3D depth buffer hide it behind nearer opaque geometry.
+	var camera_right := camera.global_basis.x.normalized()
+	var camera_up := camera.global_basis.y.normalized()
+	var right_scale := camera.unproject_position(visible_tip + camera_right).distance_to(projected_center)
+	var up_scale := camera.unproject_position(visible_tip + camera_up).distance_to(projected_center)
+	var world_width := projected_size.x / maxf(right_scale, 0.001)
+	var world_height := projected_size.y / maxf(up_scale, 0.001)
+	var billboard_basis := Basis(camera_right, camera_up, camera.global_basis.z.normalized())
+	overlay.global_transform = Transform3D(billboard_basis, visible_tip)
+	overlay.scale = Vector3(world_width, world_height, 1.0)
+	if not overlay.visible:
+		overlay.visible = true
