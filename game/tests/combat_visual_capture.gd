@@ -21,6 +21,7 @@ func _run() -> void:
 		quit(1)
 		return
 	seed(7417)
+	Engine.max_fps = 60
 	root.scaling_3d_scale = 0.40
 	var game := Foundation.new()
 	root.add_child(game)
@@ -97,6 +98,8 @@ func _run() -> void:
 			print("COMBAT_VIEW ", name, " scale=", root.scaling_3d_scale,
 				" styled=", style.get_style_stats().styled_meshes, " rigs=", game.horde_far_visuals.get_full_rig_count(),
 				" proxies=", game.horde_far_visuals.multimesh.visible_instance_count)
+			if pencil:
+				await _sample_host_frames(scale)
 	if game.horde_far_visuals.get_full_rig_count() != 7 or game.horde_far_visuals.multimesh.visible_instance_count < 1:
 		push_error("Combat capture must include seven detailed rigs and a visible crowd silhouette.")
 		failed = true
@@ -131,8 +134,8 @@ func _wears_visible_outfit(enemy: FoundationEnemy, pencil: bool) -> bool:
 				continue
 			var source := FoundationEnemy.FLASHLIGHT_REVEAL.source_for(material)
 			if pencil and source is ShaderMaterial:
-				if source.get_shader_parameter("albedo_texture") == FoundationEnemy.INFECTED_ALBEDO:
-					return true
+				if source.get_shader_parameter("albedo_texture") == FoundationEnemy.INFECTED_ALBEDO and material is ShaderMaterial:
+					return material.get_shader_parameter("albedo_texture") == FoundationEnemy.INFECTED_ALBEDO
 			elif not pencil and source is StandardMaterial3D:
 				if source.albedo_texture == FoundationEnemy.INFECTED_ALBEDO:
 					return true
@@ -142,6 +145,22 @@ func _check(condition: bool, message: String) -> void:
 	if not condition:
 		push_error(message)
 		failed = true
+
+func _sample_host_frames(scale: float) -> void:
+	# These are end-to-end software-renderer frame intervals on this runner.
+	# Allow each scale to warm up and exclude PNG readback from the sample.
+	for i in range(10):
+		await RenderingServer.frame_post_draw
+	var intervals := PackedFloat32Array()
+	var last := Time.get_ticks_usec()
+	for i in range(40):
+		await RenderingServer.frame_post_draw
+		var now := Time.get_ticks_usec()
+		intervals.append((now - last) / 1000.0)
+		last = now
+	intervals.sort()
+	print("HOST_FRAME_MS scale=%.2f median=%.2f p95=%.2f frames=%d" % [
+		scale, (intervals[19] + intervals[20]) * 0.5, intervals[37], intervals.size()])
 
 func _save_frame(path: String) -> void:
 	await process_frame

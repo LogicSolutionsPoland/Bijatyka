@@ -350,10 +350,11 @@ func _set_rooftop_render_profile(on_roof: bool) -> void:
 	if flashlight_visibility_enabled:
 		# A warm side light picks out shoulders and faces against cool shadow.
 		# The existing key and ambient fill require no additional light passes.
-		_environment.ambient_light_color = Color.WHITE if on_roof else Color(0.62, 0.72, 0.84)
+		_environment.ambient_light_color = Color(0.80, 0.85, 0.93) if on_roof else Color(0.62, 0.72, 0.84)
 		_environment.ambient_light_energy = 0.72 if on_roof else 0.52
-		_key_light.light_color = Color.WHITE if on_roof else Color(1.0, 0.89, 0.76)
-		_key_light.light_energy = 1.0 if on_roof else 1.12
+		_key_light.light_color = Color(1.0, 0.82, 0.65) if on_roof else Color(1.0, 0.89, 0.76)
+		_key_light.light_energy = 1.08 if on_roof else 1.12
+		_key_light.rotation_degrees = Vector3(-27.0, -148.0, 0.0) if on_roof else Vector3(-39.0, -34.0, 0.0)
 	_sync_pencil_style()
 
 

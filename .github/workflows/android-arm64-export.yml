@@ -188,6 +188,8 @@ jobs:
             assets/assets/environment/nature/Rock_Medium_1.gltf.import \
             assets/assets/environment/nature/Bush_Common.gltf.import \
             assets/shaders/burning_horizon.gdshader \
+            assets/assets/environment/rooftop_deck.jpg.import \
+            assets/shaders/rooftop_deck.gdshader \
             assets/assets/environment/rooftop_burning_city.jpg.import \
             assets/shaders/radial_ground.gdshader \
             assets/shaders/flashlight_visibility.gdshader \
@@ -207,7 +209,12 @@ jobs:
           package_name="org.logicsolutionspoland.bijatyka"
           if [ "$GITHUB_REF_NAME" = "codex/fix-mobile-5fps-20261025" ]; then package_name="org.logicsolutionspoland.bijatyka.fpstest"; fi
           if [ "$GITHUB_REF_NAME" = "codex/mobile-performance-apk-export-20261026" ]; then package_name="org.logicsolutionspoland.bijatyka.perftest2"; fi
-          "$aapt_bin" dump badging "$apk" | grep -q "package: name='$package_name'"
+          "$aapt_bin" dump badging "$apk" > "$RUNNER_TEMP/apk-badging.txt"
+          grep -F "package: name='$package_name'" "$RUNNER_TEMP/apk-badging.txt"
+          grep -Fxq 'application-debuggable' "$RUNNER_TEMP/apk-badging.txt"
+          apksigner="$(dirname "$aapt_bin")/apksigner"
+          "$apksigner" verify --verbose --print-certs "$apk"
+          sha256sum "$apk"
 
       - name: Upload Android ARM64 APK artifact
         if: ${{ (github.event_name == 'workflow_dispatch' || github.ref_name != 'feat/jump-horde-stage1-20261105' || startsWith(github.event.head_commit.message, 'build(stage10-apk-export):')) && (success() || github.ref_name == 'codex/roof-spawn-cage-30cm-20261029') }}
