@@ -46,6 +46,9 @@ func _run() -> void:
 	var opacity := float(effect.material.get_shader_parameter("silhouette_opacity"))
 	_check(is_equal_approx(opacity, 0.40), "rendered shader is configured for 40 percent silhouette opacity")
 
+	# Freeze the shader phase while capturing the paired opacity frames so the
+	# animation cannot change the sampled silhouette between comparisons.
+	effect.material.set_shader_parameter("animation_time_scale", 0.0)
 	effect.set_effect_visible(false)
 	var hidden_frame := await _capture_frame()
 	effect.call("update_beam", manager.beam_origin, manager.beam_direction,
@@ -86,8 +89,11 @@ func _run() -> void:
 	_check(measured_opacity >= 0.30 and measured_opacity <= 0.50,
 		"rendered silhouette opacity is approximately 40 percent")
 
+	effect.material.set_shader_parameter("animation_time_scale", 1.0)
+	await process_frame
+	var motion_start_frame := await _capture_frame()
 	var moving_frame := await _capture_after_motion(0.8)
-	var motion_delta := _region_delta(visible_frame, moving_frame, sample_point, effect.projected_size)
+	var motion_delta := _region_delta(motion_start_frame, moving_frame, sample_point, effect.projected_size)
 	_check(motion_delta > 0.006, "zombie silhouettes and fog visibly move over time")
 	print("FLASHLIGHT_TIP_MOTION " + JSON.stringify({"max_pixel_delta": motion_delta, "wait_seconds": 0.8}))
 

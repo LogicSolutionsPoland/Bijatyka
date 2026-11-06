@@ -2,6 +2,7 @@ shader_type canvas_item;
 render_mode blend_mix;
 
 uniform float silhouette_opacity : hint_range(0.0, 1.0) = 0.40;
+uniform float animation_time_scale : hint_range(0.0, 2.0) = 1.0;
 uniform vec3 silhouette_color : source_color = vec3(0.53, 0.60, 0.68);
 uniform vec3 fog_color : source_color = vec3(0.50, 0.58, 0.68);
 
@@ -17,7 +18,7 @@ float edge_mask(float distance_value) {
 }
 
 float zombie_shape(vec2 uv, float center_x, float height, float phase) {
-	float time = TIME;
+	float time = TIME * animation_time_scale;
 	float stride = sin(time * 2.1 + phase);
 	float sway = sin(time * 1.15 + phase) * 0.045;
 	float bob = sin(time * 2.8 + phase) * 0.012;
@@ -46,16 +47,17 @@ float mist_noise(vec2 point) {
 
 void fragment() {
 	vec2 uv = UV;
-	float drift = sin(TIME * 0.48) * 0.018;
+	float effect_time = TIME * animation_time_scale;
+	float drift = sin(effect_time * 0.48) * 0.018;
 	float rear = zombie_shape(uv, 0.29 + drift, 0.73, 1.1);
 	float center = zombie_shape(uv, 0.51 - drift * 0.6, 0.88, 3.0);
 	float near = zombie_shape(uv, 0.73 + drift * 0.8, 0.68, 4.7);
 	float silhouettes = max(rear, max(center, near));
 
-	vec2 fog_center = vec2(0.5 + sin(TIME * 0.33) * 0.035, 0.55 + cos(TIME * 0.41) * 0.025);
+	vec2 fog_center = vec2(0.5 + sin(effect_time * 0.33) * 0.035, 0.55 + cos(effect_time * 0.41) * 0.025);
 	vec2 fog_delta = (uv - fog_center) / vec2(0.49, 0.45);
 	float fog_shape = 1.0 - smoothstep(0.22, 1.0, dot(fog_delta, fog_delta));
-	float fog_motion = 0.72 + mist_noise(uv * vec2(10.0, 7.0) + vec2(TIME * 0.18, -TIME * 0.11)) * 0.28;
+	float fog_motion = 0.72 + mist_noise(uv * vec2(10.0, 7.0) + vec2(effect_time * 0.18, -effect_time * 0.11)) * 0.28;
 	float fog_alpha = fog_shape * fog_motion * 0.12;
 
 	vec3 color = mix(fog_color, silhouette_color, silhouettes);
