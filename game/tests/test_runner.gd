@@ -590,6 +590,12 @@ func _test_gamepad_controls() -> void:
 	_check(is_equal_approx(arena._camera_pitch, deg_to_rad(Foundation.CAMERA_MIN_PITCH_DEGREES)), "downward stick look obeys lower pitch clamp")
 	Input.action_release(&"camera_down")
 
+# This block checks only HUD routing. Casting another Blast here can hit the
+	# nearby test enemy and open a second aura-selection menu during the check.
+	var gameplay_action_handler := Callable(arena, "_on_hud_action")
+	var had_gameplay_action_handler := hud.action_requested.is_connected(gameplay_action_handler)
+	if had_gameplay_action_handler:
+		hud.action_requested.disconnect(gameplay_action_handler)
 	var before_menu := routed.size()
 	paused = true
 	hud.show_aura_selection(10)
@@ -612,8 +618,10 @@ func _test_gamepad_controls() -> void:
 	_send_trigger(0.8)
 	var last_menu_action: String = str(routed.back()) if not routed.is_empty() else "<none>"
 	_check(routed.size() == before_menu + 2 and last_menu_action == "magic_right",
-		"R2 requires a new press after the menu (action count delta %d, last %s, held %s, rest %.2f, paused %s, menu %s)" % [routed.size() - before_menu, last_menu_action, str(hud._held_gamepad_actions.keys()), float(hud._right_trigger_rest_values.get(0, 99.0)), str(paused), str(hud._selection_panel != null)])
+		"R2 requires a fresh press after the menu")
 	_send_trigger(0.0)
+	if had_gameplay_action_handler:
+		hud.action_requested.connect(gameplay_action_handler)
 	arena.queue_free()
 	await process_frame
 	root.size = original_size
