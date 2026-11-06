@@ -111,7 +111,7 @@ func _run() -> void:
 	player._update_limb_grab(player.limb_grab_hold_seconds + 0.1)
 	_check(player.get_grab_state() == FoundationPlayer.GrabState.READY and int(events["failed"]) == 1 and events["finished"].back() == "timeout", "expiry becomes FAILED, then RECOVERY and READY")
 	_check(not ledger.locks.has(timer_enemy.get_instance_id()), "timeout releases attacker slot")
-	var completed := events["finished"].size()
+	var completed: int = events["finished"].size()
 	player._update_limb_grab(1.0)
 	player.cancel_limb_grab("duplicate")
 	_check(events["finished"].size() == completed and int(events["failed"]) == 1, "timeout cleanup is idempotent")
