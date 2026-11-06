@@ -610,7 +610,7 @@ func _test_gamepad_controls() -> void:
 	_check(routed.size() == before_menu + 1 and routed.back() == "blast", "a fresh Y press after the menu activates Blast")
 	_send_pad(JOY_BUTTON_Y, false)
 	_send_trigger(0.8)
-	var last_menu_action := routed.back() if not routed.is_empty() else "<none>"
+	var last_menu_action: String = str(routed.back()) if not routed.is_empty() else "<none>"
 	_check(routed.size() == before_menu + 2 and last_menu_action == "magic_right",
 		"R2 requires a new press after the menu (action count delta %d, last %s)" % [routed.size() - before_menu, last_menu_action])
 	_send_trigger(0.0)
