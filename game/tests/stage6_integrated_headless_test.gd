@@ -111,13 +111,19 @@ func _run() -> void:
 	var grabber: FoundationEnemy
 	for value in spawns._live.values():
 		var enemy := value as FoundationEnemy
-		if spawns.formation_role_for(enemy) == "attacker":
+		if spawns.formation_role_for(enemy) != "attacker":
+			continue
+		if grabber == null:
+			grabber = enemy
+		# Prefer an already locked attacker when four slots are occupied.
+		if spawns._attackers.has(enemy.get_instance_id()):
 			grabber = enemy
 			break
 	if is_instance_valid(grabber) and player.is_on_floor():
 		grabber.set_physics_process(false)
 		grabber._player = player
 		grabber.global_position = player.global_position + Vector3(1.5, 0.0, 0.0)
+		_check(spawns.try_acquire_attacker(grabber), "grabber obtains a valid attacker reservation")
 		_check(player.try_reserve_limb_grab(grabber, "LEFT ARM")
 			and player.begin_limb_grab(grabber, "LEFT ARM"), "zombie can hold one arm")
 		grabber.state = "limb_hold"
@@ -125,6 +131,7 @@ func _run() -> void:
 		_check(player._limb_grab_owner == null, "R3 input escapes the grab and returns control")
 		_send_pad(JOY_BUTTON_RIGHT_STICK, false)
 		player._limb_grab_cooldown = 0.0
+		_check(spawns.try_acquire_attacker(grabber), "grabber reacquires its attacker slot after escape")
 		_check(player.try_reserve_limb_grab(grabber, "RIGHT ARM")
 			and player.begin_limb_grab(grabber, "RIGHT ARM"), "new hold can start after cooldown")
 		grabber.state = "limb_hold"

@@ -8,6 +8,7 @@ on:
       - game/scripts/player_controller.gd
       - game/scripts/enemy.gd
       - game/tests/brutal_grab_state_machine_test.gd
+      - game/tests/stage6_integrated_headless_test.gd
       - .github/workflows/brutal-grab-stage1-validation.yml
   workflow_dispatch:
 
