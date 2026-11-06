@@ -45,10 +45,16 @@ func _run() -> void:
 	var sample_point: Vector2 = effect.projected_center
 	var opacity := float(effect.material.get_shader_parameter("silhouette_opacity"))
 	_check(is_equal_approx(opacity, 0.40), "rendered shader is configured for 40 percent silhouette opacity")
+	var original_silhouette_color = effect.material.get_shader_parameter("silhouette_color")
+	var original_fog_color = effect.material.get_shader_parameter("fog_color")
 
 	# Freeze the shader phase while capturing the paired opacity frames so the
-	# animation cannot change the sampled silhouette between comparisons.
+	# animation cannot change the sampled silhouette between comparisons. Use
+	# white source colors so the linear readback directly measures alpha rather
+	# than the silhouette tint.
 	effect.material.set_shader_parameter("animation_time_scale", 0.0)
+	effect.material.set_shader_parameter("silhouette_color", Vector3.ONE)
+	effect.material.set_shader_parameter("fog_color", Vector3.ONE)
 	effect.set_effect_visible(false)
 	var hidden_frame := await _capture_frame()
 	effect.call("update_beam", manager.beam_origin, manager.beam_direction,
@@ -90,6 +96,8 @@ func _run() -> void:
 		"rendered silhouette opacity is approximately 40 percent")
 
 	effect.material.set_shader_parameter("animation_time_scale", 1.0)
+	effect.material.set_shader_parameter("silhouette_color", original_silhouette_color)
+	effect.material.set_shader_parameter("fog_color", original_fog_color)
 	await process_frame
 	var motion_start_frame := await _capture_frame()
 	var moving_frame := await _capture_after_motion(0.8)
