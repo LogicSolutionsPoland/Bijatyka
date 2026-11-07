@@ -778,11 +778,20 @@ func begin_limb_grab(enemy: FoundationEnemy, limb: String) -> bool:
 		_finish_limb_grab("qte_setup_failed")
 		return false
 	_limb_grab_time = _grab_qte.get_remaining_seconds()
+	var started_session_id := _grab_session_id
 	limb_grab_started.emit(limb)
+	# Signals are synchronous: a listener may kill the attacker or cancel the
+	# grab. Do not publish a ghost QTE for a session already cleaned up.
+	if grab_state != GrabState.GRABBED or not _grab_qte.matches(started_session_id, enemy, limb):
+		return false
 	grab_established.emit(enemy, limb)
-	grab_qte_started.emit(_grab_session_id, enemy, limb, _grab_qte.get_required_presses(), _limb_grab_time)
-	grab_qte_progress.emit(_grab_session_id, 0, _grab_qte.get_required_presses(), _limb_grab_time)
-	return true
+	if grab_state != GrabState.GRABBED or not _grab_qte.matches(started_session_id, enemy, limb):
+		return false
+	grab_qte_started.emit(started_session_id, enemy, limb, _grab_qte.get_required_presses(), _limb_grab_time)
+	if grab_state != GrabState.GRABBED or not _grab_qte.matches(started_session_id, enemy, limb):
+		return false
+	grab_qte_progress.emit(started_session_id, 0, _grab_qte.get_required_presses(), _limb_grab_time)
+	return grab_state == GrabState.GRABBED and _grab_qte.matches(started_session_id, enemy, limb)
 
 # The caller must send a fresh input edge. Optional session token rejects stale events.
 # True means the press was accepted, not necessarily that the player has escaped.
