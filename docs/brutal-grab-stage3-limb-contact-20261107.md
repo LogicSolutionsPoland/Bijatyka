@@ -6,7 +6,7 @@ Branch: `feat/jump-horde-stage1-20261105`; feature-only, no APK.
 
 `FoundationPlayer` still owns the sole grab session, attacker lock and Stage 2 QTE. The new `BrutalGrabLimbContact` component is a child of the player, observing `grab_qte_started(session_id, enemy, limb, ...)` and `grab_fully_ended(reason)`. It does not reserve attackers, submit QTE presses, change damage, move any `CharacterBody3D`, or create a second grab state machine. It rejects stale attacker/session IDs every render update and disables/queues the modifier and target markers for deletion when the session ends. A new valid session gets a fresh modifier and targets; no persistent global bone overrides are used.
 
-The component starts after the established Stage 2 QTE signal. If a dummy actor has no rig, or a real rig is incompatible or out of reach, it rejects **visual contact** only; the existing Stage 1/2 gameplay session continues. The rejection reason is available via `last_reject_reason`. This is deliberate to preserve existing Stage 1/2 host tests that create enemies without detailed models. A runtime scene test with real zombie models is needed to validate real contact activation frequency.
+The component starts after the established Stage 2 QTE signal. For **real detailed zombies**, the authoritative player runs a read-only skeleton/reach preflight after selecting the Hit pose and updating the visible Exo retarget, but **before** starting Stage 2 QTE. An incompatible or out-of-reach imported limb causes `visual_contact_unreachable`, cleans the Stage 1 hold and releases the attacker without publishing a ghost QTE. This prevents invisible grabs. The older Stage 1/2 headless dummy enemies have no detailed model and retain their original gameplay-only QTE path for backwards compatibility. The additional runtime component independently repeats its mapping/reach checks and records `last_reject_reason`.
 
 ## Verified code-level bone names
 
@@ -26,13 +26,22 @@ One `TwoBoneIK3D` (Godot 4.7.2 API) is created under the zombie's currently deta
 
 The solver runs on the animated **enemy** skeleton only. Target sampling runs on the render frame after Exo Gray's retarget node (priority 100 versus 200). The left/right bone indices and references are cached at activation; inactive zombies do no IK work. Each frame checks the current session, actor validity, model retention, health and shoulder-to-target reach. Maximum reach is measured from actual shoulder/elbow/wrist positions with only 0.06 m allowance; out-of-reach contact is released without teleporting or stretching the player/enemy.
 
-`TwoBoneIK3D` solves end-effector **position**, not guaranteed palm/finger wrap. The enemy still has the original closed-fist punch/holding animation; **real wrist grasp appearance and finger orientation require visual inspection**, and may need an additional bounded hand-only orientation/finger modifier later. A measured hand-to-target distance below 0.05 m is the synthetic-rig headless target, not proof of a skin-to-skin grip. This limitation prevents claiming final photorealistic limb grabbing without visual evidence.
+`TwoBoneIK3D` solves end-effector **position**, not guaranteed palm/finger wrap. The enemy still has the original closed-fist punch/holding animation; **real wrist grasp appearance and finger orientation require visual inspection**, and may need an additional bounded hand-only orientation/finger modifier later. A measured hand-to-target distance below 0.05 m is checked both on synthetic arm chains and **actual imported Exo/zombie skeletons**, after the deferred `modification_processed` callback. The component's `last_hand_error_m` records that post-solver world-space error, not a misleading pre-IK hand position. This position metric alone is not proof of a skin-to-skin grip. This limitation prevents claiming final photorealistic limb grabbing without visual evidence.
 
 ## Validation
 
-Headless suite: `game/tests/brutal_grab_limb_contact_test.gd`. The same GitHub Actions workflow also runs Stage 1 and Stage 2 grabs, integrated combat, jump and control regressions. CI status must be checked on the **final** feature branch HEAD before acceptance. Never claim Redmi FPS, real IK contact accuracy on the shipped rigs, or clipping quality from synthetic headless skeletons.
+Headless suites (Godot 4.7.2, Ubuntu GitHub Actions):
+- `brutal_grab_state_machine_test.gd`: **PASS 50** (Stage 1).
+- `brutal_grab_qte_test.gd`: **PASS 63** (Stage 2).
+- `brutal_grab_limb_contact_test.gd`: **PASS 45** (synthetic arm IK, mapping, rejection and cleanup).
+- `brutal_grab_real_rig_test.gd`: **PASS 41** (imported 112-bone Exo / 65-bone zombie skeletons, actual held punch clips, 5 cm threshold, measured elbow bending, minor actor rotations/translation, no CharacterBody3D movement, out-of-reach preflight before QTE, successful QTE escape release).
+- `stage6_integrated_headless_test.gd`: **PASS 28**.
+- `jump_state_regression_test.gd`: **PASS 25**.
+- `test_runner.gd`: **PASS 215**.
 
-Missing evidence to collect before declaring full Stage 3 visual acceptance: runtime scene measurements with the imported Exo Gray GLB and Universal Base zombie GLB, left/right grab video at 40% render scale, wall/crowd/terrain cases, and actual Redmi Android 16 thermal/FPS/60 FPS cap. No APK is permitted in this stage.
+Imported skeleton arm chain lengths: left/right **0.4947 m**. The rendered Exo lower-forearm target yielded **0.0000 m** world-space contact error on both sides when sampled after the held-punch IK modifier update in the real-rig headless regression. Left/right are not equivalent to visually verified fingertip wrap; the hand's punch pose remains the animation-authored orientation. These figures were produced by CI, not measured on Redmi. Validation run: `https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/42359524663`.
+
+**Outstanding visual acceptance:** real in-game videos of left/right grabs at 40% scale, finger/palm orientation on both Exo sleeves, crowd/wall/uneven-terrain clipping, and Redmi Android 16 FPS/thermal behavior. The QTE/IK implementation is headless-validated, but skin-to-skin realism and on-device 60 FPS are **not** established. No APK was built in this stage.
 
 ## Stage 4 camera contract (not implemented)
 
