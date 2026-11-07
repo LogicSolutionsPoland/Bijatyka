@@ -1,16 +1,14 @@
 extends Node3D
-## Fog silhouettes follow the live beam tip and respect world geometry.
+## Fog silhouettes use a foreground layer anchored to the live flashlight tip.
 
 const TIP_SHADER := preload("res://shaders/flashlight_tip_silhouettes.gdshader")
 const ZOMBIE_SILHOUETTE_MASK := preload("res://assets/effects/flashlight_tip_zombie_silhouettes.webp")
 const SILHOUETTE_OPACITY := 0.40
 const FOG_OPACITY := 0.55
 const CLUSTER_FOOTPRINT_SCALE := 0.44
-const WORLD_OCCLUSION_MASK := 1 | 4 # Ground and arena barriers; enemy bodies are intentionally ignored.
 const RENDER_PRIORITY := 127 # After the flashlight blackout composite.
 
 var camera: Camera3D
-var player: PhysicsBody3D
 var overlay: MeshInstance3D
 var material: ShaderMaterial
 var beam_tip := Vector3.ZERO
@@ -19,9 +17,8 @@ var projected_size := Vector2.ZERO
 var effect_active := false
 var _last_projection_state: Array = []
 
-func configure(camera_node: Camera3D, player_node: PhysicsBody3D) -> void:
+func configure(camera_node: Camera3D) -> void:
 	camera = camera_node
-	player = player_node
 	if not is_instance_valid(camera):
 		return
 	var quad := QuadMesh.new()
@@ -88,12 +85,9 @@ func update_beam(
 	if state == _last_projection_state:
 		return
 	_last_projection_state = state
-	if not _beam_path_is_clear(origin, visible_tip):
-		set_effect_visible(false)
-		return
 
 	# Project the live circular beam cross-section. Keep the cluster footprint
-	# proportional to the cone while placing it on a real camera-facing 3D quad.
+	# proportional to the cone while placing it on a camera-facing 3D quad.
 	var right := normalized_direction.cross(Vector3.UP)
 	if right.length_squared() < 0.0001:
 		right = camera.global_basis.x
@@ -129,8 +123,7 @@ func update_beam(
 		set_effect_visible(false)
 		return
 
-	# Keep the silhouettes in front of distant enemy meshes. A world-only ray
-	# check above hides the overlay when a wall blocks the flashlight.
+	# Size the camera-facing quad to the same projected footprint, but keep the fog silhouettes visible over distant enemy models.
 	var camera_right := camera.global_basis.x.normalized()
 	var camera_up := camera.global_basis.y.normalized()
 	var right_scale := camera.unproject_position(visible_tip + camera_right).distance_to(projected_center)
@@ -142,14 +135,3 @@ func update_beam(
 	overlay.scale = Vector3(world_width, world_height, 1.0)
 	if not overlay.visible:
 		overlay.visible = true
-
-func _beam_path_is_clear(origin: Vector3, tip: Vector3) -> bool:
-	if not is_instance_valid(camera) or not is_instance_valid(player):
-		return false
-	var world := camera.get_world_3d()
-	if not is_instance_valid(world):
-		return false
-	var query := PhysicsRayQueryParameters3D.create(origin, tip, WORLD_OCCLUSION_MASK)
-	query.exclude = [player.get_rid()]
-	query.collide_with_areas = false
-	return world.direct_space_state.intersect_ray(query).is_empty()

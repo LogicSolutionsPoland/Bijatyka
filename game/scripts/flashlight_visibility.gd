@@ -71,7 +71,7 @@ func configure(player_node: Node3D, camera_node: Camera3D, is_enabled: bool) -> 
 		_tip_silhouettes = TIP_SILHOUETTES.new()
 		_tip_silhouettes.name = "FlashlightTipSilhouettes"
 		add_child(_tip_silhouettes)
-		_tip_silhouettes.call("configure", camera, player)
+		_tip_silhouettes.call("configure", camera)
 	_upload_shader_parameters()
 	_sync_tip_silhouettes()
 	_classify_enemies()
