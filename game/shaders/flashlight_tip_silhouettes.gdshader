@@ -55,7 +55,7 @@ void fragment() {
 	vec2 fog_delta = (UV - fog_center) / vec2(0.53, 0.46);
 	float fog_shape = 1.0 - smoothstep(0.18, 1.0, dot(fog_delta, fog_delta));
 	float fog_density = smoothstep(0.24, 0.78, cloud) * fog_shape;
-	float fog_alpha = fog_density * 0.16 * (1.0 - body * 0.55);
+	float fog_alpha = fog_density * 0.16 * (1.0 - body * 0.55) * silhouette_opacity;
 
 	vec3 fog_color = vec3(0.095, 0.084, 0.077);
 	vec3 shadow_color = vec3(0.012, 0.009, 0.008);
