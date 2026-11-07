@@ -34,13 +34,40 @@ float fog_noise(vec2 point) {
 	return value / 0.9625;
 }
 
+// Five short, hard-edged scan slices change positions together at 13 steps per second.
+float fast_cut_mask(vec2 point, float frame_index) {
+	float mask = 0.0;
+	for (int line_index = 0; line_index < 5; line_index++) {
+		float index = float(line_index);
+		vec2 seed = vec2(frame_index + index * 13.17, index * 7.3 + 2.9);
+		float visible = step(0.23, hash21(seed));
+		float line_y = hash21(seed + vec2(17.7, 4.1));
+		float half_height = mix(0.0018, 0.0065, hash21(seed + vec2(3.4, 29.1)));
+		float segment_start = hash21(seed + vec2(51.2, 8.3)) * 0.72;
+		float segment_length = mix(0.18, 0.60, hash21(seed + vec2(11.8, 63.5)));
+		float line = 1.0 - smoothstep(half_height, half_height + 0.001, abs(point.y - line_y));
+		float segment = smoothstep(segment_start, segment_start + 0.002, point.x)
+			* (1.0 - smoothstep(segment_start + segment_length - 0.002,
+				segment_start + segment_length, point.x));
+		mask = max(mask, line * segment * visible);
+	}
+	return mask;
+}
+
 void fragment() {
 	float effect_time = TIME * animation_time_scale;
 	vec2 uv = UV;
 	// A slight animated warp keeps the uploaded, already blurred figures alive.
 	uv.x += sin(effect_time * 0.43 + UV.y * 4.1 + UV.x * 1.8) * 0.0035;
 	uv.y += sin(effect_time * 0.31 + UV.x * 3.8 + UV.y * 2.0) * 0.0025;
-	vec4 artwork = texture(tip_artwork, uv);
+
+	float cut_frame = floor(effect_time * 13.0);
+	float cut_mask = fast_cut_mask(UV, cut_frame);
+	vec2 sliced_uv = uv;
+	float slice_jump = (hash21(vec2(cut_frame, 37.1)) - 0.5) * 0.018;
+	sliced_uv.x += cut_mask * slice_jump;
+	vec4 artwork = texture(tip_artwork, sliced_uv);
+	artwork.rgb = mix(artwork.rgb, vec3(0.006, 0.008, 0.011), cut_mask * 0.92);
 
 	vec2 moving_fog_uv = UV * vec2(8.0, 5.0) + vec2(effect_time * 0.045, -effect_time * 0.032);
 	float cloud = fog_noise(moving_fog_uv);
