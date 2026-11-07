@@ -76,7 +76,7 @@ var _status_timer := 0.0
 var _pending_notice := ""
 var _visibility_timer := 0.0
 var _floor_material: ShaderMaterial
-var _floor_skip_enabled := true
+var _floor_skip_enabled := false
 var _pencil_comparison_visible := true
 var _floor_fast_detail_enabled := false
 var _local_lights_enabled := true
@@ -381,7 +381,8 @@ func _build_arena() -> void:
 	_floor_material.shader = RADIAL_GROUND_SHADER
 	_floor_material.set_shader_parameter("floor_color", Color(0.105, 0.118, 0.135))
 	_floor_material.set_shader_parameter("player_position", Vector3.ZERO)
-	_floor_material.set_shader_parameter("floor_skip_enabled", flashlight_visibility_enabled)
+	_floor_material.set_shader_parameter("floor_skip_enabled",
+		flashlight_visibility_enabled and _floor_skip_enabled)
 	_floor_material.set_shader_parameter("floor_fast_detail", _floor_fast_detail_enabled)
 	floor.material_override = _floor_material
 	floor.add_to_group("radial_floor")
