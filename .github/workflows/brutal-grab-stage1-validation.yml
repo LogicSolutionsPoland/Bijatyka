@@ -18,6 +18,7 @@ on:
 
 permissions:
   contents: read
+  statuses: write
 
 jobs:
   validate:
@@ -30,11 +31,13 @@ jobs:
           version: 4.7.2
           use-dotnet: false
       - name: Import game
+        id: import_game
         run: |
           set -euo pipefail
           godot --headless --editor --path game --import --quit 2>&1 | tee grab-import.log
           if grep -E 'SCRIPT ERROR:|ERROR: Failed to load' grab-import.log; then exit 1; fi
       - name: Grab stages 1-2, jump, combat and control regressions
+        id: regressions
         run: |
           set -euo pipefail
           for script in brutal_grab_state_machine_test.gd brutal_grab_qte_test.gd stage6_integrated_headless_test.gd jump_state_regression_test.gd test_runner.gd; do
@@ -42,6 +45,26 @@ jobs:
             grep -q 'PASS:' "$script.log"
             if grep -E 'SCRIPT ERROR:|ERROR:' "$script.log"; then exit 1; fi
           done
+      - name: Publish Godot result to commit status
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // GitHub Actions checks use a separate API. A commit status makes
+            // the result readable by limited CI-status clients, too.
+            const passed = '${{ steps.import_game.outcome }}' === 'success'
+              && '${{ steps.regressions.outcome }}' === 'success';
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state: passed ? 'success' : 'failure',
+              context: 'brutal-grab/stage2.5-headless',
+              description: passed
+                ? 'Godot import and five headless test suites passed'
+                : 'Godot import or headless test suite did not pass',
+              target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            });
       - name: Keep validation logs
         if: always()
         uses: actions/upload-artifact@v4
