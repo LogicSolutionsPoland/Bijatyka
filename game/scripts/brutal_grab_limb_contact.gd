@@ -6,6 +6,7 @@ const BLEND_IN_SECONDS := 0.10
 const BLEND_OUT_SECONDS := 0.08
 const REACH_MARGIN_M := 0.03
 const FOREARM_CONTACT_FRACTION := 0.82
+const HAND_ORIENTATION := preload("res://scripts/brutal_grab_hand_orientation.gd")
 const IMMEDIATE_END_REASONS := [
 	"actor_invalid", "session_or_hold_lost", "dead_or_model_changed",
 	"scene_exit", "replaced", "visual_contact_unreachable", "model_released",
@@ -25,6 +26,8 @@ var session_id := 0
 var last_end_reason := ""
 var last_reject_reason := ""
 var last_hand_error_m := INF
+var last_palm_alignment_error_degrees := INF
+var last_finger_alignment_error_degrees := INF
 var _owner_ref: WeakRef
 var _enemy_ref: WeakRef
 var _player_ref: WeakRef
@@ -40,6 +43,7 @@ var _elapsed := 0.0
 var _target: Marker3D
 var _pole: Marker3D
 var _ik: TwoBoneIK3D
+var _hand_orientation
 var _release_tween: Tween
 var _release_generation := 0
 var _is_releasing := false
@@ -101,6 +105,9 @@ func can_reach_contact(enemy: Node, player: Node, limb: String, hand_side: Strin
 	var enemy_bones := resolve_enemy_bones(rig, hand_side)
 	if player_bones.is_empty() or enemy_bones.is_empty():
 		return false
+	var player_side := "left" if limb == "LEFT ARM" else "right"
+	if HAND_ORIENTATION.resolve_hand_frame(target_rig, player_side, exo).is_empty() or HAND_ORIENTATION.resolve_hand_frame(rig, hand_side, false).is_empty():
+		return false
 	var shoulder := bone_world(rig, int(enemy_bones.root))
 	var elbow := bone_world(rig, int(enemy_bones.middle))
 	var wrist := bone_world(rig, int(enemy_bones.end))
@@ -133,6 +140,10 @@ func begin_contact(enemy: Node, player: Node, limb: String, hand_side: String, i
 	if target_bones.is_empty() or hand_bones.is_empty():
 		last_reject_reason = "missing_or_incompatible_bones"
 		return false
+	var player_side := "left" if limb == "LEFT ARM" else "right"
+	if HAND_ORIENTATION.resolve_hand_frame(target_skeleton, player_side, visible_exo).is_empty() or HAND_ORIENTATION.resolve_hand_frame(skeleton, hand_side, false).is_empty():
+		last_reject_reason = "missing_or_incompatible_hand_frame"
+		return false
 	var root_idx: int = hand_bones.root
 	var mid_idx: int = hand_bones.middle
 	var hand_idx: int = hand_bones.end
@@ -159,6 +170,8 @@ func begin_contact(enemy: Node, player: Node, limb: String, hand_side: String, i
 	_reach_m = length_m
 	_elapsed = 0.0
 	last_hand_error_m = INF
+	last_palm_alignment_error_degrees = INF
+	last_finger_alignment_error_degrees = INF
 	_target = Marker3D.new()
 	_target.name = "GrabContactTarget"
 	_enemy_skeleton.add_child(_target)
@@ -179,9 +192,21 @@ func begin_contact(enemy: Node, player: Node, limb: String, hand_side: String, i
 	_ik.set_pole_node(0, _ik.get_path_to(_pole))
 	_ik.set_pole_direction(0, SkeletonModifier3D.SECONDARY_DIRECTION_PLUS_Y)
 	# This fires *after* Godot solves and blends the skeleton pose.
-	_ik.modification_processed.connect(_on_ik_processed)
 	_ik.influence = 0.0
 	_ik.active = true
+	# Skeleton3D processes direct-child modifiers in tree order. This child is
+	# deliberately added after TwoBoneIK3D so it sees the solved wrist chain.
+	_hand_orientation = HAND_ORIENTATION.new()
+	_hand_orientation.name = "BrutalGrabHandOrientation"
+	_hand_orientation.influence = 0.0
+	_hand_orientation.active = true
+	_enemy_skeleton.add_child(_hand_orientation)
+	if not _hand_orientation.configure(_enemy_skeleton, hand_idx, hand_side, target_skeleton,
+			int(target_bones.forearm), int(target_bones.wrist), player_side, visible_exo):
+		last_reject_reason = "hand_orientation_configuration_failed"
+		_clear_contact_nodes()
+		return false
+	_hand_orientation.modification_processed.connect(_on_hand_orientation_processed)
 	session_id = id
 	set_process(true)
 	return true
@@ -223,11 +248,17 @@ func update_contact(delta: float) -> void:
 	_update_pole()
 	_elapsed += maxf(0.0, delta)
 	_ik.influence = clampf(_elapsed / BLEND_IN_SECONDS, 0.0, 1.0)
+	if is_instance_valid(_hand_orientation):
+		_hand_orientation.influence = _ik.influence
 
-func _on_ik_processed() -> void:
-	if session_id <= 0 or not is_instance_valid(_enemy_skeleton) or not is_instance_valid(_target):
+func _on_hand_orientation_processed() -> void:
+	if session_id <= 0 or not is_instance_valid(_enemy_skeleton) or not is_instance_valid(_target) or not is_instance_valid(_hand_orientation):
 		return
 	last_hand_error_m = bone_world(_enemy_skeleton, _hand).distance_to(_target.global_position)
+	var errors: Dictionary = _hand_orientation.get_alignment_errors_degrees()
+	if not errors.is_empty():
+		last_finger_alignment_error_degrees = float(errors.finger)
+		last_palm_alignment_error_degrees = float(errors.palm)
 
 func is_solver_active() -> bool:
 	return is_instance_valid(_ik) and _ik.active
@@ -262,6 +293,8 @@ func end_contact(reason: String = "cancelled") -> void:
 	var release_token := _release_generation
 	_release_tween = create_tween()
 	_release_tween.tween_property(_ik, "influence", 0.0, BLEND_OUT_SECONDS).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	if is_instance_valid(_hand_orientation):
+		_release_tween.parallel().tween_property(_hand_orientation, "influence", 0.0, BLEND_OUT_SECONDS).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	_release_tween.tween_callback(_finish_blended_release.bind(release_token))
 
 func _finish_blended_release(release_token: int) -> void:
@@ -280,11 +313,16 @@ func _clear_contact_nodes() -> void:
 		_ik.influence = 0.0
 		_ik.active = false
 		_ik.queue_free()
+	if is_instance_valid(_hand_orientation):
+		_hand_orientation.influence = 0.0
+		_hand_orientation.active = false
+		_hand_orientation.queue_free()
 	if is_instance_valid(_target):
 		_target.queue_free()
 	if is_instance_valid(_pole):
 		_pole.queue_free()
 	_ik = null
+	_hand_orientation = null
 	_target = null
 	_pole = null
 	_enemy_ref = null
@@ -298,6 +336,9 @@ func _clear_contact_nodes() -> void:
 	_hand = -1
 	_reach_m = 0.0
 	_elapsed = 0.0
+	last_hand_error_m = INF
+	last_palm_alignment_error_degrees = INF
+	last_finger_alignment_error_degrees = INF
 
 func _exit_tree() -> void:
 	end_contact("scene_exit")

@@ -122,19 +122,35 @@ func _run() -> void:
 			continue
 		_check(_contact._player_skeleton == player_exo, "%s uses visible Exo pose" % side)
 		_check(_contact._enemy_skeleton == enemy_rig, "%s modifies actual zombie bones" % side)
-		var sample := {"count": 0, "error": INF, "elbow_before": CONTACT.bone_world(enemy_rig, int(zombie_bones.middle)), "elbow_after": Vector3.ZERO}
+		var authored_hand_basis: Basis = enemy_rig.get_bone_global_pose(int(zombie_bones.end)).basis.orthonormalized()
+		var sample := {"count": 0, "error": INF, "palm_error": INF, "finger_error": INF,
+			"elbow_before": CONTACT.bone_world(enemy_rig, int(zombie_bones.middle)), "elbow_after": Vector3.ZERO}
+		var modifier_order: Array[String] = []
 		var modifier := _contact._ik
 		modifier.modification_processed.connect(func() -> void:
+			modifier_order.append("ik")
 			if is_instance_valid(_contact._target):
 				sample.count = int(sample.count) + 1
 				sample.error = CONTACT.bone_world(enemy_rig, int(zombie_bones.end)).distance_to(_contact._target.global_position)
 				sample.elbow_after = CONTACT.bone_world(enemy_rig, int(zombie_bones.middle))
 		)
+		var orientation_modifier: Variant = _contact._hand_orientation
+		orientation_modifier.modification_processed.connect(func() -> void:
+			modifier_order.append("orientation")
+			var alignment: Dictionary = orientation_modifier.get_alignment_errors_degrees()
+			if not alignment.is_empty():
+				sample.palm_error = float(alignment.palm)
+				sample.finger_error = float(alignment.finger)
+				sample.error = CONTACT.bone_world(enemy_rig, int(zombie_bones.end)).distance_to(_contact._target.global_position)
+		)
 		_contact.update_contact(0.15)
 		await process_frame
 		await process_frame
 		_check(int(sample.count) > 0, "%s imported two-bone IK runs" % side)
-		_check(float(sample.error) <= 0.05, "%s imported hand reaches Exo forearm within 5 cm (%.3fm)" % [side, float(sample.error)])
+		_check(modifier_order.find("ik") >= 0 and modifier_order.find("orientation") > modifier_order.find("ik"), "%s hand orientation modifier runs after TwoBoneIK3D" % side)
+		_check(float(sample.error) <= 0.05, "%s post-orientation hand reaches Exo forearm within 5 cm (%.3fm)" % [side, float(sample.error)])
+		_check(float(sample.palm_error) <= 1.0, "%s palm normal aligns with Exo forearm frame (%.3f degrees)" % [side, float(sample.palm_error)])
+		_check(float(sample.finger_error) <= 1.0, "%s curled hand axis follows forearm toward the wrist (%.3f degrees)" % [side, float(sample.finger_error)])
 		_check((sample.elbow_after as Vector3).distance_to(sample.elbow_before as Vector3) > 0.005, "%s elbow actually bends" % side)
 		_check(_contact.last_hand_error_m <= 0.05, "%s runtime metric captures post-IK error" % side)
 		var enemy_anchor := _zombie.global_position
@@ -144,6 +160,7 @@ func _run() -> void:
 		await process_frame
 		await process_frame
 		_check(_contact.is_solver_active() and float(sample.error) <= 0.05, "%s follows both small character rotations" % side)
+		_check(float(sample.palm_error) <= 1.0 and float(sample.finger_error) <= 1.0, "%s recalculates its palm frame after both actor rotations" % side)
 		_check(_zombie.global_position.distance_to(enemy_anchor) < 0.00001 and _player.global_position.distance_to(player_anchor) < 0.00001, "%s modifier does not move either CharacterBody3D" % side)
 		_player.global_position += Vector3(0.025, 0.0, 0.025)
 		await process_frame
@@ -152,14 +169,16 @@ func _run() -> void:
 		_player.global_position = player_anchor
 		_player.rotation.y = 0.0
 		_zombie.rotation.y = 0.0
-		print("STAGE3_IMPORTED_RIG side=%s reach=%.4f error=%.4f count=%d" % [side, reach, float(sample.error), int(sample.count)])
+		print("STAGE3_IMPORTED_RIG side=%s reach=%.4f position=%.4f palm_error_deg=%.4f finger_error_deg=%.4f count=%d" % [side, reach, float(sample.error), float(sample.palm_error), float(sample.finger_error), int(sample.count)])
 		_contact.end_contact("test_released")
 		_player._grab_session_id = 0
 		_player._limb_grab_owner = null
 		_player.grab_state = FoundationPlayer.GrabState.READY
 		await create_timer(CONTACT.BLEND_OUT_SECONDS + 0.02).timeout
 		await process_frame
-		_check(not _contact.is_solver_active() and enemy_rig.find_child("BrutalGrabArmIK", false, false) == null, "%s imported skeleton released cleanly" % side)
+		_check(not _contact.is_solver_active() and enemy_rig.find_child("BrutalGrabArmIK", false, false) == null and enemy_rig.find_child("BrutalGrabHandOrientation", false, false) == null, "%s imported skeleton releases both modifiers cleanly" % side)
+		var restored_hand_basis := enemy_rig.get_bone_global_pose(int(zombie_bones.end)).basis.orthonormalized()
+		_check(restored_hand_basis.get_rotation_quaternion().angle_to(authored_hand_basis.get_rotation_quaternion()) < 0.02, "%s cleanup leaves the authored punch wrist pose, not a stale orientation" % side)
 
 	# Verify real reach preflight against the authoritative Stage 1/2 transition.
 	var floor := StaticBody3D.new()
