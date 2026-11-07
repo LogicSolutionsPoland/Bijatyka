@@ -1,4 +1,4 @@
-name: Bijatyka brutal grab Stage 1 validation
+name: Bijatyka brutal grab Stages 1-2 headless validation
 
 on:
   push:
@@ -6,8 +6,12 @@ on:
       - feat/jump-horde-stage1-20261105
     paths:
       - game/scripts/player_controller.gd
+      - game/scripts/brutal_grab_qte.gd
+      - game/scripts/mobile_hud.gd
+      - game/scripts/foundation.gd
       - game/scripts/enemy.gd
       - game/tests/brutal_grab_state_machine_test.gd
+      - game/tests/brutal_grab_qte_test.gd
       - game/tests/stage6_integrated_headless_test.gd
       - .github/workflows/brutal-grab-stage1-validation.yml
   workflow_dispatch:
@@ -30,10 +34,10 @@ jobs:
           set -euo pipefail
           godot --headless --editor --path game --import --quit 2>&1 | tee grab-import.log
           if grep -E 'SCRIPT ERROR:|ERROR: Failed to load' grab-import.log; then exit 1; fi
-      - name: Grab state, prior grab behavior, jump, combat and control regressions
+      - name: Grab stages 1-2, jump, combat and control regressions
         run: |
           set -euo pipefail
-          for script in brutal_grab_state_machine_test.gd stage6_integrated_headless_test.gd jump_state_regression_test.gd test_runner.gd; do
+          for script in brutal_grab_state_machine_test.gd brutal_grab_qte_test.gd stage6_integrated_headless_test.gd jump_state_regression_test.gd test_runner.gd; do
             timeout 180s godot --headless --path game --script "res://tests/$script" 2>&1 | tee "$script.log"
             grep -q 'PASS:' "$script.log"
             if grep -E 'SCRIPT ERROR:|ERROR:' "$script.log"; then exit 1; fi
@@ -42,6 +46,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Bijatyka-brutal-grab-stage1-logs
+          name: Bijatyka-brutal-grab-stage2-logs
           path: "*.log"
           if-no-files-found: warn
