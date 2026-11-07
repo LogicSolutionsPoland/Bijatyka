@@ -2,7 +2,7 @@ extends Node3D
 ## Depth-tested, non-gameplay artwork anchored to the live flashlight endpoint.
 
 const TIP_SHADER := preload("res://shaders/flashlight_tip_silhouettes.gdshader")
-const ZOMBIE_GROUP_TEXTURE := preload("res://assets/effects/flashlight_tip_zombies.webp")
+const ZOMBIE_SILHOUETTE_MASK := preload("res://assets/effects/flashlight_tip_zombies.webp")
 const SILHOUETTE_OPACITY := 0.40
 const CLUSTER_FOOTPRINT_SCALE := 0.44
 const RENDER_PRIORITY := 127 # After the flashlight blackout composite.
@@ -31,7 +31,7 @@ func configure(camera_node: Camera3D) -> void:
 	material.shader = TIP_SHADER
 	material.render_priority = RENDER_PRIORITY
 	material.set_shader_parameter("silhouette_opacity", SILHOUETTE_OPACITY)
-	material.set_shader_parameter("zombie_group_texture", ZOMBIE_GROUP_TEXTURE)
+	material.set_shader_parameter("zombie_silhouette_mask", ZOMBIE_SILHOUETTE_MASK)
 	overlay.material_override = material
 	add_child(overlay)
 

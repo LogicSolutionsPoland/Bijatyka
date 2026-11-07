@@ -1,22 +1,64 @@
 shader_type spatial;
 render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, fog_disabled;
 
-uniform sampler2D zombie_group_texture : source_color, filter_linear_mipmap, repeat_disable;
+uniform sampler2D zombie_silhouette_mask : source_color, filter_linear_mipmap, repeat_disable;
 uniform float silhouette_opacity : hint_range(0.0, 1.0) = 0.40;
 uniform float animation_time_scale : hint_range(0.0, 2.0) = 1.0;
 
+float hash21(vec2 point) {
+	point = fract(point * vec2(123.34, 456.21));
+	point += dot(point, point + 45.32);
+	return fract(point.x * point.y);
+}
+
+float noise21(vec2 point) {
+	vec2 cell = floor(point);
+	vec2 local = fract(point);
+	local = local * local * (3.0 - 2.0 * local);
+	float a = hash21(cell);
+	float b = hash21(cell + vec2(1.0, 0.0));
+	float c = hash21(cell + vec2(0.0, 1.0));
+	float d = hash21(cell + vec2(1.0, 1.0));
+	return mix(mix(a, b, local.x), mix(c, d, local.x), local.y);
+}
+
+float fog_noise(vec2 point) {
+	float value = 0.0;
+	float amplitude = 0.55;
+	for (int octave = 0; octave < 3; octave++) {
+		value += noise21(point) * amplitude;
+		point = point * 2.03 + vec2(17.1, 9.2);
+		amplitude *= 0.5;
+	}
+	return value / 0.9625;
+}
+
 void fragment() {
-	// Keep the detailed cutout recognizable while giving the group a barely
-	// perceptible stagger and breathing motion at the flashlight boundary.
 	float effect_time = TIME * animation_time_scale;
 	vec2 uv = UV;
-	float sway = sin(effect_time * 0.72 + UV.y * 4.6 + UV.x * 2.3);
-	uv.x += sway * 0.004;
-	uv.y += sin(effect_time * 1.65 + UV.x * 5.2 + UV.y * 2.0) * 0.0015;
+	// The alpha channel supplies only the broken, predatory body contours.
+	// All surface color/detail is discarded so the figures read as silhouettes.
+	uv.x += sin(effect_time * 0.43 + UV.y * 4.1 + UV.x * 1.8) * 0.0035;
+	uv.y += sin(effect_time * 0.31 + UV.x * 3.8 + UV.y * 2.0) * 0.0025;
+	float source_alpha = texture(zombie_silhouette_mask, uv).a;
 
-	vec4 zombie_group = texture(zombie_group_texture, uv);
-	float cutout = smoothstep(0.015, 0.085, zombie_group.a);
-	// Preserve the charcoal/brown palette while keeping fleshy detail readable through the 40% reveal.
-	ALBEDO = min(zombie_group.rgb * vec3(1.55, 1.42, 1.28), vec3(0.68));
-	ALPHA = cutout * silhouette_opacity;
+	vec2 moving_fog_uv = UV * vec2(8.0, 5.0) + vec2(effect_time * 0.045, -effect_time * 0.032);
+	float cloud = fog_noise(moving_fog_uv);
+	float edge_noise = fog_noise(UV * vec2(15.0, 11.0) + vec2(-effect_time * 0.07, effect_time * 0.05));
+	float threshold = 0.16 + cloud * 0.06;
+	float body = smoothstep(threshold, 0.72 + cloud * 0.04, source_alpha);
+	float broken_density = 0.62 + edge_noise * 0.38;
+	float lower_body_fade = 1.0 - smoothstep(0.66, 1.0, UV.y);
+	float silhouette_alpha = body * broken_density * lower_body_fade * silhouette_opacity;
+
+	vec2 fog_center = vec2(0.5 + sin(effect_time * 0.20) * 0.025, 0.53 + cos(effect_time * 0.27) * 0.025);
+	vec2 fog_delta = (UV - fog_center) / vec2(0.53, 0.46);
+	float fog_shape = 1.0 - smoothstep(0.18, 1.0, dot(fog_delta, fog_delta));
+	float fog_density = smoothstep(0.24, 0.78, cloud) * fog_shape;
+	float fog_alpha = fog_density * 0.16 * (1.0 - body * 0.55);
+
+	vec3 fog_color = vec3(0.095, 0.084, 0.077);
+	vec3 shadow_color = vec3(0.012, 0.009, 0.008);
+	ALBEDO = mix(fog_color, shadow_color, body);
+	ALPHA = max(fog_alpha, silhouette_alpha);
 }
