@@ -90,6 +90,8 @@ func _run() -> void:
 	alpha_quad.mesh = alpha_mesh
 	alpha_quad.position = Vector3(0.0, 0.0, -2.0)
 	var alpha_material := effect.material.duplicate() as ShaderMaterial
+	# Isolate the silhouette layer while measuring its 40% opacity.
+	alpha_material.set_shader_parameter("fog_opacity", 0.0)
 	alpha_quad.material_override = alpha_material
 	probe_world.add_child(alpha_quad)
 	alpha_probe.add_child(probe_world)
