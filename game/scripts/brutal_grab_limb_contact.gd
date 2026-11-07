@@ -3,7 +3,7 @@ class_name BrutalGrabLimbContact
 ## Stage 3: visual-only, session-bound wrist contact. Never owns the QTE/hold.
 ## One TwoBoneIK3D on the active zombie rig; no CharacterBody3D motion.
 const BLEND_IN_SECONDS := 0.10
-const REACH_MARGIN_M := 0.06
+const REACH_MARGIN_M := 0.03
 const FOREARM_CONTACT_FRACTION := 0.82
 
 const PLAYER_BONES := {
@@ -208,7 +208,7 @@ func update_contact(delta: float) -> void:
 	var contact := forearm_contact_point(_player_skeleton, _target_forearm, _target_wrist)
 	var shoulder := bone_world(_enemy_skeleton, _upper_arm)
 	if shoulder.distance_to(contact) > _reach_m + REACH_MARGIN_M:
-		end_contact("target_outside_reach")
+		_cancel_owned_session("visual_contact_unreachable")
 		return
 	_target.global_position = contact
 	_update_pole()
@@ -222,6 +222,19 @@ func _on_ik_processed() -> void:
 
 func is_solver_active() -> bool:
 	return session_id > 0 and is_instance_valid(_ik) and _ik.active
+
+func _cancel_owned_session(reason: String) -> void:
+	# The contact component requests cleanup, but FoundationPlayer remains the
+	# sole authority that ends the grab/QTE and releases the attacker slot.
+	var active_id := session_id
+	var player: Node = _player_ref.get_ref() if _player_ref != null else null
+	var enemy: Node = _enemy_ref.get_ref() if _enemy_ref != null else null
+	if active_id > 0 and is_instance_valid(player) and is_instance_valid(enemy):
+		if player.has_method("get_active_grab_session_id") and player.has_method("get_active_grab_enemy") and player.has_method("cancel_limb_grab"):
+			if player.call("get_active_grab_session_id") == active_id and player.call("get_active_grab_enemy") == enemy:
+				player.call("cancel_limb_grab", reason)
+				return
+	end_contact(reason)
 
 func end_contact(reason: String = "cancelled") -> void:
 	last_end_reason = reason

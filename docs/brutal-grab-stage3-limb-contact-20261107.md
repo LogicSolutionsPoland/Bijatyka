@@ -24,22 +24,25 @@ The Exo rig is centimeter-origin with a 0.01 root model scale, while the enemy U
 
 One `TwoBoneIK3D` (Godot 4.7.2 API) is created under the zombie's currently detailed skeleton for the selected three-bone arm chain. The end target is 82% along the player's elbow-to-wrist segment, approximating a lower-forearm grip; a pole marker is placed outside the current elbow. The zombie's punch animation remains the authored holding pose and the player's pre-existing `Hit` pose is unchanged. The solver is blended in over 0.10 seconds using `SkeletonModifier3D.influence`; the existing 0.08-second enemy Idle/attack animation blend handles the exit. At release the IK is disabled and its influence reset immediately for safe cleanup. No extra animation tracks or new animation state are installed.
 
-The solver runs on the animated **enemy** skeleton only. Target sampling runs on the render frame after Exo Gray's retarget node (priority 100 versus 200). The left/right bone indices and references are cached at activation; inactive zombies do no IK work. Each frame checks the current session, actor validity, model retention, health and shoulder-to-target reach. Maximum reach is measured from actual shoulder/elbow/wrist positions with only 0.06 m allowance; out-of-reach contact is released without teleporting or stretching the player/enemy.
+The solver runs on the animated **enemy** skeleton only. Target sampling runs on the render frame after Exo Gray's retarget node (priority 100 versus 200). The left/right bone indices and references are cached at activation; inactive zombies do no IK work. Each frame checks the current session, actor validity, model retention, health and shoulder-to-target reach. Maximum reach is measured from actual shoulder/elbow/wrist positions with a 0.03 m allowance, below the 0.05 m contact tolerance. If reach is lost during a live QTE, the component asks `FoundationPlayer` to cancel its owned session; it does not resolve the gameplay grab itself.
 
 `TwoBoneIK3D` solves end-effector **position**, not guaranteed palm/finger wrap. The enemy still has the original closed-fist punch/holding animation; **real wrist grasp appearance and finger orientation require visual inspection**, and may need an additional bounded hand-only orientation/finger modifier later. A measured hand-to-target distance below 0.05 m is checked both on synthetic arm chains and **actual imported Exo/zombie skeletons**, after the deferred `modification_processed` callback. The component's `last_hand_error_m` records that post-solver world-space error, not a misleading pre-IK hand position. This position metric alone is not proof of a skin-to-skin grip. This limitation prevents claiming final photorealistic limb grabbing without visual evidence.
 
 ## Validation
 
-Headless suites (Godot 4.7.2, Ubuntu GitHub Actions):
+Local headless revalidation in this update (Godot 4.7.2, current implementation tree):
 - `brutal_grab_state_machine_test.gd`: **PASS 50** (Stage 1).
 - `brutal_grab_qte_test.gd`: **PASS 63** (Stage 2).
-- `brutal_grab_limb_contact_test.gd`: **PASS 45** (synthetic arm IK, mapping, rejection and cleanup).
-- `brutal_grab_real_rig_test.gd`: **PASS 41** (imported 112-bone Exo / 65-bone zombie skeletons, actual held punch clips, 5 cm threshold, measured elbow bending, minor actor rotations/translation, no CharacterBody3D movement, out-of-reach preflight before QTE, successful QTE escape release).
+- `brutal_grab_limb_contact_test.gd`: **PASS 46** (synthetic arm IK, both bone maps, 5 cm allowance, invalid/missing bones, session rejection and cleanup).
+- `brutal_grab_real_rig_test.gd`: **PASS 48** (imported 112-bone Exo / 65-bone zombie skeletons, both arms, actual held punch clips, 5 cm hand-position check, measured elbow bending, minor actor rotations/translation, no CharacterBody3D movement, preflight rejection, QTE escape and timeout release, dynamic reach-loss cancellation).
 - `stage6_integrated_headless_test.gd`: **PASS 28**.
 - `jump_state_regression_test.gd`: **PASS 25**.
 - `test_runner.gd`: **PASS 215**.
+- Godot project import: **PASS**, no script or resource load errors.
 
-Imported skeleton arm chain lengths: left/right **0.4947 m**. The rendered Exo lower-forearm target yielded **0.0000 m** world-space contact error on both sides when sampled after the held-punch IK modifier update in the real-rig headless regression. Left/right are not equivalent to visually verified fingertip wrap; the hand's punch pose remains the animation-authored orientation. These figures were produced by CI, not measured on Redmi. Validation run: `https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/42359524663`.
+Earlier CI run `42359524663` validated commit `848c1b244457e7964730d0000a05ef4c21adaa57`; its results are historical and precede the reach-loss regression added here.
+
+Imported skeleton arm chain lengths: left/right **0.4947 m**. The rendered Exo lower-forearm target yielded **0.0000 m** world-space contact error on both sides when sampled after the held-punch IK modifier update in the imported-rig headless regression. Left/right are not equivalent to visually verified fingertip wrap; the hand's punch pose remains the animation-authored orientation. The local checks are host results, not Redmi measurements.
 
 **Outstanding visual acceptance:** real in-game videos of left/right grabs at 40% scale, finger/palm orientation on both Exo sleeves, crowd/wall/uneven-terrain clipping, and Redmi Android 16 FPS/thermal behavior. The QTE/IK implementation is headless-validated, but skin-to-skin realism and on-device 60 FPS are **not** established. No APK was built in this stage.
 
@@ -47,6 +50,6 @@ Imported skeleton arm chain lengths: left/right **0.4947 m**. The rendered Exo l
 
 Only after the grab state is `GRABBED` and the active session ID is confirmed, Stage 4 may observe `grab_qte_started` and the selected `LEFT ARM` / `RIGHT ARM`. The camera should focus on the **visible Exo forearm contact point**, not the hidden source rig. On `grab_fully_ended` (or QTE finish with matching ID), reset the camera and discard old focus callbacks. Preserve movement, collision, player-enemy ownership and the existing 4 m fighting zone; never lock camera on windup alone, use global time scaling, or add new QTE inputs in Stage 4.
 
-## Post-stage Android device acceptance build request (2026-11-07)
+## Android and visual acceptance boundary
 
-The owner explicitly requested a new Android ARM64 debug APK after Stage 3 implementation, to inspect the real visual grab on a Redmi phone before planning Stage 4. This is a build/test checkpoint only, not Stage 4 implementation or proof of mobile visual acceptance. The prior headless test evidence and limitations remain unchanged. The CI commit starting with `build(stage10-apk-export):` deliberately permits the existing Android export workflow on this branch; any APK must be checked against its exact resulting commit SHA before distribution.
+This update does not build an APK. No Redmi or other device result is available. Headless hand-position and elbow checks do not validate palm orientation, finger wrap, skin clipping, crowded/wall/uneven-terrain cases, or mobile frame pacing. The held hand still uses its authored punch orientation; Stage 3 remains visually unaccepted until those details are inspected in a rendered build.

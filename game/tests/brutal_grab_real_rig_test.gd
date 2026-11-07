@@ -26,6 +26,31 @@ func _check(ok: bool, label: String) -> void:
 		failures.append(label)
 		push_error("Real grab rig: " + label)
 
+func _prepare_reachable_hold(player_exo: Skeleton3D, enemy_rig: Skeleton3D, limb: String, side: String) -> bool:
+	var holding_clip := String(FoundationEnemy.FIGHT_ANIMATION_BUILDER.clip_path("punch", side, FoundationEnemy.ENEMY_FIGHT_LIBRARY))
+	if not _zombie._animation_player.has_animation(holding_clip):
+		return false
+	_zombie._animation_player.play(holding_clip, 0.0)
+	_zombie._animation_player.seek(_zombie._attack_clip_contact_time(holding_clip), true)
+	_zombie._animation_player.pause()
+	_player._animation_player.play(FoundationPlayer.CHARACTER_MOTION.clip_path("Hit"), 0.0)
+	_player._animation_player.seek(0.12, true)
+	_player._animation_player.pause()
+	_player._exo_retarget.synchronize_pose()
+	await process_frame
+	var player_bones := CONTACT.resolve_player_bones(player_exo, limb, true)
+	var enemy_bones := CONTACT.resolve_enemy_bones(enemy_rig, side)
+	if player_bones.is_empty() or enemy_bones.is_empty():
+		return false
+	var target := CONTACT.forearm_contact_point(player_exo, int(player_bones.forearm), int(player_bones.wrist))
+	var shoulder := CONTACT.bone_world(enemy_rig, int(enemy_bones.root))
+	_zombie.global_position += target - shoulder + Vector3(0.0, 0.0, 0.20)
+	_zombie._limb_grab_limb = limb
+	_zombie._limb_grab_hand = side
+	_zombie.state = "limb_grab_windup"
+	_player._limb_grab_cooldown = 0.0
+	return _player.try_reserve_limb_grab(_zombie, limb)
+
 func _run() -> void:
 	_host = Node3D.new()
 	root.add_child(_host)
@@ -205,6 +230,33 @@ func _run() -> void:
 			for press in range(3):
 				_player.try_escape_limb_grab(id)
 			_check(_player.get_active_grab_session_id() == 0 and not _contact.is_solver_active() and _zombie.state == "recovery", "real QTE escape removes active IK cleanly")
+
+		# A real Stage 2 timeout must release the imported-rig modifier through
+		# the same authoritative completion signal as a successful escape.
+		var timeout_reserved := await _prepare_reachable_hold(player_exo, enemy_rig, "LEFT ARM", "left")
+		_check(timeout_reserved, "reachable imported rig can reserve the timeout session")
+		if timeout_reserved:
+			_zombie.state = "limb_hold"
+			var timeout_started := _player.begin_limb_grab(_zombie, "LEFT ARM")
+			_check(timeout_started and _contact.is_solver_active(), "real timeout session starts with active IK")
+			if timeout_started:
+				_player._update_limb_grab(_player.grab_qte_duration_seconds + 0.01)
+				_check(_player.get_active_grab_session_id() == 0 and not _contact.is_solver_active() and _zombie.state == "recovery", "real QTE timeout removes imported-rig IK")
+
+		# Dynamic overreach asks FoundationPlayer to cancel its owned QTE. The
+		# contact component never leaves a ghost HUD session or moves either body.
+		var reach_reserved := await _prepare_reachable_hold(player_exo, enemy_rig, "LEFT ARM", "left")
+		_check(reach_reserved, "reachable imported rig can reserve the reach-loss session")
+		if reach_reserved:
+			_zombie.state = "limb_hold"
+			var reach_started := _player.begin_limb_grab(_zombie, "LEFT ARM")
+			_check(reach_started and _contact.is_solver_active(), "reach-loss session starts with active IK")
+			if reach_started:
+				var enemy_anchor := _zombie.global_position
+				_player.global_position += Vector3(0.0, 0.0, 1.0)
+				_contact.update_contact(0.016)
+				_check(_player.get_active_grab_session_id() == 0 and not _contact.is_solver_active() and _zombie.state == "recovery", "out-of-reach contact cancels owner QTE and releases IK")
+				_check(_zombie.global_position.distance_to(enemy_anchor) < 0.00001, "reach cancellation never moves the enemy CharacterBody3D")
 
 	_finish()
 

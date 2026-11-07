@@ -92,6 +92,7 @@ func _run() -> void:
 	_check(not right.is_empty() and owner._skeleton.get_bone_name(right.wrist) == "hand_r", "right target mapped")
 	_check(not enemy_left.is_empty() and zombie._skeleton.get_bone_name(enemy_left.middle) == "lowerarm_l", "left elbow mapped")
 	_check(not enemy_right.is_empty() and zombie._skeleton.get_bone_name(enemy_right.end) == "hand_r", "right hand mapped")
+	_check(CONTACT.REACH_MARGIN_M <= 0.05, "reach allowance stays within the 5 cm contact tolerance")
 	_check(CONTACT.resolve_player_bones(owner._skeleton, "LEFT LEG", false).is_empty(), "leg contact intentionally not enabled")
 	_check(CONTACT.resolve_player_bones(null, "LEFT ARM", false).is_empty(), "invalid player skeleton rejected")
 	_check(CONTACT.resolve_enemy_bones(null, "left").is_empty(), "invalid enemy skeleton rejected")
