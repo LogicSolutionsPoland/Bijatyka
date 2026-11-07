@@ -77,7 +77,7 @@ var _status_timer := 0.0
 var _pending_notice := ""
 var _visibility_timer := 0.0
 var _floor_material: ShaderMaterial
-var _floor_skip_enabled := true
+var _floor_skip_enabled := false
 var _pencil_comparison_visible := true
 var _floor_fast_detail_enabled := false
 var _local_lights_enabled := true
@@ -171,8 +171,8 @@ func _ready() -> void:
 	_spawn_enemies()
 	_setup_performance_diagnostics()
 	_update_distance_visibility()
-	# Convert lit mesh materials, then draw the graphite pass before the
-	# flashlight's priority-126 black mask.
+	# Convert lit mesh materials and draw the graphite pass independently of
+	# the 3D flashlight beam; the full-screen blackout mask has been removed.
 	# Leave rooftop materials unstyled. Pencil conversion starts during descent.
 	var pencil_screen := PENCIL.add_screen_pass(camera)
 	pencil_screen.set_shader_parameter(&"line_color", Color(0.085, 0.10, 0.13, 0.82))
@@ -298,8 +298,8 @@ func _build_environment() -> void:
 	_rooftop_city_sky.sky_material = city_material
 	_rooftop_city_sky.process_mode = Sky.PROCESS_MODE_QUALITY
 	# The photo fills the lower field of view from the rooftop while the
-	# existing procedural sky continues overhead. The flashlight still
-	# blacks out the ground-level sky; the world sky is unobscured on the roof.
+	# existing procedural sky continues overhead. Ground and rooftop sky
+	# visibility is no longer altered by a fullscreen flashlight overlay.
 	environment.background_mode = Environment.BG_SKY
 	environment.sky = _ground_sky
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
@@ -405,7 +405,7 @@ func _build_arena() -> void:
 	_floor_material.shader = RADIAL_GROUND_SHADER
 	_floor_material.set_shader_parameter("floor_color", Color(0.105, 0.118, 0.135))
 	_floor_material.set_shader_parameter("player_position", Vector3.ZERO)
-	_floor_material.set_shader_parameter("floor_skip_enabled", flashlight_visibility_enabled)
+	_floor_material.set_shader_parameter("floor_skip_enabled", false)
 	_floor_material.set_shader_parameter("floor_fast_detail", _floor_fast_detail_enabled)
 	floor.material_override = _floor_material
 	floor.add_to_group("radial_floor")
@@ -1065,7 +1065,7 @@ func _apply_distance_visibility(node: Node) -> void:
 		return
 	if node is MultiMeshInstance3D and node.is_in_group("static_map_batch"):
 		# The loading coordinator owns visibility during elevator preparation.
-		# Once downstairs, skip distant cells before the flashlight mask pass.
+		# Once downstairs, skip distant cells before local scene rendering.
 		if _ground_map_ready and not _ground_map_preparing and not _rooftop_sky_active:
 			var city_cell := node as MultiMeshInstance3D
 			var bounds := city_cell.global_transform * city_cell.custom_aabb
@@ -1164,7 +1164,7 @@ func _set_debug_render_scale(scale: float) -> void:
 
 func _set_debug_mask_visible(is_visible: bool) -> void:
 	if OS.is_debug_build() and flashlight_visibility_manager != null:
-		# Leave the floor shader fixed for a one-pass A/B measurement.
+		# Retained for compatibility with the diagnostics panel; the mask is gone.
 		flashlight_visibility_manager.set_composite_visible_for_comparison(is_visible)
 
 func _set_debug_pencil_visible(is_visible: bool) -> void:
@@ -1202,10 +1202,8 @@ func _set_character_shadow_state(is_enabled: bool) -> void:
 
 func _update_floor_skip_enabled() -> void:
 	if _floor_material != null:
-		# Debug mask comparisons change only the fullscreen pass. The separate
-		# Floor skip button still profiles this ground shader independently.
-		_floor_material.set_shader_parameter("floor_skip_enabled",
-			flashlight_visibility_enabled and _floor_skip_enabled)
+		# Keep the whole floor visible after removing the flashlight blackout.
+		_floor_material.set_shader_parameter("floor_skip_enabled", false)
 
 func _set_debug_map_visible(is_visible: bool) -> void:
 	if OS.is_debug_build() and is_instance_valid(arena_map):
