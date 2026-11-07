@@ -22,7 +22,7 @@ The Exo rig is centimeter-origin with a 0.01 root model scale, while the enemy U
 
 ## Solver and sampling
 
-One `TwoBoneIK3D` (Godot 4.7.2 API) is created under the zombie's currently detailed skeleton for the selected three-bone arm chain. The end target is 82% along the player's elbow-to-wrist segment, approximating a lower-forearm grip; a pole marker is placed outside the current elbow. The zombie's punch animation remains the authored holding pose and the player's pre-existing `Hit` pose is unchanged. The solver is blended in over 0.10 seconds using `SkeletonModifier3D.influence`; the existing 0.08-second enemy Idle/attack animation blend handles the exit. At release the IK is disabled and its influence reset immediately for safe cleanup. No extra animation tracks or new animation state are installed.
+One `TwoBoneIK3D` (Godot 4.7.2 API) is created under the zombie's currently detailed skeleton for the selected three-bone arm chain. The end target is 82% along the player's elbow-to-wrist segment, approximating a lower-forearm grip; a pole marker is placed outside the current elbow. The zombie's punch animation remains the authored holding pose and the player's pre-existing `Hit` pose is unchanged. The solver blends in over 0.10 seconds and blends out over 0.08 seconds using `SkeletonModifier3D.influence`. Contact sampling and session ownership stop immediately on release; the short modifier fade then removes the IK node and target markers. Death, scene/model exit, lost ownership and out-of-reach reasons disable and clean it immediately. No extra animation tracks or new animation state are installed.
 
 The solver runs on the animated **enemy** skeleton only. Target sampling runs on the render frame after Exo Gray's retarget node (priority 100 versus 200). The left/right bone indices and references are cached at activation; inactive zombies do no IK work. Each frame checks the current session, actor validity, model retention, health and shoulder-to-target reach. Maximum reach is measured from actual shoulder/elbow/wrist positions with a 0.03 m allowance, below the 0.05 m contact tolerance. If reach is lost during a live QTE, the component asks `FoundationPlayer` to cancel its owned session; it does not resolve the gameplay grab itself.
 
@@ -33,8 +33,8 @@ The solver runs on the animated **enemy** skeleton only. Target sampling runs on
 Local headless revalidation in this update (Godot 4.7.2, current implementation tree):
 - `brutal_grab_state_machine_test.gd`: **PASS 50** (Stage 1).
 - `brutal_grab_qte_test.gd`: **PASS 63** (Stage 2).
-- `brutal_grab_limb_contact_test.gd`: **PASS 46** (synthetic arm IK, both bone maps, 5 cm allowance, invalid/missing bones, session rejection and cleanup).
-- `brutal_grab_real_rig_test.gd`: **PASS 48** (imported 112-bone Exo / 65-bone zombie skeletons, both arms, actual held punch clips, 5 cm hand-position check, measured elbow bending, minor actor rotations/translation, no CharacterBody3D movement, preflight rejection, QTE escape and timeout release, dynamic reach-loss cancellation).
+- `brutal_grab_limb_contact_test.gd`: **PASS 48** (synthetic arm IK, both bone maps, 5 cm allowance, invalid/missing bones, session rejection, measured release blend and cleanup).
+- `brutal_grab_real_rig_test.gd`: **PASS 50** (imported 112-bone Exo / 65-bone zombie skeletons, both arms, actual held punch clips, 5 cm hand-position check, measured elbow bending, minor actor rotations/translation, no CharacterBody3D movement, preflight rejection, QTE escape/timeout blend-out, dynamic reach-loss cancellation).
 - `stage6_integrated_headless_test.gd`: **PASS 28**.
 - `jump_state_regression_test.gd`: **PASS 25**.
 - `test_runner.gd`: **PASS 215**.

@@ -157,6 +157,7 @@ func _run() -> void:
 		_player._grab_session_id = 0
 		_player._limb_grab_owner = null
 		_player.grab_state = FoundationPlayer.GrabState.READY
+		await create_timer(CONTACT.BLEND_OUT_SECONDS + 0.02).timeout
 		await process_frame
 		_check(not _contact.is_solver_active() and enemy_rig.find_child("BrutalGrabArmIK", false, false) == null, "%s imported skeleton released cleanly" % side)
 
@@ -229,7 +230,9 @@ func _run() -> void:
 			var id := _player.get_active_grab_session_id()
 			for press in range(3):
 				_player.try_escape_limb_grab(id)
-			_check(_player.get_active_grab_session_id() == 0 and not _contact.is_solver_active() and _zombie.state == "recovery", "real QTE escape removes active IK cleanly")
+			_check(_player.get_active_grab_session_id() == 0 and _contact.is_solver_active() and not _contact.is_processing() and _zombie.state == "recovery", "real QTE escape stops target sampling and blends IK out")
+			await create_timer(CONTACT.BLEND_OUT_SECONDS + 0.02).timeout
+			_check(not _contact.is_solver_active(), "real QTE escape removes IK after blend-out")
 
 		# A real Stage 2 timeout must release the imported-rig modifier through
 		# the same authoritative completion signal as a successful escape.
@@ -241,7 +244,9 @@ func _run() -> void:
 			_check(timeout_started and _contact.is_solver_active(), "real timeout session starts with active IK")
 			if timeout_started:
 				_player._update_limb_grab(_player.grab_qte_duration_seconds + 0.01)
-				_check(_player.get_active_grab_session_id() == 0 and not _contact.is_solver_active() and _zombie.state == "recovery", "real QTE timeout removes imported-rig IK")
+				_check(_player.get_active_grab_session_id() == 0 and _contact.is_solver_active() and not _contact.is_processing() and _zombie.state == "recovery", "real QTE timeout starts imported-rig IK blend-out")
+				await create_timer(CONTACT.BLEND_OUT_SECONDS + 0.02).timeout
+				_check(not _contact.is_solver_active(), "real QTE timeout removes IK after blend-out")
 
 		# Dynamic overreach asks FoundationPlayer to cancel its owned QTE. The
 		# contact component never leaves a ghost HUD session or moves either body.

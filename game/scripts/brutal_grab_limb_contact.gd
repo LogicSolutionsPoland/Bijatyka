@@ -3,8 +3,14 @@ class_name BrutalGrabLimbContact
 ## Stage 3: visual-only, session-bound wrist contact. Never owns the QTE/hold.
 ## One TwoBoneIK3D on the active zombie rig; no CharacterBody3D motion.
 const BLEND_IN_SECONDS := 0.10
+const BLEND_OUT_SECONDS := 0.08
 const REACH_MARGIN_M := 0.03
 const FOREARM_CONTACT_FRACTION := 0.82
+const IMMEDIATE_END_REASONS := [
+	"actor_invalid", "session_or_hold_lost", "dead_or_model_changed",
+	"scene_exit", "replaced", "visual_contact_unreachable", "model_released",
+	"enemy_despawned", "enemy_died", "player_dead", "player_condemned", "respawn",
+]
 
 const PLAYER_BONES := {
 	"LEFT ARM": {"exo": ["LeftForeArm", "LeftHand"], "base": ["lowerarm_l", "hand_l"]},
@@ -34,6 +40,9 @@ var _elapsed := 0.0
 var _target: Marker3D
 var _pole: Marker3D
 var _ik: TwoBoneIK3D
+var _release_tween: Tween
+var _release_generation := 0
+var _is_releasing := false
 
 func configure(owner: Node) -> void:
 	set_process(false)
@@ -221,7 +230,7 @@ func _on_ik_processed() -> void:
 	last_hand_error_m = bone_world(_enemy_skeleton, _hand).distance_to(_target.global_position)
 
 func is_solver_active() -> bool:
-	return session_id > 0 and is_instance_valid(_ik) and _ik.active
+	return is_instance_valid(_ik) and _ik.active
 
 func _cancel_owned_session(reason: String) -> void:
 	# The contact component requests cleanup, but FoundationPlayer remains the
@@ -237,9 +246,36 @@ func _cancel_owned_session(reason: String) -> void:
 	end_contact(reason)
 
 func end_contact(reason: String = "cancelled") -> void:
+	if session_id <= 0:
+		if _is_releasing and reason in IMMEDIATE_END_REASONS:
+			last_end_reason = reason
+			_clear_contact_nodes()
+		return
 	last_end_reason = reason
 	session_id = 0
 	set_process(false)
+	if not is_instance_valid(_ik) or reason in IMMEDIATE_END_REASONS:
+		_clear_contact_nodes()
+		return
+	_is_releasing = true
+	_release_generation += 1
+	var release_token := _release_generation
+	_release_tween = create_tween()
+	_release_tween.tween_property(_ik, "influence", 0.0, BLEND_OUT_SECONDS).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	_release_tween.tween_callback(_finish_blended_release.bind(release_token))
+
+func _finish_blended_release(release_token: int) -> void:
+	if release_token != _release_generation or not _is_releasing:
+		return
+	_release_tween = null
+	_clear_contact_nodes()
+
+func _clear_contact_nodes() -> void:
+	_release_generation += 1
+	if is_instance_valid(_release_tween):
+		_release_tween.kill()
+	_release_tween = null
+	_is_releasing = false
 	if is_instance_valid(_ik):
 		_ik.influence = 0.0
 		_ik.active = false

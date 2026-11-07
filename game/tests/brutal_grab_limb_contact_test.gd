@@ -125,8 +125,14 @@ func _run() -> void:
 	await process_frame
 	_check(int(left_sample.count) > 0, "left IK modifier actually processed")
 	_check(float(left_sample.error) <= 0.05, "left wrist attachment within 5 cm after IK: %.3fm" % float(left_sample.error))
+	var release_modifier := contact._ik
+	var influence_before_release := release_modifier.influence
 	contact.end_contact("escaped")
-	_check(not contact.is_solver_active() and not contact.is_processing(), "QTE success disables solver")
+	_check(contact.is_solver_active() and not contact.is_processing() and contact.session_id == 0, "QTE success stops contact sampling and blends solver out")
+	await create_timer(CONTACT.BLEND_OUT_SECONDS * 0.5).timeout
+	_check(release_modifier.influence > 0.0 and release_modifier.influence < influence_before_release, "IK influence decreases during release blend")
+	await create_timer(CONTACT.BLEND_OUT_SECONDS).timeout
+	_check(not contact.is_solver_active(), "QTE success disables solver after blend-out")
 	contact.end_contact("repeat")
 	_check(not contact.is_solver_active() and contact.session_id == 0, "cleanup idempotent")
 	await process_frame
@@ -191,6 +197,7 @@ func _run() -> void:
 	contact.end_contact("escaped")
 	_check(_begin("RIGHT ARM", "right") and owner.id > old_id and contact.session_id == owner.id, "consecutive session has new owner ID")
 	contact.end_contact("reset")
+	await create_timer(CONTACT.BLEND_OUT_SECONDS + 0.02).timeout
 	await process_frame
 	_check(zombie._skeleton.find_child("BrutalGrabArmIK", false, false) == null, "consecutive sessions leave no overrides")
 
