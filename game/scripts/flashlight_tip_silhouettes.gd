@@ -4,7 +4,7 @@ extends Node3D
 const TIP_SHADER := preload("res://shaders/flashlight_tip_silhouettes.gdshader")
 const ZOMBIE_GROUP_TEXTURE := preload("res://assets/effects/flashlight_tip_zombies.webp")
 const SILHOUETTE_OPACITY := 0.40
-const CLUSTER_FOOTPRINT_SCALE := 0.34
+const CLUSTER_FOOTPRINT_SCALE := 0.44
 const RENDER_PRIORITY := 127 # After the flashlight blackout composite.
 
 var camera: Camera3D

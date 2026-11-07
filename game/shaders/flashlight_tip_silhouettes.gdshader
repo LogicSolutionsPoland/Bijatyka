@@ -16,6 +16,7 @@ void fragment() {
 
 	vec4 zombie_group = texture(zombie_group_texture, uv);
 	float cutout = smoothstep(0.015, 0.085, zombie_group.a);
-	ALBEDO = zombie_group.rgb;
+	// Preserve the charcoal/brown palette while keeping fleshy detail readable through the 40% reveal.
+	ALBEDO = min(zombie_group.rgb * vec3(1.55, 1.42, 1.28), vec3(0.68));
 	ALPHA = cutout * silhouette_opacity;
 }
