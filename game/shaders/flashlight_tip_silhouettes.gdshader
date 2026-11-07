@@ -1,7 +1,7 @@
 shader_type spatial;
 render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, fog_disabled, depth_test_disabled;
 
-uniform sampler2D zombie_silhouette_mask : source_color, filter_linear_mipmap, repeat_disable;
+uniform sampler2D zombie_contour_mask : source_color, filter_linear_mipmap, repeat_disable;
 uniform float silhouette_opacity : hint_range(0.0, 1.0) = 0.40;
 uniform float fog_opacity : hint_range(0.0, 1.0) = 0.72;
 uniform float animation_time_scale : hint_range(0.0, 2.0) = 1.0;
@@ -37,23 +37,11 @@ float fog_noise(vec2 point) {
 void fragment() {
 	float effect_time = TIME * animation_time_scale;
 	vec2 uv = UV;
-	// Keep the alpha mask's jagged zombie edges, but draw only their contours.
-	// The RGB art is discarded so the fog contains no filled model shapes.
+	// The texture contains hand-drawn ink contours; sample alpha only for fog blending.
 	uv.x += sin(effect_time * 0.43 + UV.y * 4.1 + UV.x * 1.8) * 0.0035;
 	uv.y += sin(effect_time * 0.31 + UV.x * 3.8 + UV.y * 2.0) * 0.0025;
-	float source_alpha = texture(zombie_silhouette_mask, uv).a;
-	vec2 contour_step = vec2(6.0 / 768.0, 6.0 / 512.0);
-	float neighbor_alpha = min(
-		min(texture(zombie_silhouette_mask, uv + vec2(contour_step.x, 0.0)).a,
-			texture(zombie_silhouette_mask, uv - vec2(contour_step.x, 0.0)).a),
-		min(texture(zombie_silhouette_mask, uv + vec2(0.0, contour_step.y)).a,
-			texture(zombie_silhouette_mask, uv - vec2(0.0, contour_step.y)).a));
-	neighbor_alpha = min(neighbor_alpha, min(
-		min(texture(zombie_silhouette_mask, uv + contour_step).a,
-			texture(zombie_silhouette_mask, uv - contour_step).a),
-		min(texture(zombie_silhouette_mask, uv + vec2(contour_step.x, -contour_step.y)).a,
-			texture(zombie_silhouette_mask, uv + vec2(-contour_step.x, contour_step.y)).a)));
-	float contour_strength = smoothstep(0.12, 0.72, source_alpha - neighbor_alpha);
+	float source_alpha = texture(zombie_contour_mask, uv).a;
+	float contour_strength = smoothstep(0.08, 0.78, source_alpha);
 
 	vec2 moving_fog_uv = UV * vec2(8.0, 5.0) + vec2(effect_time * 0.045, -effect_time * 0.032);
 	float cloud = fog_noise(moving_fog_uv);
