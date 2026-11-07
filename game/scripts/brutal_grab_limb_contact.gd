@@ -79,6 +79,27 @@ static func bone_world(skeleton: Skeleton3D, bone: int) -> Vector3:
 static func forearm_contact_point(skeleton: Skeleton3D, forearm: int, wrist: int) -> Vector3:
 	return bone_world(skeleton, forearm).lerp(bone_world(skeleton, wrist), FOREARM_CONTACT_FRACTION)
 
+# Read-only admission used before Stage 2 QTE starts on detailed actors.
+# The same chain mapping and reach limits are enforced by begin_contact().
+func can_reach_contact(enemy: Node, player: Node, limb: String, hand_side: String) -> bool:
+	if not is_instance_valid(enemy) or not is_instance_valid(player):
+		return false
+	var rig := enemy.get("_skeleton") as Skeleton3D
+	var driver := player.get("_exo_retarget") as PlayerExoGrayRetarget
+	var exo := is_instance_valid(driver) and is_instance_valid(driver.target_skeleton)
+	var target_rig: Skeleton3D = driver.target_skeleton if exo else player.get("_skeleton") as Skeleton3D
+	var player_bones := resolve_player_bones(target_rig, limb, exo)
+	var enemy_bones := resolve_enemy_bones(rig, hand_side)
+	if player_bones.is_empty() or enemy_bones.is_empty():
+		return false
+	var shoulder := bone_world(rig, int(enemy_bones.root))
+	var elbow := bone_world(rig, int(enemy_bones.middle))
+	var wrist := bone_world(rig, int(enemy_bones.end))
+	var upper_length := shoulder.distance_to(elbow)
+	var lower_length := elbow.distance_to(wrist)
+	var distance := shoulder.distance_to(forearm_contact_point(target_rig, int(player_bones.forearm), int(player_bones.wrist)))
+	return upper_length + lower_length > 0.02 and distance <= upper_length + lower_length + REACH_MARGIN_M and distance >= absf(upper_length - lower_length) + 0.02
+
 func begin_contact(enemy: Node, player: Node, limb: String, hand_side: String, id: int) -> bool:
 	end_contact("replaced")
 	last_reject_reason = ""
