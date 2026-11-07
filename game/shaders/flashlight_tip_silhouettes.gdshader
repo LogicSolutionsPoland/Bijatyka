@@ -3,7 +3,7 @@ render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, fog_disabled;
 
 uniform sampler2D zombie_silhouette_mask : source_color, filter_linear_mipmap, repeat_disable;
 uniform float silhouette_opacity : hint_range(0.0, 1.0) = 0.40;
-uniform float fog_opacity : hint_range(0.0, 1.0) = 0.22;
+uniform float fog_opacity : hint_range(0.0, 1.0) = 0.40;
 uniform float animation_time_scale : hint_range(0.0, 2.0) = 1.0;
 
 float hash21(vec2 point) {
@@ -60,7 +60,7 @@ void fragment() {
 
 	// Composite the smoke behind the dark, partially obscured contours.
 	float combined_alpha = silhouette_alpha + mist_alpha * (1.0 - silhouette_alpha);
-	vec3 fog_color = vec3(0.22, 0.21, 0.20);
+	vec3 fog_color = vec3(0.32, 0.31, 0.30);
 	vec3 shadow_color = vec3(0.008, 0.006, 0.005);
 	vec3 premultiplied_color = shadow_color * silhouette_alpha
 		+ fog_color * mist_alpha * (1.0 - silhouette_alpha);
