@@ -42,10 +42,7 @@ func _run() -> void:
 	if not is_instance_valid(player_exo) or not is_instance_valid(enemy_rig) or not is_instance_valid(_contact):
 		_finish()
 		return
-	_zombie._animation_player.play(&"Idle", 0.0)
-	_zombie._animation_player.seek(0.05, true)
-	_zombie._animation_player.pause()
-	_player._animation_player.play(_player.CHARACTER_MOTION.clip_path("Hit"), 0.0)
+	_player._animation_player.play(FoundationPlayer.CHARACTER_MOTION.clip_path("Hit"), 0.0)
 	_player._animation_player.seek(0.12, true)
 	_player._animation_player.pause()
 	await process_frame
@@ -58,6 +55,16 @@ func _run() -> void:
 		_check(not zombie_bones.is_empty(), "real zombie %s upper/forearm/hand parent chain" % side)
 		if player_bones.is_empty() or zombie_bones.is_empty():
 			continue
+		# The original per-side punch is held at its authored contact marker.
+		_zombie.global_position = Vector3.ZERO
+		var punch := String(FoundationEnemy.FIGHT_ANIMATION_BUILDER.clip_path("punch", side, FoundationEnemy.ENEMY_FIGHT_LIBRARY))
+		_check(_zombie._animation_player.has_animation(punch), "%s existing zombie hold animation" % side)
+		if not _zombie._animation_player.has_animation(punch):
+			continue
+		_zombie._animation_player.play(punch, 0.0)
+		_zombie._animation_player.seek(_zombie._attack_clip_contact_time(punch), true)
+		_zombie._animation_player.pause()
+		await process_frame
 		var target := CONTACT.forearm_contact_point(player_exo, int(player_bones.forearm), int(player_bones.wrist))
 		var shoulder := CONTACT.bone_world(enemy_rig, int(zombie_bones.root))
 		var elbow := CONTACT.bone_world(enemy_rig, int(zombie_bones.middle))
@@ -98,6 +105,22 @@ func _run() -> void:
 		_check(int(sample.count) > 0, "%s imported two-bone IK runs" % side)
 		_check(float(sample.error) <= 0.05, "%s imported hand reaches Exo forearm within 5 cm (%.3fm)" % [side, float(sample.error)])
 		_check((sample.elbow_after as Vector3).distance_to(sample.elbow_before as Vector3) > 0.005, "%s elbow actually bends" % side)
+		_check(_contact.last_hand_error_m <= 0.05, "%s runtime metric captures post-IK error" % side)
+		var enemy_anchor := _zombie.global_position
+		var player_anchor := _player.global_position
+		_player.rotation.y = 0.05
+		_zombie.rotation.y = -0.05
+		await process_frame
+		await process_frame
+		_check(_contact.is_solver_active() and float(sample.error) <= 0.05, "%s follows both small character rotations" % side)
+		_check(_zombie.global_position.distance_to(enemy_anchor) < 0.00001 and _player.global_position.distance_to(player_anchor) < 0.00001, "%s modifier does not move either CharacterBody3D" % side)
+		_player.global_position += Vector3(0.025, 0.0, 0.025)
+		await process_frame
+		await process_frame
+		_check(_contact.is_solver_active() and float(sample.error) <= 0.05, "%s follows small player translation" % side)
+		_player.global_position = player_anchor
+		_player.rotation.y = 0.0
+		_zombie.rotation.y = 0.0
 		print("STAGE3_IMPORTED_RIG side=%s reach=%.4f error=%.4f count=%d" % [side, reach, float(sample.error), int(sample.count)])
 		_contact.end_contact("test_released")
 		_player._grab_session_id = 0
