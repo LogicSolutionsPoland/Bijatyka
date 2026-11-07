@@ -148,6 +148,8 @@ func begin_contact(enemy: Node, player: Node, limb: String, hand_side: String, i
 	_ik.set_target_node(0, _ik.get_path_to(_target))
 	_ik.set_pole_node(0, _ik.get_path_to(_pole))
 	_ik.set_pole_direction(0, SkeletonModifier3D.SECONDARY_DIRECTION_PLUS_Y)
+	# This fires *after* Godot solves and blends the skeleton pose.
+	_ik.modification_processed.connect(_on_ik_processed)
 	_ik.influence = 0.0
 	_ik.active = true
 	session_id = id
@@ -191,7 +193,11 @@ func update_contact(delta: float) -> void:
 	_update_pole()
 	_elapsed += maxf(0.0, delta)
 	_ik.influence = clampf(_elapsed / BLEND_IN_SECONDS, 0.0, 1.0)
-	last_hand_error_m = bone_world(_enemy_skeleton, _hand).distance_to(contact)
+
+func _on_ik_processed() -> void:
+	if session_id <= 0 or not is_instance_valid(_enemy_skeleton) or not is_instance_valid(_target):
+		return
+	last_hand_error_m = bone_world(_enemy_skeleton, _hand).distance_to(_target.global_position)
 
 func is_solver_active() -> bool:
 	return session_id > 0 and is_instance_valid(_ik) and _ik.active
