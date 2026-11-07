@@ -21,7 +21,12 @@ signal grab_interrupted(reason: String, enemy: FoundationEnemy, limb: String)
 signal grab_escaped(enemy: FoundationEnemy, limb: String)
 signal grab_failed(enemy: FoundationEnemy, limb: String)
 signal grab_fully_ended(reason: String)
+# Stable Stage 3 contract: session ID, attacker and limb are bound at GRABBED.
+signal grab_qte_started(session_id: int, enemy: FoundationEnemy, limb: String, required_presses: int, duration_seconds: float)
+signal grab_qte_progress(session_id: int, accepted_presses: int, required_presses: int, remaining_seconds: float)
+signal grab_qte_finished(session_id: int, outcome: String)
 
+const GRAB_QTE_SCRIPT := preload("res://scripts/brutal_grab_qte.gd")
 const RAGE_SCRIPT := preload("res://scripts/rage_progression.gd")
 const FIGHT_ANIMATION_BUILDER := preload("res://scripts/universal_base_combat.gd")
 const CHARACTER_MOTION := preload("res://scripts/universal_base_motion.gd")
@@ -62,6 +67,8 @@ const SPELLS := {
 @export_range(0.8, 4.0, 0.1) var forward_jump_arc_height_m := 2.4
 @export_range(0.5, 3.0, 0.1) var limb_grab_hold_seconds := 2.2
 @export_range(1.0, 6.0, 0.1) var limb_grab_regrab_seconds := 3.0
+@export_range(0.5, 4.0, 0.1) var grab_qte_duration_seconds := 1.5
+@export_range(1, 8, 1) var grab_qte_required_presses := 3
 
 var rage: RageProgression = RAGE_SCRIPT.new()
 var health := MAX_HEALTH
@@ -107,6 +114,10 @@ var _limb_grab_owner: FoundationEnemy
 var _limb_grab_limb := ""
 var _limb_grab_time := 0.0
 var _limb_grab_cooldown := 0.0
+# Monotonic IDs reject inputs/callbacks from earlier holds, even on the same enemy.
+var _grab_session_serial := 0
+var _grab_session_id := 0
+var _grab_qte := GRAB_QTE_SCRIPT.new()
 var flashlight_visibility_manager: Node
 var _character_motion_ready := false
 var _character_action_time := 0.0
@@ -680,7 +691,7 @@ func try_parabolic_jump() -> bool:
 	return true
 
 # Enemy-to-player limb hold; independent from the player's melee grapple.
-# Stage 2 will replace the single escape action, not the session lifecycle.
+# FoundationPlayer is the sole grab authority. QTE stores only per-session progress.
 func get_grab_state() -> int:
 	return grab_state
 
@@ -693,6 +704,18 @@ func get_active_grab_enemy() -> FoundationEnemy:
 
 func get_grab_limb() -> String:
 	return _limb_grab_limb if grab_state in [GrabState.WINDUP, GrabState.GRABBED] else ""
+
+func get_active_grab_session_id() -> int:
+	return _grab_session_id if grab_state == GrabState.GRABBED else 0
+
+func get_grab_qte_progress() -> int:
+	return _grab_qte.get_press_count() if grab_state == GrabState.GRABBED else 0
+
+func get_grab_qte_remaining_seconds() -> float:
+	return _grab_qte.get_remaining_seconds() if grab_state == GrabState.GRABBED else 0.0
+
+func get_grab_qte_required_presses() -> int:
+	return _grab_qte.get_required_presses() if grab_state == GrabState.GRABBED else 0
 
 func _set_grab_state(next_state: GrabState) -> void:
 	if grab_state == next_state:
@@ -738,7 +761,7 @@ func begin_limb_grab(enemy: FoundationEnemy, limb: String) -> bool:
 	_desktop_attack_repeat_timers.clear()
 	_finish_attack()
 	_limb_grab_owner = enemy
-	_limb_grab_time = clampf(limb_grab_hold_seconds, 0.5, 3.0)
+	_limb_grab_time = 0.0
 	velocity.x = 0.0
 	velocity.z = 0.0
 	_play_character_action("Hit", float(CHARACTER_MOTION.ACTIONS.get("Hit", 0.34)))
@@ -746,14 +769,33 @@ func begin_limb_grab(enemy: FoundationEnemy, limb: String) -> bool:
 		_animation_player.seek(0.12, true)
 		_animation_player.pause()
 	_set_grab_state(GrabState.GRABBED)
+	# Start only after GRABBED, never during WINDUP. No independent QTE timer.
+	if grab_state != GrabState.GRABBED or _limb_grab_owner != enemy:
+		return false
+	_grab_session_serial += 1
+	_grab_session_id = _grab_session_serial
+	if not _grab_qte.begin(_grab_session_id, enemy, limb, grab_qte_duration_seconds, grab_qte_required_presses):
+		_finish_limb_grab("qte_setup_failed")
+		return false
+	_limb_grab_time = _grab_qte.get_remaining_seconds()
 	limb_grab_started.emit(limb)
 	grab_established.emit(enemy, limb)
+	grab_qte_started.emit(_grab_session_id, enemy, limb, _grab_qte.get_required_presses(), _limb_grab_time)
+	grab_qte_progress.emit(_grab_session_id, 0, _grab_qte.get_required_presses(), _limb_grab_time)
 	return true
 
-func try_escape_limb_grab() -> bool:
-	if grab_state != GrabState.GRABBED:
+# The caller must send a fresh input edge. Optional session token rejects stale events.
+# True means the press was accepted, not necessarily that the player has escaped.
+func try_escape_limb_grab(session_id: int = -1) -> bool:
+	if grab_state != GrabState.GRABBED or get_tree().paused:
 		return false
-	_finish_limb_grab("escaped")
+	if session_id >= 0 and session_id != _grab_session_id:
+		return false
+	if not _grab_qte.accept_press(_grab_session_id, _limb_grab_owner, _limb_grab_limb):
+		return false
+	grab_qte_progress.emit(_grab_session_id, _grab_qte.get_press_count(), _grab_qte.get_required_presses(), _grab_qte.get_remaining_seconds())
+	if _grab_qte.is_complete():
+		_finish_limb_grab("escaped")
 	return true
 
 func end_limb_grab(enemy: FoundationEnemy, reason: String = "enemy_released") -> void:
@@ -768,6 +810,10 @@ func _finish_limb_grab(reason: String) -> void:
 	if not is_instance_valid(zombie):
 		zombie = null
 	var limb := _limb_grab_limb
+	var finished_session_id := _grab_session_id
+	# Invalidate before enemy release or any terminal signals can re-enter us.
+	_grab_session_id = 0
+	_grab_qte.cancel()
 	if held and reason == "escaped":
 		_set_grab_state(GrabState.ESCAPED)
 	elif held and reason == "timeout":
@@ -807,6 +853,8 @@ func _finish_limb_grab(reason: String) -> void:
 		limb_grab_ended.emit()
 	_set_grab_state(GrabState.READY)
 	grab_fully_ended.emit(reason)
+	if held and finished_session_id > 0:
+		grab_qte_finished.emit(finished_session_id, reason)
 
 func cancel_limb_grab(reason: String = "cancelled") -> void:
 	_finish_limb_grab(reason)
@@ -829,10 +877,15 @@ func _update_limb_grab(delta: float) -> void:
 		_finish_limb_grab("player_dead")
 	elif _jump_state != JumpState.READY or _parabolic_jump_active or not _grab_enemy_eligible(_limb_grab_owner):
 		_finish_limb_grab("reservation_lost")
+	elif not _grab_qte.matches(_grab_session_id, _limb_grab_owner, _limb_grab_limb):
+		_finish_limb_grab("qte_session_lost")
 	else:
-		_limb_grab_time = maxf(0.0, _limb_grab_time - delta)
-		if _limb_grab_time <= 0.0:
+		var expired := _grab_qte.advance(_grab_session_id, delta)
+		_limb_grab_time = _grab_qte.get_remaining_seconds()
+		if expired:
 			_finish_limb_grab("timeout")
+		else:
+			grab_qte_progress.emit(_grab_session_id, _grab_qte.get_press_count(), _grab_qte.get_required_presses(), _limb_grab_time)
 
 func _exit_tree() -> void:
 	cancel_limb_grab("scene_exit")
