@@ -53,6 +53,9 @@ func _rig(parent: Node3D, exo: bool = false) -> Skeleton3D:
 		skeleton.set_bone_rest(upper_idx, Transform3D(Basis.IDENTITY, Vector3(0.22 * side_sign, 1.4, 0.0)))
 		skeleton.set_bone_rest(lower_idx, Transform3D(Basis.IDENTITY, Vector3(0.17 * side_sign, -0.13, 0.08)))
 		skeleton.set_bone_rest(hand_idx, Transform3D(Basis.IDENTITY, Vector3(0.15 * side_sign, -0.16, 0.10)))
+	# Newly created bones have identity pose, not the authored rest transform.
+	skeleton.reset_bone_poses()
+	skeleton.force_update_all_bone_transforms()
 	return skeleton
 
 func _valid_session() -> int:
@@ -100,7 +103,12 @@ func _run() -> void:
 	_check(not contact.begin_contact(null, owner, "LEFT ARM", "left", 1), "invalid enemy reference rejected")
 	_check(not contact.begin_contact(zombie, null, "LEFT ARM", "left", 1), "invalid player reference rejected")
 
-	_check(_begin(), "left-arm contact initializes")
+	var initial_contact := _begin()
+	_check(initial_contact, "left-arm contact initializes: %s" % contact.last_reject_reason)
+	if not initial_contact:
+		print("FAIL: Stage 3 IK fixture setup rejected: " + contact.last_reject_reason)
+		quit(1)
+		return
 	_check(contact.is_solver_active() and contact.session_id == owner.id and contact.is_processing(), "exactly one active solver")
 	_check(contact._ik.setting_count == 1 and contact._ik.get_end_bone_name(0) == "hand_l", "two-bone IK uses chosen hand")
 	contact.update_contact(0.20)
