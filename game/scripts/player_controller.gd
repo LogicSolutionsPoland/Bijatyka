@@ -44,6 +44,8 @@ enum JumpState { READY, ORDINARY, FORWARD }
 enum GrabState { READY, WINDUP, GRABBED, ESCAPED, FAILED, RECOVERY }
 const TARGET_MELEE_HITS_PER_SECOND := 5.0
 const TARGET_MELEE_CYCLE_SECONDS := 1.0 / TARGET_MELEE_HITS_PER_SECOND
+const MELEE_LUNGE_SPEED_MPS := 1.5
+const MELEE_LUNGE_DURATION_SECONDS := TARGET_MELEE_CYCLE_SECONDS
 const MELEE_TIMER_EPSILON := 0.0001
 const ATTACK_ANIMATION_BLEND_SECONDS := 0.06
 const CHAIN_TARGET_RADIUS := 5.0
@@ -83,6 +85,8 @@ var attack_count := 0
 var _queued_attack_kind := ""
 var _queued_attack_side := ""
 var _attack_recovery_locked := false
+var _melee_lunge_time := 0.0
+var _melee_lunge_direction := Vector3.ZERO
 var movement_slow_time := 0.0
 var movement_slow_factor := 1.0
 var _jump_state: JumpState = JumpState.READY
@@ -276,6 +280,10 @@ func _physics_process(delta: float) -> void:
 		velocity.y = 0.0
 	var started_airborne := not is_on_floor() or velocity.y > 0.1
 	move_and_slide()
+	if _melee_lunge_time > 0.0:
+		_melee_lunge_time = maxf(0.0, _melee_lunge_time - delta)
+		if _melee_lunge_time == 0.0:
+			_melee_lunge_direction = Vector3.ZERO
 	if _parabolic_jump_active and is_on_wall():
 		# Keep vertical motion and landing intact while a wall stops forward travel.
 		velocity.x = 0.0
@@ -371,8 +379,22 @@ func _update_movement(delta: float) -> void:
 			_play_character_action(turn_action, float(CHARACTER_MOTION.ACTIONS.get(turn_action, 0.28)))
 		rotation.y = lerp_angle(rotation.y, target_yaw, minf(1.0, delta * 16.0))
 	var speed := 4.8 * movement_slow_factor
-	velocity.x = direction.x * speed
-	velocity.z = direction.z * speed
+	var horizontal_velocity := direction * speed
+	if _melee_lunge_time > 0.0:
+		horizontal_velocity += _melee_lunge_direction * MELEE_LUNGE_SPEED_MPS * movement_slow_factor
+	velocity.x = horizontal_velocity.x
+	velocity.z = horizontal_velocity.z
+
+func _start_melee_lunge() -> void:
+	# Preserve the scripted horizontal arc of the forward parabolic jump.
+	if _parabolic_jump_active:
+		return
+	var forward := -global_transform.basis.z
+	forward.y = 0.0
+	if forward.length_squared() < 0.01:
+		return
+	_melee_lunge_direction = forward.normalized()
+	_melee_lunge_time = MELEE_LUNGE_DURATION_SECONDS
 
 func request_attack(kind: String, side: String = "right") -> bool:
 	if not ATTACKS.has(kind) or side not in ["left", "right"] or rage.current_soul_condemned or _limb_grab_owner != null:
@@ -594,6 +616,7 @@ func _update_attack(delta: float) -> void:
 			_begin_strike()
 		"windup":
 			attack_phase = "active"
+			_start_melee_lunge()
 			_resolve_attack()
 			attack_phase_time = EXO_KICK_ACTIVE_SECONDS if _exo_kick_active else float(ATTACKS[attack_kind].active)
 		"active":
@@ -1269,6 +1292,8 @@ func _reset_at_safe_base() -> void:
 	_previous_engagement_target = null
 	global_position = safe_base_position
 	velocity = Vector3.ZERO
+	_melee_lunge_time = 0.0
+	_melee_lunge_direction = Vector3.ZERO
 	health = MAX_HEALTH
 	magic_energy = MAX_MAGIC
 	current_spell = ""
