@@ -1,9 +1,9 @@
 shader_type spatial;
-render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, fog_disabled;
+render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, fog_disabled, depth_test_disabled;
 
 uniform sampler2D zombie_silhouette_mask : source_color, filter_linear_mipmap, repeat_disable;
 uniform float silhouette_opacity : hint_range(0.0, 1.0) = 0.40;
-uniform float fog_opacity : hint_range(0.0, 1.0) = 0.40;
+uniform float fog_opacity : hint_range(0.0, 1.0) = 0.55;
 uniform float animation_time_scale : hint_range(0.0, 2.0) = 1.0;
 
 float hash21(vec2 point) {

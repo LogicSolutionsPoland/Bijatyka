@@ -26,17 +26,17 @@ func _run() -> void:
 	if effect == null:
 		_finish()
 		return
-	_check(effect.overlay is MeshInstance3D and effect.material != null, "effect uses one persistent depth-tested quad and shader material")
+	_check(effect.overlay is MeshInstance3D and effect.material != null, "effect uses one persistent fog quad and shader material")
 	var zombie_texture := effect.material.get_shader_parameter("zombie_silhouette_mask") as Texture2D
-	_check(is_equal_approx(float(effect.material.get_shader_parameter("fog_opacity")), 0.40),
-		"translucent moving fog surrounds the zombie silhouettes")
+	_check(is_equal_approx(float(effect.material.get_shader_parameter("fog_opacity")), 0.55),
+		"stronger translucent moving fog surrounds the zombie silhouettes")
 	_check(zombie_texture != null and zombie_texture.resource_path.ends_with("flashlight_tip_zombie_silhouettes.webp"),
 		"carnivorous zombie shapes emerge as dark silhouettes through the moving fog")
 	_check(effect.material.render_priority == 127, "effect draws after the 3D blackout composite")
 	_check(is_equal_approx(float(effect.material.get_shader_parameter("silhouette_opacity")), 0.40),
 		"solid silhouettes use 40 percent alpha")
 	_check(effect.find_children("*", "MeshInstance3D", true, false).size() == 1,
-		"effect creates one reusable quad instead of per-frame nodes")
+		"effect creates one reusable fog quad instead of per-frame nodes")
 	_check(game.burning_horizon.get_child_count() == 4,
 		"the existing four-panel Zombie Horizon stays unchanged")
 

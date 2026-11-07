@@ -1,14 +1,14 @@
 extends Node3D
-## Depth-tested, non-gameplay artwork anchored to the live flashlight endpoint.
+## Fog silhouettes follow the live beam tip and respect world geometry.
 
 const TIP_SHADER := preload("res://shaders/flashlight_tip_silhouettes.gdshader")
 const ZOMBIE_SILHOUETTE_MASK := preload("res://assets/effects/flashlight_tip_zombie_silhouettes.webp")
 const SILHOUETTE_OPACITY := 0.40
-const FOG_OPACITY := 0.40
+const FOG_OPACITY := 0.55
 const CLUSTER_FOOTPRINT_SCALE := 0.44
-const RENDER_PRIORITY := 127 # After the flashlight blackout composite.
+const WORLD_OCCLUSION_MASK := 1 | 4 # Ground and arena barriers; enemy bodies are intentionally ignored.\nconst RENDER_PRIORITY := 127 # After the flashlight blackout composite.
 
-var camera: Camera3D
+var camera: Camera3D\nvar player: PhysicsBody3D
 var overlay: MeshInstance3D
 var material: ShaderMaterial
 var beam_tip := Vector3.ZERO
@@ -136,3 +136,4 @@ func update_beam(
 	overlay.scale = Vector3(world_width, world_height, 1.0)
 	if not overlay.visible:
 		overlay.visible = true
+\nfunc _beam_path_is_clear(origin: Vector3, tip: Vector3) -> bool:\n\tif not is_instance_valid(camera) or not is_instance_valid(player):\n\t\treturn false\n\tvar world := camera.get_world_3d()\n\tif not is_instance_valid(world):\n\t\treturn false\n\tvar query := PhysicsRayQueryParameters3D.create(origin, tip, WORLD_OCCLUSION_MASK)\n\tquery.exclude = [player.get_rid()]\n\tquery.collide_with_areas = false\n\treturn world.direct_space_state.intersect_ray(query).is_empty()\n
