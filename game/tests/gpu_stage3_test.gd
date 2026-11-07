@@ -42,14 +42,14 @@ func _run() -> void:
 	manager._build_beam_light()
 	var spot := manager.spotlight
 	check(is_instance_valid(spot) and not spot.shadow_enabled, "original unshadowed spotlight retained")
-	check(is_equal_approx(spot.spot_range, 30.0) and is_equal_approx(spot.spot_angle, 25.0), "original beam range and cone angle retained")
+	check(is_equal_approx(spot.spot_range, 10.0) and is_equal_approx(spot.spot_angle, 25.0), "10 m flashlight range and cone angle retained")
 	var sheet := spot.get_node_or_null("PlayerFlashlightBeamSheets") as MultiMeshInstance3D
 	check(is_instance_valid(sheet), "three crossed beam sheets share a single draw object")
 	if sheet != null:
 		check(sheet.multimesh.instance_count == 3, "crossing beam still has three sheets")
 		check(sheet.multimesh.mesh is QuadMesh, "beam keeps original QuadMesh and vertex shader")
 		check(sheet.material_override is ShaderMaterial and (sheet.material_override as ShaderMaterial).shader == VOLUME_SHADER, "all instances use unchanged beam shader")
-		check(sheet.custom_aabb.position.z <= -30.0 and sheet.custom_aabb.end.z >= 0.0, "batch culling covers full 30m cone")
+		check(sheet.custom_aabb.position.z <= -spot.spot_range and sheet.custom_aabb.end.z >= 0.0, "batch culling covers the full flashlight cone")
 	check(spot.get_node_or_null("PlayerFlashlightBeamSheet0") == null, "individual beam draw objects are removed")
 	var sections := spot.get_node_or_null("PlayerFlashlightBeamSections") as MeshInstance3D
 	check(is_instance_valid(sections) and (sections.mesh as ArrayMesh).get_surface_count() == 1, "seven transverse sections stay in one draw mesh")
@@ -81,15 +81,32 @@ func _run() -> void:
 	var wall := MeshInstance3D.new()
 	wall.position = Vector3(0.0, 0.0, -4.0)
 	world.add_child(wall)
-	world._apply_distance_visibility(light)
-	world._apply_distance_visibility(wall)
+	world._update_distance_visibility()
 	check(light.visible and wall.visible, "nearby light and mesh remain visible")
 	world._local_lights_enabled = false
-	world._apply_distance_visibility(light)
+	world._update_distance_visibility()
 	check(not light.visible and wall.visible, "mobile light disable does not hide emissive meshes")
 	world._local_lights_enabled = true
-	world._apply_distance_visibility(light)
+	world._update_distance_visibility()
 	check(light.visible, "developer light profile can restore local lights")
+	var backdrop := Node3D.new()
+	world.add_child(backdrop)
+	backdrop.add_to_group(&"distant_backdrop")
+	wall.reparent(backdrop)
+	wall.position = Vector3.RIGHT * 40.0
+	world._update_distance_visibility()
+	check(wall.visible, "a reparented backdrop mesh keeps its own visibility")
+	wall.reparent(world)
+	world._update_distance_visibility()
+	check(not wall.visible, "returning a mesh to the world restores distance culling")
+	wall.reparent(fixture)
+	wall.visible = true
+	world._update_distance_visibility()
+	check(wall.visible, "a mesh outside this world is no longer managed")
+	var short_lived := MeshInstance3D.new()
+	world.add_child(short_lived)
+	short_lived.free()
+	world._update_distance_visibility()
 	world.free()
 	fixture.queue_free()
 	await process_frame
