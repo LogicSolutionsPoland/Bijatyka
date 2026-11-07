@@ -180,6 +180,24 @@ func _run() -> void:
 		_check(player.get_grab_state() == FoundationPlayer.GrabState.READY and not player._grab_qte.is_active(), "rapid cleanup %d" % index)
 		previous = current
 
+	# The legacy Stage 1 contact signal is also synchronous. Its listeners
+	# may cancel immediately; Stage 2 must not publish a late QTE startup.
+	var legacy_start_count := starts.size()
+	var legacy_finish_count := finishes.size()
+	var legacy_enemy := _enemy()
+	var cancel_at_legacy_start := func(_limb: String) -> void:
+		player.cancel_limb_grab("legacy_started_cancelled")
+	player.limb_grab_started.connect(cancel_at_legacy_start)
+	_check(not _hold(legacy_enemy), "Stage 1 limb start listener can cancel QTE immediately")
+	player.limb_grab_started.disconnect(cancel_at_legacy_start)
+	_check(starts.size() == legacy_start_count
+		and finishes.size() == legacy_finish_count + 1
+		and finishes.back().reason == "legacy_started_cancelled",
+		"legacy start cancellation cannot emit a ghost Stage 2 start")
+	_check(player.get_grab_state() == FoundationPlayer.GrabState.READY
+		and not player._grab_qte.is_active() and player.get_active_grab_session_id() == 0,
+		"legacy start cancellation releases player QTE state")
+
 	# A synchronous signal listener can cancel the newly established grab.
 	# This used to publish a ghost QTE after Stage 1 had already cleaned it.
 	var contact_starts := starts.size()
