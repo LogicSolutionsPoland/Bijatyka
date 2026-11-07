@@ -37,6 +37,9 @@ func _run() -> void:
 	world.add_child(manager)
 	manager.configure(player, camera, true)
 	manager.set_rooftop_sky_visible(false)
+	# Keep the shaft-only probe from reactivating the foreground fog artwork.
+	manager.set_process(false)
+	manager.set_physics_process(false)
 	# Measure the cross-sections themselves, independent of the screen overlay.
 	manager._composite.visible = false
 	# The tip artwork has its own screen-space render probe. Keep it hidden here
