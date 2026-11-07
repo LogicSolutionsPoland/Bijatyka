@@ -92,7 +92,7 @@ func _run() -> void:
 	_check(is_equal_approx(player.get_grab_qte_remaining_seconds(), 1.5) and player.get_grab_qte_required_presses() == 3, "configured 1.5-second, three-press QTE")
 	_check(not player._grab_qte.begin(id + 1, second, "RIGHT ARM", 1.5, 3), "simultaneous second QTE rejected")
 	_check(not player.try_escape_limb_grab(id + 10) and player.get_grab_qte_progress() == 0, "stale session press rejected")
-	var hud: FoundationHUD = world.hud
+	var hud := world.get("hud") as FoundationHUD
 	hud._set_gamepad_action(&"pad_escape_limb_grab", 0, true)
 	_check(player.get_grab_qte_progress() == 1 and player.get_grab_state() == FoundationPlayer.GrabState.GRABBED, "R3 counts one press without escape")
 	hud._set_gamepad_action(&"pad_escape_limb_grab", 0, true)
