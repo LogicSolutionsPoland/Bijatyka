@@ -42,7 +42,7 @@ void fragment() {
 	uv.x += sin(effect_time * 0.43 + UV.y * 4.1 + UV.x * 1.8) * 0.0035;
 	uv.y += sin(effect_time * 0.31 + UV.x * 3.8 + UV.y * 2.0) * 0.0025;
 	float source_alpha = texture(zombie_silhouette_mask, uv).a;
-	vec2 contour_step = vec2(4.0 / 768.0, 4.0 / 512.0);
+	vec2 contour_step = vec2(6.0 / 768.0, 6.0 / 512.0);
 	float neighbor_alpha = min(
 		min(texture(zombie_silhouette_mask, uv + vec2(contour_step.x, 0.0)).a,
 			texture(zombie_silhouette_mask, uv - vec2(contour_step.x, 0.0)).a),
@@ -58,7 +58,7 @@ void fragment() {
 	vec2 moving_fog_uv = UV * vec2(8.0, 5.0) + vec2(effect_time * 0.045, -effect_time * 0.032);
 	float cloud = fog_noise(moving_fog_uv);
 	float edge_noise = fog_noise(UV * vec2(15.0, 11.0) + vec2(-effect_time * 0.07, effect_time * 0.05));
-	float broken_density = 0.62 + edge_noise * 0.38;
+	float broken_density = 0.78 + edge_noise * 0.22;
 	float silhouette_alpha = contour_strength * broken_density * silhouette_opacity;
 
 	vec2 fog_center = vec2(0.5 + sin(effect_time * 0.20) * 0.025, 0.53 + cos(effect_time * 0.27) * 0.025);
