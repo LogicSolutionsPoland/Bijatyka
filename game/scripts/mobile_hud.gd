@@ -37,6 +37,7 @@ var _health_tag: Label
 var _rage_tag: Label
 var _magic_tag: Label
 var _notice: Label
+var _notice_generation := 0
 var _limb_grab_button: Button
 var _active_grab_qte_session_id := 0
 var _grab_qte_limb := ""
@@ -442,11 +443,14 @@ func update_status(current_hp: int, max_hp: int, current_rage: float, max_rage: 
 func show_notice(message: String, color: Color = Color(1.0, 0.83, 0.33)) -> void:
 	if _notice == null:
 		return
+	_notice_generation += 1
+	var generation := _notice_generation
 	_notice.text = message
 	_notice.add_theme_color_override("font_color", color)
 	_notice.visible = true
 	get_tree().create_timer(1.55, true, false, true).timeout.connect(func() -> void:
-		if is_instance_valid(_notice) and _selection_panel == null:
+		# Older telegraph timers must never hide a newer QTE result.
+		if generation == _notice_generation and is_instance_valid(_notice) and _selection_panel == null:
 			_notice.visible = false)
 
 func show_aura_selection(milestone: int) -> void:
