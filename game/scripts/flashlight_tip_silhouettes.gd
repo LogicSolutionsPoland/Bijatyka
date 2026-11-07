@@ -2,7 +2,7 @@ extends Node3D
 ## Depth-tested, non-gameplay artwork anchored to the live flashlight endpoint.
 
 const TIP_SHADER := preload("res://shaders/flashlight_tip_silhouettes.gdshader")
-const ZOMBIE_SILHOUETTE_MASK := preload("res://assets/effects/flashlight_tip_zombies.webp")
+const ZOMBIE_SILHOUETTE_MASK := preload("res://assets/effects/flashlight_tip_zombie_silhouettes.webp")
 const SILHOUETTE_OPACITY := 0.40
 const FOG_OPACITY := 0.40
 const CLUSTER_FOOTPRINT_SCALE := 0.44

@@ -30,7 +30,7 @@ func _run() -> void:
 	var zombie_texture := effect.material.get_shader_parameter("zombie_silhouette_mask") as Texture2D
 	_check(is_equal_approx(float(effect.material.get_shader_parameter("fog_opacity")), 0.40),
 		"translucent moving fog surrounds the zombie silhouettes")
-	_check(zombie_texture != null and zombie_texture.resource_path.ends_with("flashlight_tip_zombies.webp"),
+	_check(zombie_texture != null and zombie_texture.resource_path.ends_with("flashlight_tip_zombie_silhouettes.webp"),
 		"carnivorous zombie shapes emerge as dark silhouettes through the moving fog")
 	_check(effect.material.render_priority == 127, "effect draws after the 3D blackout composite")
 	_check(is_equal_approx(float(effect.material.get_shader_parameter("silhouette_opacity")), 0.40),
