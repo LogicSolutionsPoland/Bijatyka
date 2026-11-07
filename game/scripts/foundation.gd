@@ -15,7 +15,6 @@ const COMBAT_FX_POOL := preload("res://scripts/combat_fx_pool.gd")
 const HUD_SCRIPT := preload("res://scripts/mobile_hud.gd")
 const SHADOW_POLICY := preload("res://scripts/shadow_policy.gd")
 const FLASHLIGHT_VISIBILITY := preload("res://scripts/flashlight_visibility.gd")
-const PENCIL := preload("res://scripts/pencil.gd")
 const RADIAL_GROUND_SHADER := preload("res://shaders/radial_ground.gdshader")
 const RUIN_SURFACE_SHADER := preload("res://shaders/ruined_surface.gdshader")
 const ARENA_MAP_SCRIPT := preload("res://scripts/arena_map_upgrade.gd")
@@ -98,7 +97,6 @@ var _environment: Environment
 var _ground_sky: Sky
 var _rooftop_city_sky: Sky
 var _rooftop_sky_active := false
-var _pencil_screen_pass: MeshInstance3D
 var arena_map: Node3D
 var starting_tower: StartingTower
 var game_music_player: AudioStreamPlayer
@@ -116,6 +114,7 @@ func _ready() -> void:
 	var style_manager := get_tree().root.get_node_or_null("PencilSketchStyle")
 	if style_manager != null:
 		style_manager.set_gameplay_pencil_enabled(false)
+		style_manager.call("set_character_only", true)
 	if OS.has_feature("mobile"):
 		Engine.max_fps = MOBILE_FPS_LIMIT
 		get_viewport().scaling_3d_scale = MOBILE_3D_RENDER_SCALE
@@ -171,27 +170,6 @@ func _ready() -> void:
 	_spawn_enemies()
 	_setup_performance_diagnostics()
 	_update_distance_visibility()
-	# Convert lit mesh materials, then draw the graphite pass before the
-	# flashlight's priority-126 black mask.
-	# Leave rooftop materials unstyled. Pencil conversion starts during descent.
-	var pencil_screen := PENCIL.add_screen_pass(camera)
-	pencil_screen.set_shader_parameter(&"line_color", Color(0.085, 0.10, 0.13, 0.82))
-	pencil_screen.set_shader_parameter(&"line_width", 1.0)
-	pencil_screen.set_shader_parameter(&"depth_threshold", 0.025)
-	pencil_screen.set_shader_parameter(&"crease_threshold", 0.25)
-	pencil_screen.set_shader_parameter(&"creases", 0.32)
-	pencil_screen.set_shader_parameter(&"wobble", 0.45)
-	pencil_screen.set_shader_parameter(&"line_roughness", 0.22)
-	pencil_screen.set_shader_parameter(&"fade_start", 19.0)
-	pencil_screen.set_shader_parameter(&"fade_end", 34.0)
-	pencil_screen.set_shader_parameter(&"saturation", 0.78)
-	pencil_screen.set_shader_parameter(&"contrast", 1.06)
-	pencil_screen.set_shader_parameter(&"paper_color", Color(0.91, 0.90, 0.86))
-	pencil_screen.set_shader_parameter(&"paper_amount", 0.16)
-	pencil_screen.set_shader_parameter(&"edge_fade", 0.0)
-	_pencil_screen_pass = camera.get_node_or_null("PencilScreenPass") as MeshInstance3D
-	if is_instance_valid(_pencil_screen_pass):
-		_pencil_screen_pass.visible = not _rooftop_sky_active and _pencil_comparison_visible
 	_floor_material.set_shader_parameter("player_position", player.global_position)
 	_floor_material.set_shader_parameter("flashlight_forward", flashlight_visibility_manager.aim_direction)
 	SHADOW_POLICY.disable_in_tree(self)
@@ -360,8 +338,6 @@ func _set_rooftop_render_profile(on_roof: bool) -> void:
 
 func _sync_pencil_style() -> void:
 	var enabled := not _rooftop_sky_active and _pencil_comparison_visible
-	if is_instance_valid(_pencil_screen_pass):
-		_pencil_screen_pass.visible = enabled
 	var style_manager := get_tree().root.get_node_or_null("PencilSketchStyle")
 	if style_manager != null:
 		style_manager.set_gameplay_pencil_enabled(enabled)

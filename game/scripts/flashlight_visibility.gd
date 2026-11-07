@@ -206,36 +206,11 @@ func _process(delta: float) -> void:
 			_update_distant_teeth()
 
 func _build_composite() -> void:
-	if not enabled or not is_instance_valid(camera):
-		return
-	var quad := QuadMesh.new()
-	quad.size = Vector2(2.0, 2.0)
-	_material = ShaderMaterial.new()
-	_material.shader = VISIBILITY_SHADER
-	# Leave the last transparent priority for depth-tested, whole enemy bodies.
-	_material.render_priority = 126
-	_material.set_shader_parameter("oval_center_uv", OVAL_CENTER_UV)
-	_material.set_shader_parameter("oval_radius_uv", OVAL_RADIUS_UV)
-	_material.set_shader_parameter("oval_feather", OVAL_FEATHER)
-	_material.set_shader_parameter("bright_radius", BRIGHT_RADIUS)
-	_material.set_shader_parameter("max_radius", MAX_RADIUS)
-	_composite = MeshInstance3D.new()
-	_composite.name = "FlashlightVisibilityComposite"
-	_composite.add_to_group("flashlight_visibility_composite")
-	_composite.mesh = quad
-	_composite.material_override = _material
-	_composite.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	_composite.custom_aabb = AABB(Vector3(-4.0, -4.0, -4.0), Vector3(8.0, 8.0, 8.0))
-	camera.add_child(_composite)
-	# Canvas layer 0 draws after the 3D blackout pass but beneath the HUD.
-	# Far teeth can catch a tiny glint without revealing the rest of a zombie.
-	_teeth_canvas = CanvasLayer.new()
-	_teeth_canvas.name = "DistantTeethGlintsLayer"
-	_teeth_canvas.layer = 0
-	add_child(_teeth_canvas)
-	_teeth_overlay = DISTANT_TEETH_OVERLAY.new()
-	_teeth_overlay.name = "DistantTeethGlints"
-	_teeth_canvas.add_child(_teeth_overlay)
+	# The broken full-screen flashlight blackout mask is removed. Enemy
+	# classification and the existing 3D flashlight presentation stay separate.
+	_material = null
+	_composite = null
+
 
 func _build_beam_light() -> void:
 	if not enabled or not is_instance_valid(player):
