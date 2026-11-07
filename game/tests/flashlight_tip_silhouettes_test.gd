@@ -27,11 +27,11 @@ func _run() -> void:
 		_finish()
 		return
 	_check(effect.overlay is MeshInstance3D and effect.material != null, "effect uses one persistent fog quad and shader material")
-	var zombie_texture := effect.material.get_shader_parameter("zombie_contour_mask") as Texture2D
+	var zombie_texture := effect.material.get_shader_parameter("tip_artwork") as Texture2D
 	_check(is_equal_approx(float(effect.material.get_shader_parameter("fog_opacity")), 0.72),
 		"stronger translucent moving fog surrounds the zombie silhouettes")
-	_check(zombie_texture != null and zombie_texture.resource_path.ends_with("flashlight_tip_zombie_contours.webp"),
-		"jagged zombie outlines are drawn inside the moving fog")
+	_check(zombie_texture != null and zombie_texture.resource_path.ends_with("flashlight_tip_zombie_fog.webp"),
+		"the supplied blurred zombie-fog image is used at the flashlight tip")
 	_check(effect.material.render_priority == 127, "effect draws after the 3D blackout composite")
 	_check(is_equal_approx(float(effect.material.get_shader_parameter("silhouette_opacity")), 0.40),
 		"zombie contour lines use 40 percent alpha")

@@ -34,6 +34,7 @@ on:
       - codex/exo-mixamo-arm64-build-20261031
       - codex/exo-gray-kick-arm64-apk-20261031
       - feat/jump-horde-stage1-20261105
+      - feat/flashlight-tip-user-image-20261107
 
 permissions:
   contents: read
@@ -194,7 +195,7 @@ jobs:
             assets/assets/characters/thornbound/Retribution_Player_Thornbound_Warrior_MOBILE.glb.import \
             assets/assets/characters/infected/Ashen_Worker.jpg.import \
             assets/assets/characters/infected/Ashen_Worker_Crowd.obj.import \
-            assets/assets/effects/flashlight_tip_zombie_contours.webp.import \
+            assets/assets/effects/flashlight_tip_zombie_fog.webp.import \
             assets/assets/characters/universal_base/Universal_Base_Characters_Male.glb.import \
             assets/assets/characters/universal_base/Universal_Base_Characters_Female.glb.import \
             assets/assets/environment/nature/DeadTree_1.gltf.import \
