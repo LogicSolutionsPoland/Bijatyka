@@ -39,6 +39,7 @@ var _magic_tag: Label
 var _notice: Label
 var _limb_grab_button: Button
 var _active_grab_qte_session_id := 0
+var _grab_qte_limb := ""
 var _boss_marker: Label
 var _elevator_prompt_panel: PanelContainer
 var _elevator_prompt: Label
@@ -555,22 +556,16 @@ func begin_grab_qte(session_id: int, _enemy: FoundationEnemy, limb: String, requ
 	if _limb_grab_button == null or session_id <= 0:
 		return
 	_active_grab_qte_session_id = session_id
+	_grab_qte_limb = limb
 	if _notice != null:
 		_notice.visible = false
 	_limb_grab_button.visible = true
-	update_grab_qte(session_id, 0, required_presses, duration_seconds, limb)
+	update_grab_qte(session_id, 0, required_presses, duration_seconds)
 
-func update_grab_qte(session_id: int, accepted_presses: int, required_presses: int, remaining_seconds: float, limb: String = "") -> void:
+func update_grab_qte(session_id: int, accepted_presses: int, required_presses: int, remaining_seconds: float) -> void:
 	if session_id != _active_grab_qte_session_id or _limb_grab_button == null:
 		return
-	if limb.is_empty():
-		limb = "ARM"
-	# Store the selected limb in button metadata, not in a secondary grab owner.
-	if _limb_grab_button.has_meta("grab_limb"):
-		limb = str(_limb_grab_button.get_meta("grab_limb")) if limb == "ARM" else limb
-	else:
-		_limb_grab_button.set_meta("grab_limb", limb)
-	var label_text := "%s — %d/%d  •  %.1fs  TAP / R3" % [limb, accepted_presses, required_presses, maxf(0.0, remaining_seconds)]
+	var label_text := "%s — %d/%d  •  %.1fs  TAP / R3" % [_grab_qte_limb, accepted_presses, required_presses, maxf(0.0, remaining_seconds)]
 	if _limb_grab_button.text != label_text:
 		_limb_grab_button.text = label_text
 
@@ -578,6 +573,7 @@ func finish_grab_qte(session_id: int, outcome: String) -> void:
 	if session_id != _active_grab_qte_session_id:
 		return
 	_active_grab_qte_session_id = 0
+	_grab_qte_limb = ""
 	hide_limb_grab()
 	if outcome == "escaped":
 		show_notice("GRAB BROKEN — ESCAPED", Color(0.45, 0.97, 0.65))
@@ -593,7 +589,6 @@ func show_limb_grab(limb: String) -> void:
 func hide_limb_grab() -> void:
 	if _limb_grab_button != null:
 		_limb_grab_button.visible = false
-		_limb_grab_button.remove_meta("grab_limb")
 	if _notice != null and _notice.text.ends_with("GRAB — EVADE"):
 		_notice.visible = false
 
