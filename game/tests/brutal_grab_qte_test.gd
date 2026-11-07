@@ -171,6 +171,36 @@ func _run() -> void:
 		_check(player.get_grab_state() == FoundationPlayer.GrabState.READY and not player._grab_qte.is_active(), "rapid cleanup %d" % index)
 		previous = current
 
+	# A synchronous signal listener can cancel the newly established grab.
+	# This used to publish a ghost QTE after Stage 1 had already cleaned it.
+	var contact_starts := starts.size()
+	var contact_finishes := finishes.size()
+	var contact_enemy := _enemy()
+	var cancel_at_establishment := func(_zombie: FoundationEnemy, _limb: String) -> void:
+		player.cancel_limb_grab("establishment_cancelled")
+	player.grab_established.connect(cancel_at_establishment)
+	_check(not _hold(contact_enemy), "contact callback cancellation rejects stale QTE startup")
+	player.grab_established.disconnect(cancel_at_establishment)
+	_check(starts.size() == contact_starts and finishes.size() == contact_finishes + 1
+		and finishes.back().reason == "establishment_cancelled", "no ghost QTE event after contact callback cancellation")
+	_check(player.get_grab_state() == FoundationPlayer.GrabState.READY
+		and not player._grab_qte.is_active() and player.get_active_grab_session_id() == 0,
+		"contact callback cancellation clears player session")
+
+	# A listener can also cancel during the QTE start event itself.
+	var start_starts := starts.size()
+	var start_finishes := finishes.size()
+	var start_enemy := _enemy()
+	var cancel_on_qte_started := func(_id: int, _zombie: FoundationEnemy, _limb: String, _presses: int, _seconds: float) -> void:
+		player.cancel_limb_grab("qte_start_cancelled")
+	player.grab_qte_started.connect(cancel_on_qte_started)
+	_check(not _hold(start_enemy), "QTE start callback cancellation rejects continuation")
+	player.grab_qte_started.disconnect(cancel_on_qte_started)
+	_check(starts.size() == start_starts + 1 and finishes.size() == start_finishes + 1
+		and finishes.back().reason == "qte_start_cancelled", "QTE start callback terminates exactly once")
+	_check(player.get_grab_state() == FoundationPlayer.GrabState.READY and not player._grab_qte.is_active()
+		and hud._active_grab_qte_session_id == 0, "start callback cannot leave active HUD or QTE progress")
+
 	var last := _enemy()
 	_check(_hold(last), "scene change case starts")
 	var last_id := player.get_active_grab_session_id()
