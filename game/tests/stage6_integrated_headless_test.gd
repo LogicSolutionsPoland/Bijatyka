@@ -128,7 +128,17 @@ func _run() -> void:
 			and player.begin_limb_grab(grabber, "LEFT ARM"), "zombie can hold one arm")
 		grabber.state = "limb_hold"
 		_send_pad(JOY_BUTTON_RIGHT_STICK, true)
-		_check(player._limb_grab_owner == null, "R3 input escapes the grab and returns control")
+		_check(player._limb_grab_owner == grabber and player.get_grab_qte_progress() == 1,
+			"first R3 press advances QTE without instant release")
+		_send_pad(JOY_BUTTON_RIGHT_STICK, true)
+		_check(player.get_grab_qte_progress() == 1, "duplicate held R3 event is rejected")
+		_send_pad(JOY_BUTTON_RIGHT_STICK, false)
+		_send_pad(JOY_BUTTON_RIGHT_STICK, true)
+		_check(player._limb_grab_owner == grabber and player.get_grab_qte_progress() == 2,
+			"second R3 press still holds zombie ownership")
+		_send_pad(JOY_BUTTON_RIGHT_STICK, false)
+		_send_pad(JOY_BUTTON_RIGHT_STICK, true)
+		_check(player._limb_grab_owner == null, "third R3 input escapes the grab and returns control")
 		_send_pad(JOY_BUTTON_RIGHT_STICK, false)
 		player._limb_grab_cooldown = 0.0
 		_check(spawns.try_acquire_attacker(grabber), "grabber reacquires its attacker slot after escape")
