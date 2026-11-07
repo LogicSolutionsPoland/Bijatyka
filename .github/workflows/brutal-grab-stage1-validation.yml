@@ -15,6 +15,7 @@ on:
       - game/tests/brutal_grab_qte_test.gd
       - game/tests/brutal_grab_limb_contact_test.gd
       - game/tests/brutal_grab_real_rig_test.gd
+      - docs/brutal-grab-stage3-limb-contact-20261107.md
       - game/tests/stage6_integrated_headless_test.gd
       - .github/workflows/brutal-grab-stage1-validation.yml
   workflow_dispatch:
