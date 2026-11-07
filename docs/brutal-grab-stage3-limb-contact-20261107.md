@@ -46,3 +46,7 @@ Imported skeleton arm chain lengths: left/right **0.4947 m**. The rendered Exo l
 ## Stage 4 camera contract (not implemented)
 
 Only after the grab state is `GRABBED` and the active session ID is confirmed, Stage 4 may observe `grab_qte_started` and the selected `LEFT ARM` / `RIGHT ARM`. The camera should focus on the **visible Exo forearm contact point**, not the hidden source rig. On `grab_fully_ended` (or QTE finish with matching ID), reset the camera and discard old focus callbacks. Preserve movement, collision, player-enemy ownership and the existing 4 m fighting zone; never lock camera on windup alone, use global time scaling, or add new QTE inputs in Stage 4.
+
+## Post-stage Android device acceptance build request (2026-11-07)
+
+The owner explicitly requested a new Android ARM64 debug APK after Stage 3 implementation, to inspect the real visual grab on a Redmi phone before planning Stage 4. This is a build/test checkpoint only, not Stage 4 implementation or proof of mobile visual acceptance. The prior headless test evidence and limitations remain unchanged. The CI commit starting with `build(stage10-apk-export):` deliberately permits the existing Android export workflow on this branch; any APK must be checked against its exact resulting commit SHA before distribution.
