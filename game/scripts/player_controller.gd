@@ -775,6 +775,15 @@ func begin_limb_grab(enemy: FoundationEnemy, limb: String) -> bool:
 		_animation_player.seek(0.12, true)
 		_animation_player.pause()
 	_set_grab_state(GrabState.GRABBED)
+	# Stage 3: a detailed real rig cannot start an invisible/unreachable QTE.
+	# Host Stage 1/2 dummy enemies without a visual skeleton keep their existing
+	# gameplay-only lifecycle; no secondary grab state machine is introduced.
+	if is_instance_valid(_grab_contact) and is_instance_valid(enemy._skeleton):
+		if is_instance_valid(_exo_retarget):
+			_exo_retarget.synchronize_pose()
+		if not _grab_contact.can_reach_contact(enemy, self, limb, enemy._limb_grab_hand):
+			_finish_limb_grab("visual_contact_unreachable")
+			return false
 	# Start only after GRABBED, never during WINDUP. No independent QTE timer.
 	if grab_state != GrabState.GRABBED or _limb_grab_owner != enemy:
 		return false
