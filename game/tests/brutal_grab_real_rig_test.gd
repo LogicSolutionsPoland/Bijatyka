@@ -11,6 +11,12 @@ var _player: FoundationPlayer
 var _zombie: FoundationEnemy
 var _contact: BrutalGrabLimbContact
 
+class SlotLedger extends Node:
+	func can_maintain_limb_grab(_enemy: FoundationEnemy) -> bool:
+		return true
+	func release_attacker(_enemy: FoundationEnemy) -> void:
+		pass
+
 func _initialize() -> void:
 	call_deferred("_run")
 
@@ -128,6 +134,77 @@ func _run() -> void:
 		_player.grab_state = FoundationPlayer.GrabState.READY
 		await process_frame
 		_check(not _contact.is_solver_active() and enemy_rig.find_child("BrutalGrabArmIK", false, false) == null, "%s imported skeleton released cleanly" % side)
+
+	# Verify real reach preflight against the authoritative Stage 1/2 transition.
+	var floor := StaticBody3D.new()
+	floor.collision_layer = 2
+	var collider := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(30.0, 0.3, 30.0)
+	collider.shape = shape
+	floor.add_child(collider)
+	floor.position.y = -0.15
+	_host.add_child(floor)
+	_player.global_position = Vector3(0.0, 1.5, 0.0)
+	_player.velocity = Vector3.ZERO
+	_player.set_physics_process(true)
+	var grounded := false
+	for index in range(100):
+		await physics_frame
+		if index > 2 and _player.is_on_floor() and is_zero_approx(_player.velocity.y):
+			grounded = true
+			break
+	_player.set_physics_process(false)
+	_check(grounded, "player settles on collision floor for real Stage 2 admission")
+	var ledger := SlotLedger.new()
+	_host.add_child(ledger)
+	_zombie.attack_director = ledger
+	_zombie._player = _player
+	var starts := {"count": 0}
+	_player.grab_qte_started.connect(func(_id: int, _grabber: FoundationEnemy, _limb: String, _required: int, _seconds: float) -> void:
+		starts.count = int(starts.count) + 1
+	)
+	_zombie.global_position = _player.global_position + Vector3(5.0, 0.0, 0.0)
+	_zombie._limb_grab_limb = "LEFT ARM"
+	_zombie._limb_grab_hand = "left"
+	_zombie.state = "limb_grab_windup"
+	_player._limb_grab_cooldown = 0.0
+	if grounded:
+		_check(_player.try_reserve_limb_grab(_zombie, "LEFT ARM"), "far real rig reservation accepted for controlled preflight test")
+		_zombie.state = "limb_hold"
+		_check(not _player.begin_limb_grab(_zombie, "LEFT ARM"), "out-of-reach real rig cannot start QTE")
+		_check(_player.get_grab_state() == FoundationPlayer.GrabState.READY and _player.get_active_grab_session_id() == 0 and not _player._grab_qte.is_active() and int(starts.count) == 0, "unreachable hold cleans before publishing QTE")
+		_check(not _contact.is_solver_active() and _zombie.state == "recovery", "unreachable preflight safely releases enemy")
+
+		# Same imported actors can still begin one reachable QTE.
+		var holding_clip := String(FoundationEnemy.FIGHT_ANIMATION_BUILDER.clip_path("punch", "left", FoundationEnemy.ENEMY_FIGHT_LIBRARY))
+		_zombie._animation_player.play(holding_clip, 0.0)
+		_zombie._animation_player.seek(_zombie._attack_clip_contact_time(holding_clip), true)
+		_zombie._animation_player.pause()
+		_player._animation_player.play(FoundationPlayer.CHARACTER_MOTION.clip_path("Hit"), 0.0)
+		_player._animation_player.seek(0.12, true)
+		_player._animation_player.pause()
+		_player._exo_retarget.synchronize_pose()
+		var current_target := CONTACT.resolve_player_bones(player_exo, "LEFT ARM", true)
+		var wrist_target := CONTACT.forearm_contact_point(player_exo, int(current_target.forearm), int(current_target.wrist))
+		var current_hand := CONTACT.resolve_enemy_bones(enemy_rig, "left")
+		var shoulder_now := CONTACT.bone_world(enemy_rig, int(current_hand.root))
+		_zombie.global_position.x += wrist_target.x - shoulder_now.x
+		_zombie.global_position.y += wrist_target.y - shoulder_now.y
+		_zombie.global_position.z += wrist_target.z - shoulder_now.z + 0.20
+		_zombie._limb_grab_limb = "LEFT ARM"
+		_zombie._limb_grab_hand = "left"
+		_zombie.state = "limb_grab_windup"
+		_player._limb_grab_cooldown = 0.0
+		_check(_player.try_reserve_limb_grab(_zombie, "LEFT ARM"), "near real rig reservation accepted")
+		_zombie.state = "limb_hold"
+		var successful := _player.begin_limb_grab(_zombie, "LEFT ARM")
+		_check(successful and int(starts.count) == 1 and _contact.is_solver_active(), "reachable imported rig starts exactly one QTE with active IK")
+		if successful:
+			var id := _player.get_active_grab_session_id()
+			for press in range(3):
+				_player.try_escape_limb_grab(id)
+			_check(_player.get_active_grab_session_id() == 0 and not _contact.is_solver_active() and _zombie.state == "recovery", "real QTE escape removes active IK cleanly")
 
 	_finish()
 
