@@ -11,7 +11,7 @@ const AURA_LABELS := {
 # L1 / LB and R1 / RB punch. L2 / LT quick-casts the first unlocked spell;
 # R2 / RT quick-casts the second, falling back to the first. B casts the
 # selected spell, while Y triggers the unlocked Fire-school Blast.
-const CONTROL_HINT_TEXT := "A / CROSS: JUMP  •  X / SQUARE: FORWARD JUMP\nR3: GRAB ESCAPE  •  L1 / LB + R1 / RB: PUNCH\nL2 / LT: FIRST SPELL  •  R2 / RT / K: SECOND SPELL*\nB / CIRCLE / L: SELECTED SPELL  •  Y / TRIANGLE: BLAST\n*R2 / RT / K uses the first spell until a second is unlocked."
+const CONTROL_HINT_TEXT := "A / CROSS: JUMP  •  X / SQUARE: FORWARD JUMP\nR3 x3: GRAB ESCAPE  •  L1 / LB + R1 / RB: PUNCH\nL2 / LT: FIRST SPELL  •  R2 / RT / K: SECOND SPELL*\nB / CIRCLE / L: SELECTED SPELL  •  Y / TRIANGLE: BLAST\n*R2 / RT / K uses the first spell until a second is unlocked."
 const GAMEPAD_ACTIONS := {
 	&"pad_jump": "jump", &"pad_jump_forward": "jump_forward", &"pad_cast_spell": "cast_spell",
 	&"pad_escape_limb_grab": "escape_limb_grab",
@@ -38,6 +38,7 @@ var _rage_tag: Label
 var _magic_tag: Label
 var _notice: Label
 var _limb_grab_button: Button
+var _active_grab_qte_session_id := 0
 var _boss_marker: Label
 var _elevator_prompt_panel: PanelContainer
 var _elevator_prompt: Label
@@ -549,20 +550,52 @@ func show_enemy_telegraph(is_boss: bool) -> void:
 func show_limb_grab_windup(limb: String) -> void:
 	show_notice("%s GRAB — EVADE" % limb, Color(1.0, 0.42, 0.24))
 
-func show_limb_grab(limb: String) -> void:
-	if _limb_grab_button == null:
+# One existing touch button and the R3 edge both go to the same player QTE.
+func begin_grab_qte(session_id: int, _enemy: FoundationEnemy, limb: String, required_presses: int, duration_seconds: float) -> void:
+	if _limb_grab_button == null or session_id <= 0:
 		return
-	_notice.visible = false
-	_limb_grab_button.text = "%s HELD — TAP / R3 / R" % limb
+	_active_grab_qte_session_id = session_id
+	if _notice != null:
+		_notice.visible = false
 	_limb_grab_button.visible = true
+	update_grab_qte(session_id, 0, required_presses, duration_seconds, limb)
+
+func update_grab_qte(session_id: int, accepted_presses: int, required_presses: int, remaining_seconds: float, limb: String = "") -> void:
+	if session_id != _active_grab_qte_session_id or _limb_grab_button == null:
+		return
+	if limb.is_empty():
+		limb = "ARM"
+	# Store the selected limb in button metadata, not in a secondary grab owner.
+	if _limb_grab_button.has_meta("grab_limb"):
+		limb = str(_limb_grab_button.get_meta("grab_limb")) if limb == "ARM" else limb
+	else:
+		_limb_grab_button.set_meta("grab_limb", limb)
+	var label_text := "%s — %d/%d  •  %.1fs  TAP / R3" % [limb, accepted_presses, required_presses, maxf(0.0, remaining_seconds)]
+	if _limb_grab_button.text != label_text:
+		_limb_grab_button.text = label_text
+
+func finish_grab_qte(session_id: int, outcome: String) -> void:
+	if session_id != _active_grab_qte_session_id:
+		return
+	_active_grab_qte_session_id = 0
+	hide_limb_grab()
+	if outcome == "escaped":
+		show_notice("GRAB BROKEN — ESCAPED", Color(0.45, 0.97, 0.65))
+	elif outcome == "timeout":
+		show_notice("GRAB FAILED — TOO SLOW", Color(1.0, 0.3, 0.23))
+
+# Compatibility for legacy HUD callers; current Stage 2 uses begin_grab_qte.
+func show_limb_grab(limb: String) -> void:
+	if _limb_grab_button != null:
+		_limb_grab_button.text = "%s HELD — TAP / R3 / R" % limb
+		_limb_grab_button.visible = true
 
 func hide_limb_grab() -> void:
 	if _limb_grab_button != null:
 		_limb_grab_button.visible = false
+		_limb_grab_button.remove_meta("grab_limb")
 	if _notice != null and _notice.text.ends_with("GRAB — EVADE"):
 		_notice.visible = false
-
-	show_notice("A soul run ends when RAGE falls below its threshold.", Color(0.82, 0.52, 1.0))
 
 func set_player_action_state(_action: String) -> void:
 	pass
