@@ -27,6 +27,7 @@ signal grab_qte_progress(session_id: int, accepted_presses: int, required_presse
 signal grab_qte_finished(session_id: int, outcome: String)
 
 const GRAB_QTE_SCRIPT := preload("res://scripts/brutal_grab_qte.gd")
+const GRAB_CONTACT_SCRIPT := preload("res://scripts/brutal_grab_limb_contact.gd")
 const RAGE_SCRIPT := preload("res://scripts/rage_progression.gd")
 const FIGHT_ANIMATION_BUILDER := preload("res://scripts/universal_base_combat.gd")
 const CHARACTER_MOTION := preload("res://scripts/universal_base_motion.gd")
@@ -118,6 +119,7 @@ var _limb_grab_cooldown := 0.0
 var _grab_session_serial := 0
 var _grab_session_id := 0
 var _grab_qte := GRAB_QTE_SCRIPT.new()
+var _grab_contact: BrutalGrabLimbContact
 var flashlight_visibility_manager: Node
 var _character_motion_ready := false
 var _character_action_time := 0.0
@@ -149,6 +151,10 @@ func _ready() -> void:
 		visual_root.name = "VisualRoot"
 		add_child(visual_root)
 	_load_player_visual()
+	# Stage 3 visual contact listens to the established Stage 2 session only.
+	_grab_contact = GRAB_CONTACT_SCRIPT.new() as BrutalGrabLimbContact
+	add_child(_grab_contact)
+	_grab_contact.configure(self)
 	SHADOW_POLICY.disable_in_tree(visual_root)
 	rage.condemned.connect(_on_condemned)
 	rage.selection_resolved.connect(_on_selection_resolved)
