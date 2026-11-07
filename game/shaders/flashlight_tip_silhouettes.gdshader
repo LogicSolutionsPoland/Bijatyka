@@ -37,20 +37,29 @@ float fog_noise(vec2 point) {
 void fragment() {
 	float effect_time = TIME * animation_time_scale;
 	vec2 uv = UV;
-	// Use only the irregular alpha contour from the art; discard its surface
-	// color so the infected shapes stay silhouetted inside the drifting smoke.
+	// Keep the alpha mask's jagged zombie edges, but draw only their contours.
+	// The RGB art is discarded so the fog contains no filled model shapes.
 	uv.x += sin(effect_time * 0.43 + UV.y * 4.1 + UV.x * 1.8) * 0.0035;
 	uv.y += sin(effect_time * 0.31 + UV.x * 3.8 + UV.y * 2.0) * 0.0025;
 	float source_alpha = texture(zombie_silhouette_mask, uv).a;
+	vec2 contour_step = vec2(4.0 / 768.0, 4.0 / 512.0);
+	float neighbor_alpha = min(
+		min(texture(zombie_silhouette_mask, uv + vec2(contour_step.x, 0.0)).a,
+			texture(zombie_silhouette_mask, uv - vec2(contour_step.x, 0.0)).a),
+		min(texture(zombie_silhouette_mask, uv + vec2(0.0, contour_step.y)).a,
+			texture(zombie_silhouette_mask, uv - vec2(0.0, contour_step.y)).a));
+	neighbor_alpha = min(neighbor_alpha, min(
+		min(texture(zombie_silhouette_mask, uv + contour_step).a,
+			texture(zombie_silhouette_mask, uv - contour_step).a),
+		min(texture(zombie_silhouette_mask, uv + vec2(contour_step.x, -contour_step.y)).a,
+			texture(zombie_silhouette_mask, uv + vec2(-contour_step.x, contour_step.y)).a)));
+	float contour_strength = smoothstep(0.12, 0.72, source_alpha - neighbor_alpha);
 
 	vec2 moving_fog_uv = UV * vec2(8.0, 5.0) + vec2(effect_time * 0.045, -effect_time * 0.032);
 	float cloud = fog_noise(moving_fog_uv);
 	float edge_noise = fog_noise(UV * vec2(15.0, 11.0) + vec2(-effect_time * 0.07, effect_time * 0.05));
-	float threshold = 0.16 + cloud * 0.06 + (edge_noise - 0.5) * 0.04;
-	float body = smoothstep(threshold, 0.72 + cloud * 0.04, source_alpha);
 	float broken_density = 0.62 + edge_noise * 0.38;
-	float lower_body_fade = 1.0 - smoothstep(0.66, 1.0, UV.y);
-	float silhouette_alpha = body * broken_density * lower_body_fade * silhouette_opacity;
+	float silhouette_alpha = contour_strength * broken_density * silhouette_opacity;
 
 	vec2 fog_center = vec2(0.5 + sin(effect_time * 0.20) * 0.025, 0.53 + cos(effect_time * 0.27) * 0.025);
 	vec2 fog_delta = (UV - fog_center) / vec2(0.53, 0.46);
@@ -58,7 +67,7 @@ void fragment() {
 	float fog_density = smoothstep(0.13, 0.63, cloud) * fog_shape;
 	float mist_alpha = fog_density * fog_opacity;
 
-	// Composite the smoke behind the dark, partially obscured contours.
+	// Composite the smoke behind the drawn zombie contour lines.
 	float combined_alpha = silhouette_alpha + mist_alpha * (1.0 - silhouette_alpha);
 	vec3 fog_color = vec3(0.38, 0.37, 0.35);
 	vec3 shadow_color = vec3(0.008, 0.006, 0.005);
