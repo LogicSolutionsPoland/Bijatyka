@@ -42,9 +42,9 @@ func _rig(parent: Node3D, exo: bool = false) -> Skeleton3D:
 	for side in ["l", "r"]:
 		var side_sign := -1.0 if side == "l" else 1.0
 		var suffix := "Left" if side == "l" else "Right"
-		var upper := suffix + "Arm" if exo else "upperarm_" + side
-		var lower := suffix + "ForeArm" if exo else "lowerarm_" + side
-		var hand := suffix + "Hand" if exo else "hand_" + side
+		var upper: String = suffix + "Arm" if exo else "upperarm_" + side
+		var lower: String = suffix + "ForeArm" if exo else "lowerarm_" + side
+		var hand: String = suffix + "Hand" if exo else "hand_" + side
 		var upper_idx := skeleton.add_bone(upper)
 		var lower_idx := skeleton.add_bone(lower)
 		var hand_idx := skeleton.add_bone(hand)
