@@ -14,6 +14,7 @@ on:
       - game/tests/brutal_grab_state_machine_test.gd
       - game/tests/brutal_grab_qte_test.gd
       - game/tests/brutal_grab_limb_contact_test.gd
+      - game/tests/brutal_grab_real_rig_test.gd
       - game/tests/stage6_integrated_headless_test.gd
       - .github/workflows/brutal-grab-stage1-validation.yml
   workflow_dispatch:
@@ -42,7 +43,7 @@ jobs:
         id: regressions
         run: |
           set -euo pipefail
-          for script in brutal_grab_state_machine_test.gd brutal_grab_qte_test.gd brutal_grab_limb_contact_test.gd stage6_integrated_headless_test.gd jump_state_regression_test.gd test_runner.gd; do
+          for script in brutal_grab_state_machine_test.gd brutal_grab_qte_test.gd brutal_grab_limb_contact_test.gd brutal_grab_real_rig_test.gd stage6_integrated_headless_test.gd jump_state_regression_test.gd test_runner.gd; do
             timeout 180s godot --headless --path game --script "res://tests/$script" 2>&1 | tee "$script.log"
             grep -q 'PASS:' "$script.log"
             if grep -E 'SCRIPT ERROR:|ERROR:' "$script.log"; then exit 1; fi
@@ -63,7 +64,7 @@ jobs:
               state: passed ? 'success' : 'failure',
               context: 'brutal-grab/stage3-headless',
               description: passed
-                ? 'Godot import and six headless test suites passed'
+                ? 'Godot import and seven headless test suites passed'
                 : 'Godot import or headless test suite did not pass',
               target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
             });
