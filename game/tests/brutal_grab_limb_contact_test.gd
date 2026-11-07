@@ -111,10 +111,19 @@ func _run() -> void:
 		return
 	_check(contact.is_solver_active() and contact.session_id == owner.id and contact.is_processing(), "exactly one active solver")
 	_check(contact._ik.setting_count == 1 and contact._ik.get_end_bone_name(0) == "hand_l", "two-bone IK uses chosen hand")
+	# Godot applies modifiers in a deferred skeleton update. Only the
+	# modification_processed signal exposes the solved bone pose.
+	var left_sample := {"count": 0, "error": INF}
+	contact._ik.modification_processed.connect(func() -> void:
+		if is_instance_valid(contact._target):
+			left_sample.count = int(left_sample.count) + 1
+			left_sample.error = CONTACT.bone_world(zombie._skeleton, enemy_left.end).distance_to(contact._target.global_position)
+	)
 	contact.update_contact(0.20)
-	zombie._skeleton.advance(0.016)
-	var left_error := CONTACT.bone_world(zombie._skeleton, enemy_left.end).distance_to(contact._target.global_position)
-	_check(left_error <= 0.05, "left wrist attachment within 5 cm: %.3fm" % left_error)
+	await process_frame
+	await process_frame
+	_check(int(left_sample.count) > 0, "left IK modifier actually processed")
+	_check(float(left_sample.error) <= 0.05, "left wrist attachment within 5 cm after IK: %.3fm" % float(left_sample.error))
 	contact.end_contact("escaped")
 	_check(not contact.is_solver_active() and not contact.is_processing(), "QTE success disables solver")
 	contact.end_contact("repeat")
@@ -123,10 +132,17 @@ func _run() -> void:
 	_check(zombie._skeleton.find_child("BrutalGrabArmIK", false, false) == null, "no stale IK node after release")
 
 	_check(_begin("RIGHT ARM", "right"), "right-arm contact initializes")
+	var right_sample := {"count": 0, "error": INF}
+	contact._ik.modification_processed.connect(func() -> void:
+		if is_instance_valid(contact._target):
+			right_sample.count = int(right_sample.count) + 1
+			right_sample.error = CONTACT.bone_world(zombie._skeleton, enemy_right.end).distance_to(contact._target.global_position)
+	)
 	contact.update_contact(0.20)
-	zombie._skeleton.advance(0.016)
-	var right_error := CONTACT.bone_world(zombie._skeleton, enemy_right.end).distance_to(contact._target.global_position)
-	_check(right_error <= 0.05, "right wrist attachment within 5 cm: %.3fm" % right_error)
+	await process_frame
+	await process_frame
+	_check(int(right_sample.count) > 0, "right IK modifier actually processed")
+	_check(float(right_sample.error) <= 0.05, "right wrist attachment within 5 cm after IK: %.3fm" % float(right_sample.error))
 	owner.rotation.y = 0.05
 	zombie.rotation.y = -0.05
 	contact.update_contact(0.05)
