@@ -749,8 +749,10 @@ func _build_hud() -> void:
 	hud.action_requested.connect(_on_hud_action)
 	hud.aura_chosen.connect(_on_aura_chosen)
 	player.limb_grab_windup.connect(hud.show_limb_grab_windup)
-	player.limb_grab_started.connect(hud.show_limb_grab)
 	player.limb_grab_ended.connect(hud.hide_limb_grab)
+	player.grab_qte_started.connect(hud.begin_grab_qte)
+	player.grab_qte_progress.connect(hud.update_grab_qte)
+	player.grab_qte_finished.connect(hud.finish_grab_qte)
 	add_child(hud)
 
 func _update_gamepad_camera(delta: float) -> void:
