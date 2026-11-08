@@ -16,7 +16,24 @@ func _run() -> void:
 	root.add_child(game)
 	for frame in range(12):
 		await process_frame
+	# A rooftop rendering profile intentionally hides teeth glints. The legacy
+	# probe ran on the roof, so move this QA-only scene to the actual ground
+	# rendering profile before testing CanvasLayer visibility.
+	game.player.set_physics_process(false)
+	game.player.global_position = Vector3(0.0, 0.05, -12.0)
+	for visual in game._ground_map_visuals:
+		visual.visible = true
+	game._ground_map_ready = true
+	game._set_rooftop_render_profile(false)
+	game._rooftop_camera_blend = 0.0
+	game.camera_rig.global_position = game.player.global_position + Vector3.UP * 1.2
+	game.camera_arm.spring_length = 2.5
+	game.camera_arm.rotation.x = game._effective_camera_pitch()
+	game._update_camera_framing()
+	for frame in range(12):
+		await process_frame
 	var manager := game.flashlight_visibility_manager
+	_check(manager._teeth_canvas.visible, "ground scene enables real teeth CanvasLayer")
 	_check(manager != null and is_instance_valid(manager._teeth_overlay), "tooth overlay exists in gameplay")
 	_check(manager._teeth_canvas.layer == 0, "tooth overlay draws on its own CanvasLayer")
 	manager.set_process(false)
