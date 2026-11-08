@@ -8,6 +8,7 @@ on:
       - .github/workflows/qa-wall-doskok-validation.yml
       - game/tests/cinematic_chain_wall_trace.gd
       - game/tests/cinematic_chain_physics_test.gd
+      - game/scripts/player_controller.gd
 
 permissions:
   contents: read
@@ -23,14 +24,22 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Assert the original gameplay source is unchanged
+      - name: Assert edits are limited to the blocked-grapple fix and QA tests
         shell: bash
         run: |
           set -euo pipefail
+          BASE=ac12a215d95ce85d982f68b469aea99e75542883
           echo "QA_HEAD=$(git rev-parse HEAD)"
-          git diff --exit-code ac12a215d95ce85d982f68b469aea99e75542883 HEAD -- game/scripts game/scenes game/assets game/shaders game/project.godot game/export_presets.cfg
-          echo "PASS: production gameplay files unchanged from audited main"
-          git diff --name-only ac12a215d95ce85d982f68b469aea99e75542883 HEAD
+          test "$(git rev-parse "$BASE")" = "$BASE"
+          git diff --name-only "$BASE" HEAD
+          while IFS= read -r changed; do
+            case "$changed" in
+              .github/workflows/qa-wall-doskok-validation.yml|game/scripts/player_controller.gd|game/tests/cinematic_chain_physics_test.gd|game/tests/cinematic_chain_wall_trace.gd) ;;
+              *) echo "ERROR: Unauthorized changed path: $changed"; exit 1 ;;
+            esac
+          done < <(git diff --name-only "$BASE" HEAD)
+          test "$(git diff --name-only "$BASE" HEAD -- game/scripts)" = "game/scripts/player_controller.gd"
+          echo "PASS: only one gameplay script and the narrow QA tests/workflow changed"
 
       - name: Install Godot 4.7.2
         uses: chickensoft-games/setup-godot@v2
@@ -45,14 +54,29 @@ jobs:
           godot --headless --editor --path game --import --quit 2>&1 | tee "$RUNNER_TEMP/qa-import.log"
           if grep -E 'SCRIPT ERROR:|ERROR: Failed to load' "$RUNNER_TEMP/qa-import.log"; then exit 1; fi
 
-      - name: Reproduce blocked chain approach and inspect state transitions
+      - name: Run blocked-grapple regression, diagnostic trace and adjacent gameplay suites
         shell: bash
         run: |
           set +e
-          timeout 80s godot --headless --path game --script res://tests/cinematic_chain_wall_trace.gd > "$RUNNER_TEMP/chain-wall-trace.log" 2>&1
-          code=$?
-          cat "$RUNNER_TEMP/chain-wall-trace.log"
-          echo "CHAIN_WALL_EXIT=$code"
-          if grep -E '^SCRIPT ERROR:|^ERROR: Failed to load' "$RUNNER_TEMP/chain-wall-trace.log"; then exit 1; fi
-          test "$code" -eq 0
-          grep -q 'PASS: cinematic zombie chain physics' "$RUNNER_TEMP/chain-wall-trace.log"
+          failures=0
+          for test in cinematic_chain_physics_test.gd cinematic_chain_wall_trace.gd test_runner.gd concealed_spawn_test.gd; do
+            logfile="$RUNNER_TEMP/$test.log"
+            timeout 120s godot --headless --path game --script "res://tests/$test" > "$logfile" 2>&1
+            code=$?
+            cat "$logfile"
+            if [ "$code" -ne 0 ] || grep -Eq 'SCRIPT ERROR:|^ERROR:|^FAIL:' "$logfile" || ! grep -q 'PASS:' "$logfile"; then
+              echo "QA_TEST_FAIL $test code=$code"
+              failures=$((failures + 1))
+            else
+              echo "QA_TEST_PASS $test"
+            fi
+          done
+          echo "QA_TEST_FAILURES=$failures"
+          test "$failures" -eq 0
+
+      - name: Smoke-run playable scene for 600 frames
+        shell: bash
+        run: |
+          set -o pipefail
+          timeout 90s godot --headless --fixed-fps 60 --path game --quit-after 600 2>&1 | tee "$RUNNER_TEMP/qa-scene-smoke.log"
+          if grep -E 'SCRIPT ERROR:|^ERROR:' "$RUNNER_TEMP/qa-scene-smoke.log"; then exit 1; fi
