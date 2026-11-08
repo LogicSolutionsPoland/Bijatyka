@@ -123,9 +123,12 @@ func _check_physical_hop_and_collision() -> void:
 	player.attack_side = "left"
 	player.attack_phase = "approach"
 	player.attack_phase_time = Player.CHAIN_APPROACH_SECONDS
+	var entered_occluded_grapple := false
 	for i in range(40):
 		await physics_frame
+		entered_occluded_grapple = entered_occluded_grapple or player.attack_phase in ["grapple", "windup", "active"]
 	_check(player.global_position.z > -1.32, "CharacterBody3D cannot hop through a solid wall")
+	_check(not entered_occluded_grapple, "prelocked zombie behind wall never triggers a grapple or strike")
 	_check(player.attack_phase == "ready", "blocked approach times out rather than teleporting")
 	_check(target.hp == wall_hp, "blocked approach cannot damage zombie through wall")
 	player.queue_free()
