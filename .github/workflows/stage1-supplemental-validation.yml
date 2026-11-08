@@ -1,0 +1,106 @@
+name: BIJATYKA Stage 1 supplemental checks (NO APK)
+
+on:
+  push:
+    branches:
+      - qa/stage1-main-validation-20261108
+    paths:
+      - .github/workflows/stage1-supplemental-validation.yml
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Pinned-main Godot non-APK verification
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact audited main source
+        uses: actions/checkout@v4
+        with:
+          ref: ac12a215d95ce85d982f68b469aea99e75542883
+          persist-credentials: false
+
+      - name: Prove exact source SHA
+        run: |
+          test "$(git rev-parse HEAD)" = "ac12a215d95ce85d982f68b469aea99e75542883"
+          echo "STAGE1_SOURCE_SHA=$(git rev-parse HEAD)"
+
+      - name: Install Godot 4.7.2
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+
+      - name: Import audited project and preserve diagnostics
+        shell: bash
+        run: |
+          set +e
+          godot --headless --editor --path game --import --quit > "$RUNNER_TEMP/stage1-import.log" 2>&1
+          code=$?
+          cat "$RUNNER_TEMP/stage1-import.log"
+          echo "STAGE1_IMPORT_EXIT=$code"
+          echo "STAGE1_IMPORT_ENGINE_ERRORS=$(grep -Ec '^ERROR:' "$RUNNER_TEMP/stage1-import.log" || true)"
+          if [ "$code" -ne 0 ] || grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load' "$RUNNER_TEMP/stage1-import.log"; then
+            exit 1
+          fi
+
+      - name: Run additional non-rendering subsystem tests
+        shell: bash
+        run: |
+          set +e
+          failures=0
+          for test in \
+            cinematic_chain_physics_test.gd \
+            dormant_visuals_test.gd \
+            elevator_loading_test.gd \
+            flashlight_volume_test.gd \
+            full_gameplay_smoke_test.gd \
+            gpu_stage3_test.gd \
+            gpu_stage4_test.gd \
+            player_choreography_test.gd \
+            zombie_30_optimization_test.gd \
+            zombie_teeth_integration_test.gd
+          do
+            logfile="$RUNNER_TEMP/stage1-$test.log"
+            godot --headless --path game --script "res://tests/$test" >"$logfile" 2>&1
+            code=$?
+            cat "$logfile"
+            if [ "$code" -ne 0 ] || grep -Eq 'SCRIPT ERROR:|^ERROR:|^FAIL:' "$logfile" || ! grep -q 'PASS:' "$logfile"; then
+              echo "STAGE1_TEST_FAIL $test exit=$code"
+              failures=$((failures+1))
+            else
+              echo "STAGE1_TEST_PASS $test"
+            fi
+          done
+          echo "STAGE1_HEADLESS_FAILED=$failures"
+          test "$failures" -eq 0
+
+      - name: Run supplemental software Compatibility test assertions
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          failures=0
+          for test in \
+            gpu_stage4_benchmark.gd \
+            gpu_stage5_effect_cycle.gd \
+            gpu_stage5_mask_pair.gd \
+            gpu_stage6_beam_profile.gd \
+            gpu_stage6_beam_shader_pair.gd \
+            zombie_teeth_glint_render_probe.gd
+          do
+            logfile="$RUNNER_TEMP/stage1-render-$test.log"
+            xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 LP_NUM_THREADS=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script "res://tests/$test" >"$logfile" 2>&1
+            code=$?
+            cat "$logfile"
+            if [ "$code" -ne 0 ] || grep -Eq 'SCRIPT ERROR:|^ERROR:|^FAIL:' "$logfile" || ! grep -q 'PASS:' "$logfile"; then
+              echo "STAGE1_TEST_FAIL $test exit=$code"
+              failures=$((failures+1))
+            else
+              echo "STAGE1_TEST_PASS $test"
+            fi
+          done
+          echo "STAGE1_RENDER_FAILED=$failures"
+          test "$failures" -eq 0
