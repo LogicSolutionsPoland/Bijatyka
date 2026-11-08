@@ -527,8 +527,13 @@ func _update_attack(delta: float) -> void:
 		var flat := _engagement_target.global_position - global_position
 		flat.y = 0.0
 		if flat.length() <= CHAIN_GRAB_DISTANCE:
-			_begin_grapple()
-			return
+			# A target can approach from behind a wall after lock-on.
+			# Recheck occlusion before starting a grapple, not only when selecting it.
+			var sight := PhysicsRayQueryParameters3D.create(global_position + Vector3.UP, _engagement_target.global_position + Vector3.UP, 1)
+			sight.exclude = [get_rid(), _engagement_target.get_rid()]
+			if get_world_3d().direct_space_state.intersect_ray(sight).is_empty():
+				_begin_grapple()
+				return
 		attack_phase_time -= elapsed_time
 		if attack_phase_time <= 0.0:
 			# A blocked hop must not hit or warp through an obstacle.
