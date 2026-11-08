@@ -6,6 +6,7 @@ on:
       - qa/stage2-visual-followup-20261109
     paths:
       - game/tests/stage2_visual_followup_capture.gd
+      - game/tests/stage2_elevator_combat_capture.gd
       - .github/workflows/stage2-visual-followup-no-apk.yml
   workflow_dispatch:
 
@@ -45,7 +46,7 @@ jobs:
         run: |
           set +e
           set -u
-          mkdir -p stage2-evidence/{main/animations,main/player,main/zombies,main/rooftop,main/ground,main/hud,main/flashlight,comparisons,logs}
+          mkdir -p stage2-evidence/{main/animations,main/player,main/zombies,main/rooftop,main/ground,main/elevator,main/combat,main/hud,main/flashlight,comparisons,logs}
           printf 'test\texit_code\n' > stage2-evidence/logs/status.tsv
           run_case() {
             local key="$1"; local script="$2"; shift 2
@@ -62,6 +63,7 @@ jobs:
           run_case player_attack_capture player_attack_capture.gd
           run_case enemy_attack_capture enemy_attack_capture.gd
           run_case stage2_visual_followup_capture stage2_visual_followup_capture.gd
+          run_case stage2_elevator_combat_capture stage2_elevator_combat_capture.gd
           mkdir -p "$GITHUB_WORKSPACE/stage2-evidence/main/ground/stage5" "$GITHUB_WORKSPACE/stage2-evidence/main/flashlight/stage6"
           run_case gpu_stage5_visual_capture gpu_stage5_visual_capture.gd BIJATYKA_CAPTURE_DIR="$GITHUB_WORKSPACE/stage2-evidence/main/ground/stage5"
           run_case gpu_stage6_visual_capture gpu_stage6_visual_capture.gd BIJATYKA_CAPTURE_DIR="$GITHUB_WORKSPACE/stage2-evidence/main/flashlight/stage6" BIJATYKA_STAGE5_CAPTURE_DIR="$GITHUB_WORKSPACE/stage2-evidence/main/ground/stage5"
@@ -70,6 +72,8 @@ jobs:
           cp -n build/exo_kick_comparison/*.png stage2-evidence/main/animations/ 2>/dev/null || :
           cp -n build/player_attack_views/*.png stage2-evidence/main/player/ 2>/dev/null || :
           cp -n build/enemy_attack_views/*.png stage2-evidence/main/zombies/ 2>/dev/null || :
+          cp -n build/stage2_sequence/elevator*.png stage2-evidence/main/elevator/ 2>/dev/null || :
+          cp -n build/stage2_sequence/combat*.png stage2-evidence/main/combat/ 2>/dev/null || :
           cp -n build/stage2_followup/roof*.png stage2-evidence/main/rooftop/ 2>/dev/null || :
           cp -n build/stage2_followup/ground*.png stage2-evidence/main/ground/ 2>/dev/null || :
           cp -n build/stage2_followup/hud*.png stage2-evidence/main/hud/ 2>/dev/null || :
@@ -98,6 +102,7 @@ jobs:
                   script= ('exo_kick_visual_capture.gd' if probe=='animations' else
                           'player_attack_capture.gd' if probe=='player' else
                           'enemy_attack_capture.gd' if probe=='zombies' else
+                          'stage2_elevator_combat_capture.gd' if probe in ('elevator','combat') else
                           'gpu_stage5_visual_capture.gd' if 'stage5/' in p else
                           'gpu_stage6_visual_capture.gd' if 'stage6/' in p else
                           'stage2_visual_followup_capture.gd')
