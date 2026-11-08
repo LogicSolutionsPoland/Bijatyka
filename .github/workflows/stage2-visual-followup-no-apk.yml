@@ -43,6 +43,7 @@ jobs:
       - name: Capture isolated real game visuals
         shell: bash
         run: |
+          set +e
           set -u
           mkdir -p stage2-evidence/{main/animations,main/player,main/zombies,main/rooftop,main/ground,main/hud,main/flashlight,comparisons,logs}
           printf 'test\texit_code\n' > stage2-evidence/logs/status.tsv
