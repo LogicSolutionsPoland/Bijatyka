@@ -56,7 +56,7 @@ func _run() -> void:
 	var forward: Vector3 = -game.player.global_transform.basis.z.normalized()
 	var anchor: Vector3 = game.player.global_position
 	var enemies: Array[FoundationEnemy] = []
-	var near := game._spawn_enemy("shambler", anchor + forward * 2.2 + Vector3.UP * 0.05)
+	var near: FoundationEnemy = game._spawn_enemy("shambler", anchor + forward * 2.2 + Vector3.UP * 0.05)
 	enemies.append(near)
 	near.begin_spawn_assault(game.player)
 	for i in range(18):
@@ -68,7 +68,7 @@ func _run() -> void:
 		if i in [3, 8, 13, 19]:
 			await _save("combat_punch_%02d" % i)
 	for offset in [-1.35, 1.35]:
-		var enemy := game._spawn_enemy("shambler", anchor + forward * 2.8 + game.player.global_transform.basis.x * offset)
+		var enemy: FoundationEnemy = game._spawn_enemy("shambler", anchor + forward * 2.8 + game.player.global_transform.basis.x * offset)
 		enemies.append(enemy)
 		enemy.begin_spawn_assault(game.player)
 	for i in range(15):
