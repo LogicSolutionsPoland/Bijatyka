@@ -1,0 +1,9 @@
+# District draw-call pass
+
+The last Compatibility desktop software probe on the 15-zombie camera/map branch recorded 153.8 draw calls and 281.5 rendered objects on average in the 20-zombie concentrated development scenario. This is a desktop software renderer result; it does not measure Android GPU time. A local headless check measured the scene-wide 30 m visibility traversal at roughly 0.32 ms per call on this runner, so that traversal is unlikely to explain a sustained 5 FPS report by itself.
+
+The district previously created 103 separate boxes across individual MeshInstance3D nodes and several smaller MultiMesh groups. This pass puts all 103 collision-free boxes into seven shared material batches. Each instance retains its position, size, yaw, world-space weathering, and disabled shadows. The map stays a distinct node so its rendering can be switched OFF/ON from the debug profiler without changing combat or zombie spawning.
+
+The district batches rely on Godot's MultiMesh frustum bounds and the existing 30 m flashlight mask. They bypass the old per-box center-distance culling because a batch's center would otherwise hide a nearby street or facade when the player walks away from the base. This can render some invisible distant instances inside a visible batch; phone FPS and draw calls should decide whether smaller spatial batches are worthwhile.
+
+Validation gates: 103 instances in seven batches in headless material tests; actual transform and nonempty render bounds in the Compatibility rendered probe; existing flashlight pixels, 5-zombie gameplay, controls, and ARM64 package checks. Compare the new probe's draw calls with 153.8 on the same desktop runner. Android improvement is pending the phone's profiler readings, including the Map ON/OFF diagnostic at 0.67x with Mask ON.

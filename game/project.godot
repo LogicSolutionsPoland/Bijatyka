@@ -1,0 +1,66 @@
+; Engine configuration file.
+; Retribution: Mark of Sin — mobile vertical slice.
+config_version=5
+
+[application]
+config/name="Retribution: Mark of Sin — Thornbound Trial"
+config/icon="res://assets/ui/retribution_mark.svg"
+run/main_scene="res://scenes/foundation.tscn"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+
+[autoload]
+PencilSketchStyle="*res://scripts/pencil_sketch_style.gd"
+
+[display]
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/size/window_width_override=1280
+window/size/window_height_override=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[input]
+move_left={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":65),Object(InputEventKey,"physical_keycode":4194311),Object(InputEventJoypadMotion,"axis":0,"axis_value":-1.0)]}
+move_right={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":68),Object(InputEventKey,"physical_keycode":4194313),Object(InputEventJoypadMotion,"axis":0,"axis_value":1.0)]}
+move_forward={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":87),Object(InputEventKey,"physical_keycode":4194320),Object(InputEventJoypadMotion,"axis":1,"axis_value":-1.0)]}
+move_back={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":83),Object(InputEventKey,"physical_keycode":4194322),Object(InputEventJoypadMotion,"axis":1,"axis_value":1.0)]}
+camera_left={"deadzone":0.2,"events":[Object(InputEventJoypadMotion,"axis":2,"axis_value":-1.0)]}
+camera_right={"deadzone":0.2,"events":[Object(InputEventJoypadMotion,"axis":2,"axis_value":1.0)]}
+camera_up={"deadzone":0.2,"events":[Object(InputEventJoypadMotion,"axis":3,"axis_value":-1.0)]}
+camera_down={"deadzone":0.2,"events":[Object(InputEventJoypadMotion,"axis":3,"axis_value":1.0)]}
+jump={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":32)]}
+interact_elevator={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":69)]}
+dash={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":4194321)]}
+attack_punch={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":74)]}
+attack_kick={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":75)]}
+cast_spell={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":76)]}
+cycle_spell={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":85)]}
+pad_jump={"deadzone":0.2,"events":[Object(InputEventJoypadButton,"button_index":0)]}
+pad_dash={"deadzone":0.2,"events":[Object(InputEventJoypadButton,"button_index":2)]}
+pad_cast_spell={"deadzone":0.2,"events":[Object(InputEventJoypadButton,"button_index":1)]}
+pad_punch_left={"deadzone":0.2,"events":[Object(InputEventJoypadButton,"button_index":9)]}
+pad_punch_right={"deadzone":0.2,"events":[Object(InputEventJoypadButton,"button_index":10)]}
+pad_blast={"deadzone":0.2,"events":[Object(InputEventJoypadButton,"button_index":3)]}
+pad_kick_left={"deadzone":0.2,"events":[Object(InputEventJoypadMotion,"axis":4,"axis_value":1.0)]}
+pad_kick_right={"deadzone":0.2,"events":[Object(InputEventJoypadMotion,"axis":5,"axis_value":1.0)]}
+pad_spell_0={"deadzone":0.2,"events":[Object(InputEventJoypadButton,"button_index":11)]}
+pad_spell_1={"deadzone":0.2,"events":[Object(InputEventJoypadButton,"button_index":14)]}
+pad_spell_2={"deadzone":0.2,"events":[Object(InputEventJoypadButton,"button_index":12)]}
+pad_spell_3={"deadzone":0.2,"events":[Object(InputEventJoypadButton,"button_index":13)]}
+
+[rendering]
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+environment/defaults/default_clear_color=Color(0.035, 0.045, 0.065, 1)
+textures/vram_compression/import_etc2_astc=true
+
+[physics]
+3d/default_gravity=24.0
+
+[gameplay]
+flashlight_visibility_enabled=true
+
+[android]
+min_sdk="23"
+target_sdk="35"
+
