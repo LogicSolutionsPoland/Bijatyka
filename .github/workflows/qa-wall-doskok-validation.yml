@@ -1,0 +1,57 @@
+name: Bijatyka QA blocked chain approach (NO APK)
+
+on:
+  push:
+    branches:
+      - qa/stage1-wall-doskok-20261108
+    paths:
+      - .github/workflows/qa-wall-doskok-validation.yml
+      - game/tests/cinematic_chain_wall_trace.gd
+      - game/tests/cinematic_chain_physics_test.gd
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout test-only branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Assert the original gameplay source is unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "QA_HEAD=$(git rev-parse HEAD)"
+          git diff --exit-code ac12a215d95ce85d982f68b469aea99e75542883 HEAD -- game/scripts game/scenes game/assets game/shaders game/project.godot game/export_presets.cfg
+          echo "PASS: production gameplay files unchanged from audited main"
+          git diff --name-only ac12a215d95ce85d982f68b469aea99e75542883 HEAD
+
+      - name: Install Godot 4.7.2
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+
+      - name: Import Godot project
+        shell: bash
+        run: |
+          set -o pipefail
+          godot --headless --editor --path game --import --quit 2>&1 | tee "$RUNNER_TEMP/qa-import.log"
+          if grep -E 'SCRIPT ERROR:|ERROR: Failed to load' "$RUNNER_TEMP/qa-import.log"; then exit 1; fi
+
+      - name: Reproduce blocked chain approach and inspect state transitions
+        shell: bash
+        run: |
+          set +e
+          timeout 80s godot --headless --path game --script res://tests/cinematic_chain_wall_trace.gd > "$RUNNER_TEMP/chain-wall-trace.log" 2>&1
+          code=$?
+          cat "$RUNNER_TEMP/chain-wall-trace.log"
+          echo "CHAIN_WALL_EXIT=$code"
+          if grep -E '^SCRIPT ERROR:|^ERROR: Failed to load' "$RUNNER_TEMP/chain-wall-trace.log"; then exit 1; fi
+          test "$code" -eq 0
+          grep -q 'PASS: cinematic zombie chain physics' "$RUNNER_TEMP/chain-wall-trace.log"
