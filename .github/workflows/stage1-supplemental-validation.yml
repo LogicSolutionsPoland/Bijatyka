@@ -55,7 +55,6 @@ jobs:
             cinematic_chain_physics_test.gd \
             dormant_visuals_test.gd \
             elevator_loading_test.gd \
-            flashlight_volume_test.gd \
             full_gameplay_smoke_test.gd \
             gpu_stage3_test.gd \
             gpu_stage4_test.gd \
@@ -64,7 +63,7 @@ jobs:
             zombie_teeth_integration_test.gd
           do
             logfile="$RUNNER_TEMP/stage1-$test.log"
-            godot --headless --path game --script "res://tests/$test" >"$logfile" 2>&1
+            timeout 180s godot --headless --path game --script "res://tests/$test" >"$logfile" 2>&1
             code=$?
             cat "$logfile"
             if [ "$code" -ne 0 ] || grep -Eq 'SCRIPT ERROR:|^ERROR:|^FAIL:' "$logfile" || ! grep -q 'PASS:' "$logfile"; then
@@ -84,6 +83,7 @@ jobs:
           set +e
           failures=0
           for test in \
+            flashlight_volume_test.gd \
             gpu_stage4_benchmark.gd \
             gpu_stage5_effect_cycle.gd \
             gpu_stage5_mask_pair.gd \
@@ -92,7 +92,7 @@ jobs:
             zombie_teeth_glint_render_probe.gd
           do
             logfile="$RUNNER_TEMP/stage1-render-$test.log"
-            xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 LP_NUM_THREADS=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script "res://tests/$test" >"$logfile" 2>&1
+            timeout 240s xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 LP_NUM_THREADS=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script "res://tests/$test" >"$logfile" 2>&1
             code=$?
             cat "$logfile"
             if [ "$code" -ne 0 ] || grep -Eq 'SCRIPT ERROR:|^ERROR:|^FAIL:' "$logfile" || ! grep -q 'PASS:' "$logfile"; then
