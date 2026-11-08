@@ -52,7 +52,27 @@ func _run() -> void:
 	}))
 	if elevator._travelling:
 		push_warning("QA: elevator still travelling or awaiting ground resources after 510 physics frames")
+	# The elevator exit is still inside the starting tower cage. Move the QA-only
+	# actor to the actual ground combat lane before evaluating melee visibility.
+	# No production scene positions, settings, or scripts are modified.
+	game.player.global_position = Vector3(0.0, 0.05, -12.0)
 	game.player.velocity = Vector3.ZERO
+	game.player.rotation.y = 0.0
+	game._camera_yaw = 0.0
+	game.camera_rig.rotation.y = 0.0
+	game.player.set_camera_yaw(0.0)
+	game._rooftop_camera_blend = 0.0
+	game.camera_rig.global_position = game.player.global_position + Vector3.UP * 1.2
+	game.camera_arm.spring_length = 2.5
+	game.camera_arm.rotation.x = game._effective_camera_pitch()
+	game._update_camera_framing()
+	for i in range(22):
+		await physics_frame
+	await _save("combat_outside_tower_gameplay")
+	# Clean silhouette comparison is QA-only; never changes project settings.
+	game._pencil_screen_pass.visible = false
+	game.flashlight_visibility_manager._composite.visible = false
+	await _save("combat_outside_tower_clean")
 	var forward: Vector3 = -game.player.global_transform.basis.z.normalized()
 	var anchor: Vector3 = game.player.global_position
 	var enemies: Array[FoundationEnemy] = []
@@ -62,6 +82,11 @@ func _run() -> void:
 	for i in range(18):
 		await physics_frame
 	await _save("combat_one_zombie_approach")
+	game._pencil_screen_pass.visible = true
+	game.flashlight_visibility_manager._composite.visible = true
+	await _save("combat_one_zombie_effects_on")
+	game._pencil_screen_pass.visible = false
+	game.flashlight_visibility_manager._composite.visible = false
 	game.player.request_attack("punch", "right")
 	for i in range(20):
 		await physics_frame
@@ -87,7 +112,7 @@ func _run() -> void:
 	game.queue_free()
 	await process_frame
 	print("STAGE2_SEQUENCE_CAPTURED=%d ERRORS=%d" % [shots, failures])
-	quit(0 if shots >= 14 and failures == 0 else 1)
+	quit(0 if shots >= 17 and failures == 0 else 1)
 
 func _save(label: String) -> void:
 	for i in range(3):
