@@ -1,0 +1,127 @@
+name: BIJATYKA Stage 2 visual follow-up (NO APK)
+
+on:
+  push:
+    branches:
+      - qa/stage2-visual-followup-20261109
+    paths:
+      - game/tests/stage2_visual_followup_capture.gd
+      - .github/workflows/stage2-visual-followup-no-apk.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    name: Software OpenGL visual QA, no Android export
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - name: Checkout exact QA commit
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install Godot 4.7.2 without Android templates
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+
+      - name: Install software OpenGL capture tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb libgl1 libgl1-mesa-dri
+
+      - name: Import genuine game resources
+        run: |
+          set -o pipefail
+          godot --headless --editor --path game --import --quit 2>&1 | tee import.log
+          if grep -E 'SCRIPT ERROR:|ERROR: Failed to load' import.log; then exit 1; fi
+
+      - name: Capture isolated real game visuals
+        shell: bash
+        run: |
+          set -u
+          mkdir -p stage2-evidence/{main/animations,main/player,main/zombies,main/rooftop,main/ground,main/hud,main/flashlight,comparisons,logs}
+          printf 'test\texit_code\n' > stage2-evidence/logs/status.tsv
+          run_case() {
+            local key="$1"; local script="$2"; shift 2
+            echo "::group::Godot render: $key"
+            xvfb-run -a -s "-screen 0 2560x1600x24" env LIBGL_ALWAYS_SOFTWARE=1 "$@" \
+              godot --audio-driver Dummy --rendering-driver opengl3 --path game \
+              --script "res://tests/$script" > "stage2-evidence/logs/$key.log" 2>&1
+            local rc=$?
+            cat "stage2-evidence/logs/$key.log" | tail -35
+            echo "::endgroup::"
+            printf '%s\t%s\n' "$key" "$rc" >> stage2-evidence/logs/status.tsv
+          }
+          run_case exo_kick_visual_capture exo_kick_visual_capture.gd
+          run_case player_attack_capture player_attack_capture.gd
+          run_case enemy_attack_capture enemy_attack_capture.gd
+          run_case stage2_visual_followup_capture stage2_visual_followup_capture.gd
+          mkdir -p "$GITHUB_WORKSPACE/stage2-evidence/main/ground/stage5" "$GITHUB_WORKSPACE/stage2-evidence/main/flashlight/stage6"
+          run_case gpu_stage5_visual_capture gpu_stage5_visual_capture.gd BIJATYKA_CAPTURE_DIR="$GITHUB_WORKSPACE/stage2-evidence/main/ground/stage5"
+          run_case gpu_stage6_visual_capture gpu_stage6_visual_capture.gd BIJATYKA_CAPTURE_DIR="$GITHUB_WORKSPACE/stage2-evidence/main/flashlight/stage6" BIJATYKA_STAGE5_CAPTURE_DIR="$GITHUB_WORKSPACE/stage2-evidence/main/ground/stage5"
+          run_case zombie_teeth_glint_render_probe zombie_teeth_glint_render_probe.gd
+          run_case flashlight_render_probe flashlight_render_probe.gd
+          cp -n build/exo_kick_comparison/*.png stage2-evidence/main/animations/ 2>/dev/null || :
+          cp -n build/player_attack_views/*.png stage2-evidence/main/player/ 2>/dev/null || :
+          cp -n build/enemy_attack_views/*.png stage2-evidence/main/zombies/ 2>/dev/null || :
+          cp -n build/stage2_followup/roof*.png stage2-evidence/main/rooftop/ 2>/dev/null || :
+          cp -n build/stage2_followup/ground*.png stage2-evidence/main/ground/ 2>/dev/null || :
+          cp -n build/stage2_followup/hud*.png stage2-evidence/main/hud/ 2>/dev/null || :
+          true
+
+      - name: Create SHA-anchored screenshot manifest
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p stage2-evidence/logs
+          cp import.log stage2-evidence/logs/import.log 2>/dev/null || :
+          python3 - <<'PY'
+          import csv,glob,os,struct
+          os.makedirs('stage2-evidence',exist_ok=True)
+          files=sorted(glob.glob('stage2-evidence/**/*.png',recursive=True))
+          with open('stage2-evidence/manifest.csv','w',newline='') as f:
+              w=csv.writer(f)
+              w.writerow(['file','branch','commit_sha','scene_or_probe','animation_or_state','sample','viewpoint','renderer','resolution','render_command','metadata_quality'])
+              for p in files:
+                  with open(p,'rb') as im:
+                      data=im.read(24)
+                  wh=struct.unpack('>II',data[16:24]) if data[:8]==b'\x89PNG\r\n\x1a\n' else ('unknown','unknown')
+                  part=p.split('/')
+                  probe=part[2] if len(part)>2 else 'unknown'
+                  name=os.path.splitext(os.path.basename(p))[0]
+                  script= ('exo_kick_visual_capture.gd' if probe=='animations' else
+                          'player_attack_capture.gd' if probe=='player' else
+                          'enemy_attack_capture.gd' if probe=='zombies' else
+                          'gpu_stage5_visual_capture.gd' if 'stage5/' in p else
+                          'gpu_stage6_visual_capture.gd' if 'stage6/' in p else
+                          'stage2_visual_followup_capture.gd')
+                  w.writerow([p,os.environ.get('GITHUB_REF_NAME','unknown'),os.environ.get('GITHUB_SHA','unknown'),
+                              probe,name,'filename-derived',name,'Godot 4.7.2 GL Compatibility / Mesa llvmpipe',
+                              str(wh[0])+'x'+str(wh[1]),'xvfb-run env LIBGL_ALWAYS_SOFTWARE=1 godot --rendering-driver opengl3 --script res://tests/'+script,'QA metadata, frame time inferred from filename where available'])
+          print('QA_SCREENSHOT_COUNT='+str(len(files)))
+          PY
+
+      - name: Upload screenshots, manifest and logs (never APK)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: BIJATYKA-stage2-visual-followup-no-apk
+          path: stage2-evidence/
+          if-no-files-found: warn
+          retention-days: 21
+
+      - name: Fail CI if any render probe failed
+        if: always()
+        shell: bash
+        run: |
+          test -f stage2-evidence/logs/status.tsv || exit 1
+          cat stage2-evidence/logs/status.tsv
+          if awk -F '\t' 'NR>1 && $2!=0 {bad++} END {exit !bad}' stage2-evidence/logs/status.tsv; then
+            echo 'One or more visual probes failed' >&2
+            exit 1
+          fi
