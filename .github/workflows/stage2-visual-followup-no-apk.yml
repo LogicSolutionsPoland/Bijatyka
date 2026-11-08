@@ -7,6 +7,7 @@ on:
     paths:
       - game/tests/stage2_visual_followup_capture.gd
       - game/tests/stage2_elevator_combat_capture.gd
+      - game/tests/stage2_teeth_glint_dark_probe.gd
       - .github/workflows/stage2-visual-followup-no-apk.yml
   workflow_dispatch:
 
@@ -46,7 +47,7 @@ jobs:
         run: |
           set +e
           set -u
-          mkdir -p stage2-evidence/{main/animations,main/player,main/zombies,main/rooftop,main/ground,main/elevator,main/combat,main/hud,main/flashlight,comparisons,logs}
+          mkdir -p stage2-evidence/{main/animations,main/player,main/zombies,main/rooftop,main/ground,main/elevator,main/combat,main/zombie_teeth,main/hud,main/flashlight,comparisons,logs}
           printf 'test\texit_code\n' > stage2-evidence/logs/status.tsv
           run_case() {
             local key="$1"; local script="$2"; shift 2
@@ -67,11 +68,12 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/stage2-evidence/main/ground/stage5" "$GITHUB_WORKSPACE/stage2-evidence/main/flashlight/stage6"
           run_case gpu_stage5_visual_capture gpu_stage5_visual_capture.gd BIJATYKA_CAPTURE_DIR="$GITHUB_WORKSPACE/stage2-evidence/main/ground/stage5"
           run_case gpu_stage6_visual_capture gpu_stage6_visual_capture.gd BIJATYKA_CAPTURE_DIR="$GITHUB_WORKSPACE/stage2-evidence/main/flashlight/stage6" BIJATYKA_STAGE5_CAPTURE_DIR="$GITHUB_WORKSPACE/stage2-evidence/main/ground/stage5"
-          run_case zombie_teeth_glint_render_probe zombie_teeth_glint_render_probe.gd
+          run_case stage2_teeth_glint_dark_probe stage2_teeth_glint_dark_probe.gd
           run_case flashlight_render_probe flashlight_render_probe.gd
           cp -n build/exo_kick_comparison/*.png stage2-evidence/main/animations/ 2>/dev/null || :
           cp -n build/player_attack_views/*.png stage2-evidence/main/player/ 2>/dev/null || :
           cp -n build/enemy_attack_views/*.png stage2-evidence/main/zombies/ 2>/dev/null || :
+          cp -n build/stage2_teeth_debug/*.png stage2-evidence/main/zombie_teeth/ 2>/dev/null || :
           cp -n build/stage2_sequence/elevator*.png stage2-evidence/main/elevator/ 2>/dev/null || :
           cp -n build/stage2_sequence/combat*.png stage2-evidence/main/combat/ 2>/dev/null || :
           cp -n build/stage2_followup/roof*.png stage2-evidence/main/rooftop/ 2>/dev/null || :
@@ -103,6 +105,7 @@ jobs:
                           'player_attack_capture.gd' if probe=='player' else
                           'enemy_attack_capture.gd' if probe=='zombies' else
                           'stage2_elevator_combat_capture.gd' if probe in ('elevator','combat') else
+                          'stage2_teeth_glint_dark_probe.gd' if probe=='zombie_teeth' else
                           'gpu_stage5_visual_capture.gd' if 'stage5/' in p else
                           'gpu_stage6_visual_capture.gd' if 'stage6/' in p else
                           'stage2_visual_followup_capture.gd')
