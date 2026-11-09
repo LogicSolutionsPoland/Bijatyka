@@ -114,3 +114,65 @@ This is a real locomotion/collision-based approach, **not teleportation, enlarge
 - Zombie Fog Horizon owner-reported FAIL and flashlight-tip artwork PARTIAL remain **deferred and untouched**. Fullscreen Blackout remains under the existing regression suite.
 - Do not merge to `main`, start Stage 7, release a build, alter source branch Stage 5B or replace the previous verified APK.
 - **Working branch:** `fix/bijatyka-stage6-grab-qte-android-20261109`. Production source modification limited to `game/scripts/enemy.gd`; other changes are a dedicated natural gameplay test, a no-APK CI workflow, and this diagnosis.
+
+
+---
+
+## 2026-11-09 — Stage 6 P1: one final ARM64 debug APK (CI PASS, Android device PENDING)
+
+### Source integrity and build provenance
+
+- Exact Android export commit: `2949e9873ea64945ad508823b1878b7639a8aee8`.
+- Previous verified P1 branch HEAD before export workflow: `192c8e91b2b21bce4242148e1674acde3e76a96b`.
+- Verified gameplay repair commit: `fdb3fe055b6d5b06c2f0bb75ac90cdcf987ee833`.
+- Last successful full pre-build CI game source: `e2bb1097e1de2c97a540e366b8f4ca618a285853` ([run #42704672958](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/42704672958)).
+- New workflow commit changes *only* `.github/workflows/bijatyka-stage6-p1-arm64-apk.yml`, not `game/**`. The workflow verified `git diff --quiet e2bb1097... HEAD -- game` and an unchanged `enemy.gd` against the repaired commit, while checking the active R3 input map. **No gameplay, graphics, controls, shaders, fog, blackout, elevator or Stage 5B code changed.**
+- Existing Android export preset `Android ARM64` uses `arm64-v8a=true`, with other architectures disabled; Godot 4.7.2 and compatible Android export templates were used.
+
+### CI build and verified artifact
+
+- [**GitHub Actions run #42707639776**](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/42707639776): **COMPLETED / SUCCESS**.
+- Artifact ID: **13715370279**, named `Bijatyka-Stage6-P1-GrabQTE-ARM64-debug` ([verified download API URL](https://api.github.com/repos/LogicSolutionsPoland/Bijatyka/actions/artifacts/13715370279/zip)); the archive contains exactly one APK.
+- APK filename: `Bijatyka-Stage6-P1-GrabQTE-ARM64-debug.apk`.
+- APK SHA-256 as printed by the successful export job: **`ec20129f701f12b97361f28bfec07e27682affebdd469eedf770a39ef9b08c1a`**.
+- Artifact ZIP download size reported by GitHub: 65,009,662 bytes (ZIP size, **not** independently verified raw APK size).
+- Android package: `org.logicsolutionspoland.bijatyka`; ZIP archive integrity, Android manifest/badging, debug signing (`apksigner verify`), ARM64-only shared-library entries, `assets/project.binary`, compiled `assets/scripts/enemy.gdc`, player, foundation, HUD code and main scenes: **PASS**.
+- Exact one APK output and exactly one APK artifact upload: **PASS**. No release was created; no old artifact was replaced.
+
+### Pre-build and rendering results in this exact build workflow
+
+1. Repository source/repair identity guard: **PASS**.
+2. Godot project import and parse: **PASS**.
+3. `brutal_grab_state_machine_test`: **PASS**.
+4. `brutal_grab_qte_test`: **PASS**.
+5. `brutal_grab_limb_contact_test`: **PASS**.
+6. `brutal_grab_real_rig_test`: **PASS**.
+7. `stage6_grab_qte_hud_diagnostic_test`: **PASS**.
+8. `stage6_p1_natural_grab_test`: **PASS**, production AI natural contact and QTE, including three distinct simulated R3 inputs; no test-forced grip reservation or QTE start.
+9. `ai_director_test` and `jump_state_regression_test`: **PASS**.
+10. Stage 5B Mesa/OpenGL transition probe and Fullscreen Blackout regression: **PASS**.
+11. Mesa/OpenGL production natural-grab capture: **PASS**; seven nonempty real rendered PNG frames covering approach, windup, reaching, contact/QTE, restraint, escape, and recovery.
+12. ARM64 debug export, APK integrity, content and signing checks: **PASS**.
+
+### Physical Android acceptance checklist — OWNER ACTION REQUIRED
+
+These checks are **PENDING**, not inferred from CI.
+
+- [ ] Install this exact APK, verify filename and optional SHA-256, launch, rooftop, elevator, ground activation and ordinary enemy population.
+- [ ] Verify Fullscreen Blackout; movement, jumping, punches, magic, RAGE and original gamepad mappings.
+- [ ] In ordinary combat with no developer-forced grab, observe an ordinary zombie naturally approach the Exo Gray forearm, enter windup, make visible hand-to-arm contact, restrain the player, reveal the QTE, then release the player.
+- [ ] Confirm QTE starts with 1.5 seconds and expects exactly **three distinct R3 press/release events**; holding R3 must not count repeatedly.
+- [ ] Confirm normal movement resumes after successful escape, HUD disappears, timeouts safely release the player and interruptions/death clear the active grip.
+- [ ] Confirm no stuck attacker slot, permanently frozen player, lingering QTE widget, unnatural teleporting or severe skeletal deformation.
+- [ ] Watch FPS, heat, stability and controller responsiveness on real hardware; report any regressions with a short video/log if possible.
+
+### Explicit limitations and exclusions
+
+- Not every natural grab is guaranteed or permitted: visually unreachable contacts remain correctly rejected.
+- Existing punch-derived grab-windup animation and contact/release readability remain aesthetically imperfect; this P1 APK does not modify animations.
+- No Android hardware GPU, FPS, thermals or controller timing measurements are available. Device acceptance remains **PENDING**.
+- Owner-deferred Zombie Fog Horizon failure and flashlight-tip artwork partial result are **OUT OF SCOPE** for this P1 verdict.
+- `main` unchanged by this task; Stage 5B branch unchanged; Stage 7 **not started**; no merge or release.
+- This documentation update occurs *after* the build, so its new documentation-only commit is intentionally not the binary's exact source SHA. The verified APK source SHA remains `2949e9873ea64945ad508823b1878b7639a8aee8`.
+
+**Final CI matrix:** P1 NATURAL ZOMBIE GRAB CI **PASS**; QTE/R3 CI **PASS**; NATURAL GRAB RENDERING **PASS**; ANDROID ARM64 BUILD **PASS**; APK INTEGRITY **PASS**; FULLSCREEN BLACKOUT PRESERVED **YES**; ANDROID DEVICE ACCEPTANCE **PENDING**; MAIN CHANGED **NO**; STAGE 7 STARTED **NO**; APK COUNT **1**.
