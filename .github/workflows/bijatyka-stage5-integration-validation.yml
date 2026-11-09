@@ -1,9 +1,10 @@
-name: Bijatyka Stage 5 safe feature integration verification
+name: Bijatyka Stage 5/5B safe feature integration verification (NO APK)
 
 on:
   push:
     branches:
       - integration/bijatyka-stage5-complete-20261109
+      - integration/bijatyka-stage5b-blackout-fog-20261109
   workflow_dispatch:
 
 permissions:
@@ -75,6 +76,16 @@ jobs:
           timeout 180s xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/flashlight_beam_volume_test.gd 2>&1 | tee build/stage5/flashlight-gl.log
           grep -q 'PASS:' build/stage5/flashlight-gl.log
           if grep -Eq '^SCRIPT ERROR:|^ERROR:|^FAIL:' build/stage5/flashlight-gl.log; then exit 1; fi
+      - name: Capture and verify real ground blackout and rooftop pixels (Mesa OpenGL, NO APK)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/stage5/captures
+          BIJATYKA_CAPTURE_DIR="$PWD/build/stage5/captures" timeout 180s xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/flashlight_render_probe.gd 2>&1 | tee build/stage5/blackout-gl.log
+          grep -q 'PASS: flashlight Compatibility render mask' build/stage5/blackout-gl.log
+          if grep -Eq '^SCRIPT ERROR:|^ERROR:|^FAIL:' build/stage5/blackout-gl.log; then exit 1; fi
+          test -s build/stage5/captures/rooftop-no-blackout.png
+          test -s build/stage5/captures/ground-blackout-0.40.png
       - name: Paired pre/post visibility CPU samples (host only)
         if: always()
         shell: bash
@@ -97,5 +108,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: bijatyka-stage5-no-apk-qa-logs
-          path: build/stage5/*.log
+          path: |
+            build/stage5/*.log
+            build/stage5/captures/*.png
           if-no-files-found: warn

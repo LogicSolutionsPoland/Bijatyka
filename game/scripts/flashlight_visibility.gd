@@ -1,8 +1,8 @@
 extends Node
 class_name FlashlightVisibilityManager
-## One shared flashlight classifier for all enemies.
-## It controls the 3D beam and keeps hidden actors out of detailed render queues;
-## the broken full-screen blackout composite is deliberately not created.
+## One full-screen flashlight blackout and one cached enemy classifier.
+## Preserve the Stage 5 visibility optimizations while restoring the tested
+## ground-floor screen mask from the previous Compatibility implementation.
 
 enum Band {
 	VISIBLE_CLOSE,
@@ -12,6 +12,7 @@ enum Band {
 	BEYOND_RENDER,
 }
 
+const VISIBILITY_SHADER := preload("res://shaders/flashlight_visibility.gdshader")
 const BEAM_VOLUME_SHADER := preload("res://shaders/flashlight_beam_volume.gdshader")
 const BEAM_SECTIONS_SHADER := preload("res://shaders/flashlight_beam_sections.gdshader")
 const DISTANT_TEETH_OVERLAY := preload("res://scripts/distant_zombie_teeth.gd")
@@ -37,6 +38,7 @@ var camera: Camera3D
 var enabled := true
 var rooftop_sky_visible := false
 var _rooftop_mode := false
+var _composite_debug_visible := true
 var aim_direction := Vector3.FORWARD
 var beam_origin := Vector3.ZERO
 var beam_direction := Vector3.FORWARD
@@ -64,6 +66,7 @@ func configure(player_node: Node3D, camera_node: Camera3D, is_enabled: bool) -> 
 	_last_upload_state.clear()
 	_uploaded_uniforms.clear()
 	_build_distant_teeth_overlay()
+	_build_composite()
 	_build_beam_light()
 	if enabled and is_instance_valid(camera):
 		_tip_silhouettes = TIP_SILHOUETTES.new()
@@ -106,6 +109,8 @@ func set_rooftop_sky_visible(is_visible: bool) -> void:
 
 func _sync_rooftop_render_visibility() -> void:
 	var should_draw := enabled and not _rooftop_mode
+	if is_instance_valid(_composite):
+		_composite.visible = should_draw and _composite_debug_visible
 	if is_instance_valid(spotlight):
 		spotlight.visible = should_draw
 	if is_instance_valid(_teeth_canvas):
@@ -177,9 +182,11 @@ func get_teeth_glow_weight(_world_position: Vector3) -> float:
 func get_classification_counts() -> Dictionary:
 	return _counts.duplicate()
 
-func set_composite_visible_for_comparison(_is_visible: bool) -> void:
-	# Compatibility no-op for the diagnostics panel; the screen mask is removed.
-	pass
+func set_composite_visible_for_comparison(is_visible: bool) -> void:
+	# Debug-only A/B: change just the screen pass, not AI or enemy population.
+	if OS.is_debug_build() and is_instance_valid(_composite):
+		_composite_debug_visible = is_visible
+		_sync_rooftop_render_visibility()
 
 func _process(delta: float) -> void:
 	if not is_instance_valid(player) or _rooftop_mode:
@@ -210,6 +217,31 @@ func _build_distant_teeth_overlay() -> void:
 	_teeth_overlay = DISTANT_TEETH_OVERLAY.new()
 	_teeth_overlay.name = "DistantTeethGlints"
 	_teeth_canvas.add_child(_teeth_overlay)
+
+func _build_composite() -> void:
+	if not enabled or not is_instance_valid(camera):
+		return
+	# One existing, depth-reconstructing full-viewport pass. The world outside
+	# the beam is black; scene HUD remains in a separate CanvasLayer.
+	var quad := QuadMesh.new()
+	quad.size = Vector2(2.0, 2.0)
+	_material = ShaderMaterial.new()
+	_material.shader = VISIBILITY_SHADER
+	_material.render_priority = 126
+	_material.set_shader_parameter("oval_center_uv", OVAL_CENTER_UV)
+	_material.set_shader_parameter("oval_radius_uv", OVAL_RADIUS_UV)
+	_material.set_shader_parameter("oval_feather", OVAL_FEATHER)
+	_material.set_shader_parameter("bright_radius", BRIGHT_RADIUS)
+	_material.set_shader_parameter("max_radius", MAX_RADIUS)
+	_composite = MeshInstance3D.new()
+	_composite.name = "FlashlightVisibilityComposite"
+	_composite.add_to_group("flashlight_visibility_composite")
+	_composite.mesh = quad
+	_composite.material_override = _material
+	_composite.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_composite.custom_aabb = AABB(Vector3(-4.0, -4.0, -4.0), Vector3(8.0, 8.0, 8.0))
+	camera.add_child(_composite)
+
 
 func _build_beam_light() -> void:
 	if not enabled or not is_instance_valid(player):

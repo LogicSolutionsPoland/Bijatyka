@@ -27,7 +27,7 @@ const ZOMBIE_SPAWN_DISTANCE := 50.0
 const VISIBILITY_RADIUS := 30.0
 const INDEPENDENT_VISIBILITY_GROUPS := [
 	&"distant_backdrop", &"nature_scenery_batch", &"flashlight_beam",
-	&"pencil_screen_pass"
+	&"pencil_screen_pass", &"flashlight_visibility_composite"
 ]
 const COURTYARD_BATCH_CELL_SIZE := 12.0
 # Preserve the 1280x720 Android viewport and native-resolution touch HUD, but
@@ -1215,7 +1215,7 @@ func _set_debug_render_scale(scale: float) -> void:
 
 func _set_debug_mask_visible(is_visible: bool) -> void:
 	if OS.is_debug_build() and flashlight_visibility_manager != null:
-		# Retained for compatibility with the diagnostics panel; the mask is gone.
+		# Compare the restored fullscreen mask without changing AI or geometry.
 		flashlight_visibility_manager.set_composite_visible_for_comparison(is_visible)
 
 func _set_debug_pencil_visible(is_visible: bool) -> void:
@@ -1253,7 +1253,7 @@ func _set_character_shadow_state(is_enabled: bool) -> void:
 
 func _update_floor_skip_enabled() -> void:
 	if _floor_material != null:
-		# Keep the whole floor visible after removing the flashlight blackout.
+		# Keep Stage 5's whole-floor policy; blackout is applied after 3D geometry.
 		_floor_material.set_shader_parameter("floor_skip_enabled", false)
 
 func _set_debug_map_visible(is_visible: bool) -> void:

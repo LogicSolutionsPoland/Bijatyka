@@ -1,5 +1,5 @@
 extends SceneTree
-## Stage 5 cached visibility, effect lifecycle, and no-blackout regression.
+## Stage 5 cached visibility and FX lifecycle with restored Stage 5B blackout.
 
 const WORLD := preload("res://scenes/foundation.tscn")
 var failures: Array[String] = []
@@ -23,7 +23,18 @@ func _run() -> void:
 
 	_check(world.ZOMBIE_PERFORMANCE_CAPACITY == 20, "20 ordinary zombies remain the population cap")
 	_check(world.flashlight_visibility_manager.MAX_RADIUS == 10.0, "10m flashlight range remains")
-	_check(world.flashlight_visibility_manager._composite == null, "full-screen blackout remains absent")
+	var mask: MeshInstance3D = world.flashlight_visibility_manager._composite
+	_check(is_instance_valid(mask) and world.flashlight_visibility_manager._material != null,
+		"full-screen blackout is allocated with a shader")
+	_check(world.flashlight_visibility_manager._material.render_priority == 126,
+		"blackout draws ahead of beam and tip transparent artwork")
+	_check(not mask.visible, "rooftop hides ground-floor blackout")
+	world._set_rooftop_render_profile(false)
+	world._update_distance_visibility()
+	_check(mask.visible and not world._distance_visuals.has(mask),
+		"ground-floor blackout stays visible outside Stage 5 cached distance culling")
+	world._set_rooftop_render_profile(true)
+	_check(not mask.visible, "return to rooftop hides blackout again")
 	_check(world._distance_visuals.size() > 0, "visible geometry is registered without repeated traversal")
 
 	var box := MeshInstance3D.new()

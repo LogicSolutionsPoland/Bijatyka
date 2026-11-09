@@ -19,7 +19,10 @@ func _run() -> void:
 	var city_view_point := root.get_visible_rect().size * Vector2(0.50, 0.56)
 	game.hud._root.visible = false
 	await RenderingServer.frame_post_draw
-	var rooftop_city_pixel := _sample(root.get_texture().get_image(), city_view_point)
+	var rooftop_frame := root.get_texture().get_image()
+	_save_capture(rooftop_frame, "rooftop-no-blackout.png")
+	_check(not game.flashlight_visibility_manager._composite.visible, "roof keeps blackout mesh disabled")
+	var rooftop_city_pixel := _sample(rooftop_frame, city_view_point)
 	print("ROOFTOP_ZOMBIE_CITY_SAMPLE " + JSON.stringify({"pixel": rooftop_city_pixel, "sky_active": game._rooftop_sky_active}))
 	_check(maxf(rooftop_city_pixel.r, maxf(rooftop_city_pixel.g, rooftop_city_pixel.b)) > 0.04, "the zombie-filled city panorama reaches the view above the rooftop guard")
 	game.player.set_physics_process(false)
@@ -70,6 +73,8 @@ func _run() -> void:
 		var image := root.get_texture().get_image()
 		_check(image != null and not image.is_empty(), "Compatibility frame readback is available at %.2fx" % scale)
 		if image != null and not image.is_empty():
+			_save_capture(image, "ground-blackout-%.2f.png" % scale)
+		if image != null and not image.is_empty():
 			var lit_point := game.camera.unproject_position(lit_probe.global_position)
 			var dark_point := game.camera.unproject_position(dark_probe.global_position)
 			var player_point := game.camera.unproject_position(game.player.global_position + Vector3.UP * 1.15)
@@ -113,6 +118,18 @@ func _sample(image: Image, screen_point: Vector2) -> Color:
 	var x := clampi(int(screen_point.x), 0, image.get_width() - 1)
 	var y := clampi(int(screen_point.y), 0, image.get_height() - 1)
 	return image.get_pixel(x, y)
+
+func _save_capture(image: Image, file_name: String) -> void:
+	var folder := OS.get_environment("BIJATYKA_CAPTURE_DIR")
+	if folder.is_empty() or image == null or image.is_empty():
+		return
+	var created := DirAccess.make_dir_recursive_absolute(folder)
+	_check(created == OK, "screenshot directory is writable")
+	if created != OK:
+		return
+	_check(image.save_png(folder.path_join(file_name)) == OK,
+		"actual Compatibility frame is saved: " + file_name)
+
 
 func _check(ok: bool, message: String) -> void:
 	checks += 1
