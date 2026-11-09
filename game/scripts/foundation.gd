@@ -25,6 +25,10 @@ const GROUND_ZOMBIE_HORDE_SIZE := 20
 const ZOMBIE_PERFORMANCE_CAPACITY := 20
 const ZOMBIE_SPAWN_DISTANCE := 50.0
 const VISIBILITY_RADIUS := 30.0
+const INDEPENDENT_VISIBILITY_GROUPS := [
+	&"distant_backdrop", &"nature_scenery_batch", &"flashlight_beam",
+	&"pencil_screen_pass"
+]
 const COURTYARD_BATCH_CELL_SIZE := 12.0
 # Preserve the 1280x720 Android viewport and native-resolution touch HUD, but
 # render the 3D scene at 40% linear resolution to reduce mobile GPU workload.
@@ -107,6 +111,20 @@ var performance_diagnostics: FoundationPerformanceDiagnostics
 var combat_fx_pool: FoundationCombatFxPool
 var _performance_scenario := ""
 var _spawn_blockers: Array[AABB] = []
+
+enum DistanceVisibility { POSITION, LOCAL_LIGHT, FLOOR, COURTYARD_BATCH, CITY_BATCH }
+var _new_distance_visuals: Dictionary[Node3D, bool] = {}
+var _distance_visuals: Dictionary[Node3D, DistanceVisibility] = {}
+
+func _enter_tree() -> void:
+	get_tree().node_added.connect(_on_distance_node_added)
+	get_tree().node_removed.connect(_on_distance_node_removed)
+
+func _exit_tree() -> void:
+	get_tree().node_added.disconnect(_on_distance_node_added)
+	get_tree().node_removed.disconnect(_on_distance_node_removed)
+	_new_distance_visuals.clear()
+	_distance_visuals.clear()
 
 func _ready() -> void:
 	# Disable the global graphite material converter before any rooftop meshes
@@ -1030,11 +1048,67 @@ func _update_boss_locator() -> void:
 	var target := _boss_enemy.global_position + Vector3(0.0, 2.8, 0.0)
 	hud.update_boss_marker(camera.unproject_position(target), player.global_position.distance_to(_boss_enemy.global_position), camera.is_position_behind(target))
 
+func _on_distance_node_added(node: Node) -> void:
+	if node is GeometryInstance3D or node is OmniLight3D or node is SpotLight3D:
+		if is_ancestor_of(node):
+			# Wait until _ready has assigned groups to the visual and its parents.
+			_new_distance_visuals[node as Node3D] = true
+
+func _on_distance_node_removed(node: Node) -> void:
+	if node is Node3D:
+		_new_distance_visuals.erase(node)
+		_distance_visuals.erase(node)
+
+func _register_distance_visual(visual: Node3D) -> void:
+	var ancestor: Node = visual
+	while ancestor != self:
+		if ancestor is FoundationEnemy or ancestor is HordeFarVisuals:
+			return
+		for group in INDEPENDENT_VISIBILITY_GROUPS:
+			if ancestor.is_in_group(group):
+				return
+		if ancestor != visual and ancestor is MultiMeshInstance3D and ancestor.is_in_group(&"static_map_batch"):
+			return
+		ancestor = ancestor.get_parent()
+	var kind := DistanceVisibility.POSITION
+	if visual is MultiMeshInstance3D and visual.is_in_group(&"static_map_batch"):
+		kind = DistanceVisibility.CITY_BATCH
+	elif visual.is_in_group(&"radial_floor"):
+		kind = DistanceVisibility.FLOOR
+	elif visual is MultiMeshInstance3D and visual.is_in_group(&"courtyard_static_batch"):
+		kind = DistanceVisibility.COURTYARD_BATCH
+	elif visual is OmniLight3D or visual is SpotLight3D:
+		kind = DistanceVisibility.LOCAL_LIGHT
+	_distance_visuals[visual] = kind
+
 func _update_distance_visibility() -> void:
 	if player == null:
 		return
-	_apply_distance_visibility(self)
+	for visual in _new_distance_visuals:
+		_register_distance_visual(visual)
+	_new_distance_visuals.clear()
+	var at := player.global_position
+	# During roof and elevator preparation the loading coordinator owns city cells.
+	var cull_city := _ground_map_ready and not _ground_map_preparing and not _rooftop_sky_active
+	for visual in _distance_visuals:
+		var kind := _distance_visuals[visual]
+		var in_range := true
+		match kind:
+			DistanceVisibility.CITY_BATCH, DistanceVisibility.COURTYARD_BATCH:
+				if kind == DistanceVisibility.CITY_BATCH and not cull_city:
+					continue
+				var batch := visual as MultiMeshInstance3D
+				var bounds := batch.global_transform * batch.custom_aabb
+				var nearest := at.clamp(bounds.position, bounds.end)
+				var radius := VISIBILITY_RADIUS + 3.0 if kind == DistanceVisibility.CITY_BATCH else VISIBILITY_RADIUS
+				in_range = at.distance_squared_to(nearest) <= radius * radius
+			DistanceVisibility.POSITION, DistanceVisibility.LOCAL_LIGHT:
+				in_range = (kind != DistanceVisibility.LOCAL_LIGHT or _local_lights_enabled) \
+					and at.distance_squared_to(visual.global_position) <= VISIBILITY_RADIUS * VISIBILITY_RADIUS
+		if visual.visible != in_range:
+			visual.visible = in_range
 
+# Compatibility helper for legacy test fixtures only. Production uses the cached registry.
 func _apply_distance_visibility(node: Node) -> void:
 	# Enemy rigs own their 18/30 m bands; walking every bone and mesh every
 	# Keep the existing visibility cadence for the full ground population.
