@@ -1,0 +1,200 @@
+name: Bijatyka Stage 6 P1 - one verified Android ARM64 debug APK
+
+on:
+  push:
+    branches:
+      - fix/bijatyka-stage6-grab-qte-android-20261109
+    paths:
+      - .github/workflows/bijatyka-stage6-p1-arm64-apk.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bijatyka-stage6-p1-one-arm64-apk
+  cancel-in-progress: false
+
+jobs:
+  verify-and-export:
+    name: Verify P1 natural grab and export exactly one ARM64 APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - name: Check out the exact P1 branch commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Guard source SHA, repair and unaffected gameplay
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = "fix/bijatyka-stage6-grab-qte-android-20261109"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git diff --quiet e2bb1097e1de2c97a540e366b8f4ca618a285853 HEAD -- game
+          git diff --quiet fdb3fe055b6d5b06c2f0bb75ac90cdcf987ee833 HEAD -- game/scripts/enemy.gd
+          grep -q '_limb_grab_approach_point' game/scripts/enemy.gd
+          grep -q 'pad_escape_limb_grab' game/project.godot
+          echo "P1_SOURCE_SHA=$GITHUB_SHA"
+          echo "P1_GAMEDATA_IDENTICAL_TO_LAST_SUCCESSFUL_CI=YES"
+          echo "P1_ENEMY_GD_IDENTICAL_TO_VERIFIED_REPAIR=YES"
+          {
+            echo "## Bijatyka Stage 6 P1 Android ARM64"
+            echo "Source SHA: \`$GITHUB_SHA\`"
+            echo "Game files unchanged since successful CI \`e2bb1097e1de2c97a540e366b8f4ca618a285853\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install Godot 4.7.2 with matching Android export templates
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: true
+
+      - name: Import and parse game
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/stage6-p1/logs build/stage6-p1/captures
+          godot --version
+          timeout 300s godot --headless --editor --path game --import --quit > build/stage6-p1/logs/import.log 2>&1
+          if grep -Eq 'SCRIPT ERROR:|Parse Error:|ERROR: Failed to load' build/stage6-p1/logs/import.log; then
+            tail -100 build/stage6-p1/logs/import.log
+            exit 1
+          fi
+          echo 'P1_IMPORT=PASS'
+
+      - name: Validate 5 grab, QTE, IK and HUD suites
+        shell: bash
+        run: |
+          set -euo pipefail
+          for suite in brutal_grab_state_machine_test brutal_grab_qte_test brutal_grab_limb_contact_test brutal_grab_real_rig_test stage6_grab_qte_hud_diagnostic_test; do
+            log="build/stage6-p1/logs/$suite.log"
+            timeout 200s godot --headless --path game --script "res://tests/$suite.gd" > "$log" 2>&1 || { tail -100 "$log"; exit 1; }
+            grep -q '^PASS:' "$log" || { tail -100 "$log"; exit 1; }
+            if grep -Eq '^FAIL:|^SCRIPT ERROR:|^ERROR:' "$log"; then tail -100 "$log"; exit 1; fi
+            echo "P1_TEST_PASS $suite"
+          done
+
+      - name: Validate production natural AI grab and three separate R3 presses
+        shell: bash
+        run: |
+          set -euo pipefail
+          log="build/stage6-p1/logs/stage6_p1_natural_grab_test.log"
+          timeout 300s godot --headless --path game --script res://tests/stage6_p1_natural_grab_test.gd > "$log" 2>&1 || { tail -100 "$log"; exit 1; }
+          grep -q '^PASS: Stage6 P1 production natural AI grab/QTE' "$log" || { tail -100 "$log"; exit 1; }
+          if grep -Eq '^FAIL:|^SCRIPT ERROR:|^ERROR:' "$log"; then tail -100 "$log"; exit 1; fi
+          echo 'P1_NATURAL_GRAB_QTE_R3=PASS'
+
+      - name: Verify AI Director and jump regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          for suite in ai_director_test jump_state_regression_test; do
+            log="build/stage6-p1/logs/$suite.log"
+            timeout 200s godot --headless --path game --script "res://tests/$suite.gd" > "$log" 2>&1 || { tail -100 "$log"; exit 1; }
+            grep -q '^PASS:' "$log" || { tail -100 "$log"; exit 1; }
+            if grep -Eq '^FAIL:|^SCRIPT ERROR:|^ERROR:' "$log"; then tail -100 "$log"; exit 1; fi
+            echo "P1_TEST_PASS $suite"
+          done
+
+      - name: Verify real Mesa GL blackout and gameplay transitions
+        shell: bash
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: |
+          set -euo pipefail
+          export BIJATYKA_CAPTURE_DIR="$PWD/build/stage6-p1/captures"
+          log="build/stage6-p1/logs/stage5b_step5_transition_probe.log"
+          timeout 360s xvfb-run -a godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/stage5b_step5_transition_probe.gd > "$log" 2>&1 || { tail -100 "$log"; exit 1; }
+          grep -q '^PASS: Stage5B Step5 real gameplay-transition render checks' "$log" || { tail -100 "$log"; exit 1; }
+          if grep -Eq '^FAIL:|^SCRIPT ERROR:|^ERROR:' "$log"; then tail -100 "$log"; exit 1; fi
+          test -s "$BIJATYKA_CAPTURE_DIR/step5-grab-active.png"
+          test -s "$BIJATYKA_CAPTURE_DIR/step5-ground-0.40.png"
+          echo 'P1_BLACKOUT_AND_GL_TRANSITION=PASS'
+
+      - name: Verify seven real Mesa natural-grab frames
+        shell: bash
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: |
+          set -euo pipefail
+          export BIJATYKA_CAPTURE_DIR="$PWD/build/stage6-p1/captures"
+          log="build/stage6-p1/logs/stage6_p1_natural_grab_gl.log"
+          timeout 360s xvfb-run -a godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/stage6_p1_natural_grab_test.gd > "$log" 2>&1 || { tail -100 "$log"; exit 1; }
+          grep -q '^PASS: Stage6 P1 production natural AI grab/QTE' "$log" || { tail -100 "$log"; exit 1; }
+          if grep -Eq '^FAIL:|^SCRIPT ERROR:|^ERROR:' "$log"; then tail -100 "$log"; exit 1; fi
+          for stage in approach windup hand-reaching contact-qte restrained escape recovery; do
+            test -s "$BIJATYKA_CAPTURE_DIR/natural-$stage.png"
+          done
+          echo 'P1_SEVEN_NATURAL_GL_FRAMES=PASS'
+
+      - name: Export exactly one debug ARM64 APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/apk
+          apk="$GITHUB_WORKSPACE/build/apk/Bijatyka-Stage6-P1-GrabQTE-ARM64-debug.apk"
+          godot --headless --path game --export-debug 'Android ARM64' "$apk" > build/stage6-p1/logs/android-export.log 2>&1 || { tail -120 build/stage6-p1/logs/android-export.log; exit 1; }
+          if grep -Eq 'SCRIPT ERROR:|Parse Error:|^ERROR:' build/stage6-p1/logs/android-export.log; then
+            tail -120 build/stage6-p1/logs/android-export.log
+            exit 1
+          fi
+          test -s "$apk"
+          test "$(find build/apk -maxdepth 1 -type f -name '*.apk' | wc -l)" -eq 1
+          echo 'P1_ANDROID_ARM64_EXPORT=PASS'
+
+      - name: Verify manifest, debug signature, archive, ARM64 and actual packaged gameplay
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="build/apk/Bijatyka-Stage6-P1-GrabQTE-ARM64-debug.apk"
+          unzip -tqq "$apk"
+          unzip -Z1 "$apk" > build/stage6-p1/logs/apk-entries.txt
+          for entry in lib/arm64-v8a/libgodot_android.so assets/project.binary assets/scripts/enemy.gdc assets/scripts/player_controller.gdc assets/scripts/mobile_hud.gdc assets/scripts/foundation.gdc assets/scenes/foundation.tscn.remap; do
+            grep -Fxq "$entry" build/stage6-p1/logs/apk-entries.txt
+            test "$(unzip -p "$apk" "$entry" | wc -c)" -gt 0
+          done
+          if grep -Eq '^lib/(armeabi-v7a|x86|x86_64)/' build/stage6-p1/logs/apk-entries.txt; then
+            echo 'Unexpected non-ARM64 native libraries' >&2
+            exit 1
+          fi
+          aapt_bin="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
+          apksigner_bin="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
+          test -x "$aapt_bin"
+          test -x "$apksigner_bin"
+          "$aapt_bin" dump badging "$apk" > build/stage6-p1/logs/apk-badging.txt
+          grep -Fq "package: name='org.logicsolutionspoland.bijatyka'" build/stage6-p1/logs/apk-badging.txt
+          grep -Fxq 'application-debuggable' build/stage6-p1/logs/apk-badging.txt
+          "$apksigner_bin" verify --verbose --print-certs "$apk" > build/stage6-p1/logs/apk-signature.txt
+          test "$(find build/apk -maxdepth 1 -type f -name '*.apk' | wc -l)" -eq 1
+          sha256sum "$apk" | tee build/stage6-p1/logs/apk-sha256.txt
+          bytes="$(stat -c%s "$apk")"
+          {
+            echo "Build/source SHA: \`$GITHUB_SHA\`"
+            echo "APK: \`Bijatyka-Stage6-P1-GrabQTE-ARM64-debug.apk\`"
+            echo "APK bytes: $bytes"
+            echo "Package: \`org.logicsolutionspoland.bijatyka\`"
+            echo "Architecture: ARM64-v8a only"
+            echo "Android debug signature: PASS"
+            echo "APK SHA-256: \`$(cut -d' ' -f1 build/stage6-p1/logs/apk-sha256.txt)\`"
+            echo "Natural AI grab / 3 R3 presses / GL 7 frames / blackout / AI Director / jump: PASS"
+            echo "Physical Android acceptance: PENDING"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo 'P1_APK_INTEGRITY=PASS'
+
+      - name: Upload only the single verified APK
+        id: upload_apk
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bijatyka-Stage6-P1-GrabQTE-ARM64-debug
+          path: build/apk/Bijatyka-Stage6-P1-GrabQTE-ARM64-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Record artifact identifier in run summary
+        shell: bash
+        run: |
+          echo "Artifact ID: ${{ steps.upload_apk.outputs.artifact-id }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Artifact URL: ${{ steps.upload_apk.outputs.artifact-url }}" >> "$GITHUB_STEP_SUMMARY"
