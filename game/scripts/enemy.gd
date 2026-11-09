@@ -16,6 +16,7 @@ const RIG_ANIMATION_CACHE := preload("res://scripts/enemy_rig_animation_cache.gd
 const ENEMY_FIGHT_LIBRARY := &"enemy_combat"
 const SHADOW_POLICY := preload("res://scripts/shadow_policy.gd")
 const FLASHLIGHT_REVEAL := preload("res://scripts/flashlight_enemy_reveal.gd")
+const GRAB_CONTACT := preload("res://scripts/brutal_grab_limb_contact.gd")
 const GRAVITY := 24.0
 const RENDER_RADIUS := 30.0
 const DETAILED_RADIUS := 18.0
@@ -917,15 +918,19 @@ func _update_ai(delta: float, distance: float) -> void:
 			cancel_limb_grab_windup(_player)
 		elif state_time <= 0.0:
 			_resolve_limb_grab(distance)
-		elif distance > 1.03 and direction.length_squared() > 0.01 and _clear_sight(_player):
-			# A natural attack starts at the ordinary strike range (~1.5-1.8 m),
-			# but the real Exo forearm is only reachable at arm's length. Continue
-			# a collision-resolved forward reach during the authored windup rather
-			# than holding the zombie still and rejecting every valid-looking grab.
-			# This does not alter selection odds, attacker locks, IK reach or LOS.
-			var reach_speed := minf(move_speed * 0.9, (distance - 1.03) / maxf(0.08, state_time))
-			velocity.x = direction.x * reach_speed
-			velocity.z = direction.z * reach_speed
+		elif _clear_sight(_player):
+			# The real zombie arm is ~0.5 m long; simply stopping at the normal
+			# strike range, or even at 1 m center-to-center, cannot touch the Exo
+			# forearm. Strafe to the selected arm's side while keeping physics,
+			# collision, LOS and the existing attacker-slot admission authoritative.
+			var goal: Vector3 = _limb_grab_approach_point()
+			var to_goal := goal - global_position
+			to_goal.y = 0.0
+			if to_goal.length_squared() > 0.02 * 0.02:
+				var reach_speed := minf(move_speed * 1.3, to_goal.length() / maxf(0.08, state_time))
+				var reach_direction := to_goal.normalized()
+				velocity.x = reach_direction.x * reach_speed
+				velocity.z = reach_direction.z * reach_speed
 	elif state == "windup":
 		velocity.x = 0.0
 		velocity.z = 0.0
@@ -1023,6 +1028,32 @@ func _follow_local_formation(delta: float, distance: float) -> bool:
 	rotation.y = lerp_angle(rotation.y, atan2(-steering.x, -steering.z), minf(1.0, delta * 8.0))
 	_play_animation("Walk")
 	return true
+
+# A flank position is needed to keep a 0.52 m zombie arm within its real
+# IK reach without allowing two CharacterBody3D collision capsules to overlap.
+# Use the *visible* Exo forearm, not the hidden base rig's hand position.
+func _limb_grab_approach_point() -> Vector3:
+	if not is_instance_valid(_player):
+		return global_position
+	var center: Vector3 = _player.global_position
+	if _limb_grab_limb not in ["LEFT ARM", "RIGHT ARM"]:
+		return center
+	var driver := _player.get("_exo_retarget") as PlayerExoGrayRetarget
+	var exo: bool = is_instance_valid(driver) and is_instance_valid(driver.target_skeleton)
+	var rig: Skeleton3D = driver.target_skeleton if exo else _player._skeleton
+	if not is_instance_valid(rig):
+		return center
+	var bones: Dictionary = GRAB_CONTACT.resolve_player_bones(rig, _limb_grab_limb, exo)
+	if bones.is_empty():
+		return center
+	var arm_at: Vector3 = GRAB_CONTACT.forearm_contact_point(rig, int(bones.forearm), int(bones.wrist))
+	var outward := arm_at - center
+	outward.y = 0.0
+	if outward.length_squared() < 0.01:
+		return center
+	# 0.84 m leaves the player (0.38 m) and zombie (0.42 m) capsules
+	# separated; move_and_slide() performs the final safety resolution.
+	return center + outward.normalized() * 0.84
 
 # Only detailed local attackers can start a visible, side-specific reach.
 # Both rigs expose hand_l/hand_r; use live bone positions instead of assuming
