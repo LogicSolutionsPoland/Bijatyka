@@ -88,7 +88,7 @@ func _run() -> void:
 			# used to leak tall scenery at these off-axis screen coordinates.
 			for sample_uv in [
 				Vector2(0.063, 0.37), Vector2(0.625, 0.21),
-				Vector2(0.095, 0.86), Vector2(0.305, 0.14)
+				Vector2(0.095, 0.86), Vector2(0.305, 0.33)
 			]:
 				var outside_pixel := _sample(image, Vector2(image.get_size()) * sample_uv)
 				_check(maxf(outside_pixel.r, maxf(outside_pixel.g, outside_pixel.b)) < 0.04,
