@@ -98,6 +98,15 @@ func _run() -> void:
 		ended.value = id
 		event_log.append("QTE_FINISHED id=%d outcome=%s" % [id, outcome])
 	)
+	game.player.grab_interrupted.connect(func(reason: String, enemy: FoundationEnemy, limb: String) -> void:
+		event_log.append("GRAB_INTERRUPTED reason=%s enemy=%s limb=%s" % [reason, str(enemy.get_instance_id()) if is_instance_valid(enemy) else "none", limb])
+	)
+	game.player.grab_fully_ended.connect(func(reason: String) -> void:
+		event_log.append("GRAB_FINALLY_ENDED reason=%s" % reason)
+	)
+	game.player.grab_state_changed.connect(func(next_state: int, enemy: FoundationEnemy, limb: String) -> void:
+		event_log.append("PLAYER_GRAB_STATE=%d limb=%s enemy=%s" % [next_state, limb, str(enemy.get_instance_id()) if is_instance_valid(enemy) else "none"])
+	)
 	var attacks := 0
 	var last_attack_sequence := actor._attack_sequence
 	var last_state := actor.state
