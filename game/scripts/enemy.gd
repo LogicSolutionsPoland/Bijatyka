@@ -917,6 +917,15 @@ func _update_ai(delta: float, distance: float) -> void:
 			cancel_limb_grab_windup(_player)
 		elif state_time <= 0.0:
 			_resolve_limb_grab(distance)
+		elif distance > 1.03 and direction.length_squared() > 0.01 and _clear_sight(_player):
+			# A natural attack starts at the ordinary strike range (~1.5-1.8 m),
+			# but the real Exo forearm is only reachable at arm's length. Continue
+			# a collision-resolved forward reach during the authored windup rather
+			# than holding the zombie still and rejecting every valid-looking grab.
+			# This does not alter selection odds, attacker locks, IK reach or LOS.
+			var reach_speed := minf(move_speed * 0.9, (distance - 1.03) / maxf(0.08, state_time))
+			velocity.x = direction.x * reach_speed
+			velocity.z = direction.z * reach_speed
 	elif state == "windup":
 		velocity.x = 0.0
 		velocity.z = 0.0
