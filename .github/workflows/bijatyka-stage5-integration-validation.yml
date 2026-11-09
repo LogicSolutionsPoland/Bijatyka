@@ -37,6 +37,7 @@ jobs:
       - name: Gameplay, visuals, controls, zombie systems and CPU regressions
         shell: bash
         run: |
+          set +e
           set -uo pipefail
           failures=0
           for suite in \

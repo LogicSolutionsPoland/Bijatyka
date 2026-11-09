@@ -145,20 +145,20 @@ func _test_flashlight_updates() -> void:
 		_check((-manager.spotlight.global_basis.z).is_equal_approx(manager.beam_direction), "yaw rotates the physical 3D beam in the same frame")
 	after = manager.get_parameter_update_stats()
 	_check(after.updates - before.updates == 60, "three callers submit only 60 distinct moving states")
-	_check(after.uniform_writes == before.uniform_writes and manager._material == null, "moving 3D beam never submits deleted screen-mask shader uniforms")
+	_check(after.uniform_writes - before.uniform_writes == 120 and manager._material != null, "60 distinct moving states each upload exactly two changed blackout uniforms")
 	before = after
 	camera.rotation.x = -0.3
 	manager.set_aim_yaw(0.6)
 	_check(manager.beam_direction.y < -0.2, "pitch updates even when yaw is unchanged")
-	_check(manager.get_parameter_update_stats().uniform_writes == before.uniform_writes, "pitch-only change cannot introduce fullscreen mask uniforms")
+	_check(manager.get_parameter_update_stats().uniform_writes == before.uniform_writes, "pitch-only change updates beam direction without redundant horizontal mask uniforms")
 	player.rotation.y = 1.2
 	manager._process(1.0 / 60.0)
 	_check((-manager.spotlight.global_basis.z).is_equal_approx(manager.beam_direction), "parent rotation cannot turn spotlight away from camera")
 	manager.set_rooftop_sky_visible(true)
-	_check(not manager.spotlight.visible and manager._composite == null, "rooftop hides the 3D flashlight without reintroducing blackout")
+	_check(not manager.spotlight.visible and not manager._composite.visible, "rooftop hides both 3D flashlight and fullscreen blackout")
 	player.position.z = 2.0
 	manager.set_rooftop_sky_visible(false)
-	_check(manager.spotlight.visible and manager._composite == null, "ground restores 3D flashlight only; no fullscreen composite")
+	_check(manager.spotlight.visible and manager._composite.visible, "ground restores both 3D flashlight and fullscreen blackout")
 	_check(manager.beam_origin.is_equal_approx(player.global_position + Vector3.UP * Visibility.BEAM_HEIGHT), "ground restores current beam position immediately")
 	fixture.queue_free()
 

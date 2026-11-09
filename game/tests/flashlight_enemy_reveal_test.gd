@@ -35,7 +35,7 @@ func _run() -> void:
 	for mesh in enemy._base_visual_meshes:
 		for surface in range(mesh.mesh.get_surface_count()):
 			var material := mesh.get_active_material(surface)
-			_check(material != null and material.render_priority == Reveal.RENDER_PRIORITY, "revealed surface retains expected draw priority without blackout")
+			_check(material != null and material.render_priority == Reveal.RENDER_PRIORITY, "revealed surface retains priority after the restored blackout")
 			_check(material.has_meta(Reveal.SOURCE_META), "revealed surface retains its original textured material")
 			if material is ShaderMaterial:
 				_check((material as ShaderMaterial).shader != null and (material as ShaderMaterial).shader.code.contains("depth_draw_always"), "revealed shader retains depth testing")
@@ -99,8 +99,8 @@ func _run() -> void:
 	crowd.configure(5)
 	scene.add_child(crowd)
 	var crowd_material := crowd.multimesh.mesh.surface_get_material(0) as ShaderMaterial
-	_check(crowd_material != null and crowd_material.shader != null and crowd_material.shader.code.contains("shader_type spatial"), "distant MultiMesh maintains a valid 3D crowd shader without a mask")
-	_check(manager._composite == null and manager._material == null, "light classifier never reinstates the removed fullscreen blackout")
+	_check(crowd_material != null and crowd_material.shader != null and crowd_material.shader.code.contains("shader_type spatial"), "distant MultiMesh maintains a valid 3D crowd shader with the mask")
+	_check(is_instance_valid(manager._composite) and manager._material != null and manager._material.render_priority == 126, "light classifier coexists with the restored priority-126 fullscreen blackout")
 	manager.enabled = false
 	manager._classify_enemies()
 	_check(not enemy._flashlight_full_body_visible and manager.is_visible_to_flashlight(enemy), "disabling the flashlight returns normal unmasked rendering")
