@@ -36,6 +36,7 @@ func _test_rig_transfers() -> void:
 		enemy.set_physics_process(false)
 		pool.register_enemy(enemy)
 		actors.append(enemy)
+	_check_health_bars(actors[0], actors[1])
 	var before := Cache.get_stats()
 	var libraries: Dictionary = {}
 	var motion: AnimationLibrary
@@ -101,6 +102,21 @@ func _test_rig_transfers() -> void:
 		_check(is_equal_approx(clip.get_marker_time(&"contact"), actor.telegraph_duration * 0.55), "custom timing uses its own contact marker")
 		actor._set_full_animation_selected(false)
 	fixture.queue_free()
+
+func _check_health_bars(wounded: FoundationEnemy, healthy: FoundationEnemy) -> void:
+	for path in ["Backing", "Fill"]:
+		var a := wounded._health_bar_root.get_node(path) as MeshInstance3D
+		var b := healthy._health_bar_root.get_node(path) as MeshInstance3D
+		_check(a != b and a.mesh == b.mesh and a.material_override == b.material_override,
+			"%s health-bar art is shared across actors" % path)
+	wounded.hp = wounded.starting_health / 2
+	wounded._update_health_display()
+	_check(wounded._health_bar_root.visible and is_equal_approx(wounded._health_bar_fill.scale.x, 0.5),
+		"damage shows and scales only the wounded actor's bar")
+	_check(not healthy._health_bar_root.visible and is_equal_approx(healthy._health_bar_fill.scale.x, 1.0),
+		"the healthy actor keeps its own visibility and fill")
+	wounded.hp = wounded.starting_health
+	wounded._update_health_display()
 
 func _test_flashlight_updates() -> void:
 	var fixture := Node3D.new()
