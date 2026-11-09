@@ -27,14 +27,21 @@ func _run() -> void:
 		_finish()
 		return
 	_check(effect.overlay is MeshInstance3D and effect.material != null, "effect uses one persistent fog quad and shader material")
-	var zombie_texture := effect.material.get_shader_parameter("zombie_contour_mask") as Texture2D
+	var zombie_texture := effect.material.get_shader_parameter("tip_artwork") as Texture2D
 	_check(is_equal_approx(float(effect.material.get_shader_parameter("fog_opacity")), 0.72),
 		"stronger translucent moving fog surrounds the zombie silhouettes")
-	_check(zombie_texture != null and zombie_texture.resource_path.ends_with("flashlight_tip_zombie_contours.webp"),
-		"jagged zombie outlines are drawn inside the moving fog")
+	_check(zombie_texture != null and zombie_texture.resource_path.ends_with("flashlight_tip_zombie_fog.webp"),
+		"original PR #70 artwork is bound at the projected flashlight tip")
 	_check(effect.material.render_priority == 127, "effect draws after the 3D blackout composite")
 	_check(is_equal_approx(float(effect.material.get_shader_parameter("silhouette_opacity")), 0.40),
-		"zombie contour lines use 40 percent alpha")
+		"original zombie artwork uses 40 percent alpha")
+	_check(zombie_texture != null and zombie_texture.get_width() == 768 and zombie_texture.get_height() == 512,
+		"original PR #70 artwork has 768x512 imported dimensions")
+	_check(effect.material.shader.code.contains("floor(effect_time * 13.0)") and
+		effect.material.shader.code.contains("line_index < 5"),
+		"five localized glitch slices are driven by 13 Hz discrete shader-time steps")
+	_check(manager._composite != null and manager._material.render_priority == 126,
+		"verified fullscreen blackout remains active at priority 126")
 	_check(effect.find_children("*", "MeshInstance3D", true, false).size() == 1,
 		"effect creates one reusable fog quad instead of per-frame nodes")
 	_check(game.burning_horizon.get_child_count() == 1,
@@ -71,6 +78,13 @@ func _run() -> void:
 		VisibilityManager.MAX_RADIUS, VisibilityManager.BEAM_TANGENT * 0.5, true)
 	_check(effect.projected_size.x < normal_size.x and effect.projected_size.y < normal_size.y,
 		"projected silhouette footprint scales with flashlight cone width")
+	manager._sync_tip_silhouettes()
+
+	var down_direction := Vector3(0.0, -0.45, -0.9).normalized()
+	effect.update_beam(manager.beam_origin, down_direction, VisibilityManager.MAX_RADIUS,
+		VisibilityManager.BEAM_TANGENT, true)
+	_check(effect.overlay.global_position.distance_to(effect.beam_tip) > 0.25,
+		"downward beam artwork is projected near the floor intercept rather than behind the floor")
 	manager._sync_tip_silhouettes()
 
 	game._set_rooftop_render_profile(true)
