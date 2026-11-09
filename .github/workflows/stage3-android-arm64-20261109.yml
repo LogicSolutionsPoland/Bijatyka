@@ -1,0 +1,141 @@
+name: Bijatyka Stage 3 pinned Android ARM64 debug APK
+run-name: Stage 3 one APK from ac12a215 (fixed source)
+
+on:
+  push:
+    branches:
+      - qa/stage3-android-arm64-20261109
+    paths:
+      - .github/workflows/stage3-android-arm64-20261109.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bijatyka-stage3-single-apk-20261109
+  cancel-in-progress: false
+
+jobs:
+  validate-export:
+    name: Validate exact main snapshot and export one ARM64 APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      SOURCE_SHA: ac12a215d95ce85d982f68b469aea99e75542883
+      APK_PATH: build/Bijatyka-Stage3-Android-ARM64.apk
+    steps:
+      - name: Checkout immutable, previously audited main SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ac12a215d95ce85d982f68b469aea99e75542883
+          persist-credentials: false
+
+      - name: Confirm exact source, preset, main scene and package
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          test -f game/project.godot
+          test -f game/export_presets.cfg
+          grep -Fq 'run/main_scene="res://scenes/foundation.tscn"' game/project.godot
+          grep -Fq 'name="Android ARM64"' game/export_presets.cfg
+          grep -Fq 'architectures/arm64-v8a=true' game/export_presets.cfg
+          grep -Fq 'architectures/armeabi-v7a=false' game/export_presets.cfg
+          grep -Fq 'architectures/x86=false' game/export_presets.cfg
+          grep -Fq 'architectures/x86_64=false' game/export_presets.cfg
+          grep -Fq 'package/unique_name="org.logicsolutionspoland.bijatyka"' game/export_presets.cfg
+          echo "PINNED_SOURCE_SHA=$SOURCE_SHA"
+
+      - name: Install Godot 4.7.2 and Android export templates
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: true
+
+      - name: Inspect Android toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --version
+          java -version
+          test -d "$ANDROID_HOME/build-tools"
+
+      - name: Import game and compile scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --editor --path game --import --quit 2>&1 | tee "$RUNNER_TEMP/stage3-import.log"
+          if grep -E 'SCRIPT ERROR:|Parse Error:|ERROR: Failed to load' "$RUNNER_TEMP/stage3-import.log"; then exit 1; fi
+
+      - name: Run essential startup, input, elevator, combat and zombie regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          for suite in test_runner player_animation_test elevator_loading_test full_gameplay_smoke_test concealed_spawn_test zombie_30_optimization_test; do
+            logfile="$RUNNER_TEMP/stage3-${suite}.log"
+            godot --headless --path game --script "res://tests/${suite}.gd" 2>&1 | tee "$logfile"
+            grep -q 'PASS:' "$logfile"
+            if grep -E 'SCRIPT ERROR:|^ERROR:|^FAIL:' "$logfile"; then exit 1; fi
+          done
+          godot --headless --fixed-fps 60 --path game --quit-after 600 2>&1 | tee "$RUNNER_TEMP/stage3-scene-smoke.log"
+          if grep -E 'SCRIPT ERROR:|^ERROR:' "$RUNNER_TEMP/stage3-scene-smoke.log"; then exit 1; fi
+
+      - name: Export exactly one ARM64 debug APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          godot --headless --path game --export-debug "Android ARM64" "$GITHUB_WORKSPACE/$APK_PATH" 2>&1 | tee "$RUNNER_TEMP/stage3-export.log"
+          if grep -E 'SCRIPT ERROR:|Parse Error:|^ERROR:' "$RUNNER_TEMP/stage3-export.log"; then exit 1; fi
+          test -s "$APK_PATH"
+
+      - name: Verify APK format, content, architecture and debug signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="$APK_PATH"
+          unzip -tqq "$apk"
+          unzip -Z1 "$apk" > "$RUNNER_TEMP/stage3-apk-files.txt"
+          for entry in \
+            AndroidManifest.xml \
+            lib/arm64-v8a/libgodot_android.so \
+            assets/project.binary \
+            assets/scenes/foundation.tscn.remap \
+            assets/scenes/player.tscn.remap \
+            assets/scripts/player_controller.gdc \
+            assets/scripts/starting_elevator.gdc \
+            assets/scripts/enemy.gdc \
+            assets/scripts/foundation.gdc \
+            assets/assets/characters/exo_gray/Exo_Gray_Player.glb.import \
+            assets/assets/audio/menu_music.mp3.import; do
+            grep -Fxq "$entry" "$RUNNER_TEMP/stage3-apk-files.txt"
+            test "$(unzip -p "$apk" "$entry" | wc -c)" -gt 0
+          done
+          if grep -Eq '^lib/(armeabi-v7a|x86|x86_64)/' "$RUNNER_TEMP/stage3-apk-files.txt"; then
+            echo "FAIL: unexpected native ABI" >&2
+            exit 1
+          fi
+          sdk_tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          test -x "$sdk_tools/aapt"
+          test -x "$sdk_tools/apksigner"
+          "$sdk_tools/aapt" dump badging "$apk" | tee build/Bijatyka-Stage3-badging.txt
+          grep -Fq "package: name='org.logicsolutionspoland.bijatyka'" build/Bijatyka-Stage3-badging.txt
+          "$sdk_tools/apksigner" verify --verbose --print-certs "$apk" | tee build/Bijatyka-Stage3-signature.txt
+          sha256sum "$apk" | tee build/Bijatyka-Stage3-Android-ARM64.sha256
+          stat -c 'APK_BYTES=%s' "$apk"
+          printf 'SOURCE_SHA=%s\nWORKFLOW_RUN_ID=%s\nPRESET=Android ARM64\nAPK_FILE=%s\n' "$SOURCE_SHA" "$GITHUB_RUN_ID" "$APK_PATH" > build/Bijatyka-Stage3-metadata.txt
+          cat build/Bijatyka-Stage3-metadata.txt
+
+      - name: Upload one validated APK and its verification metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bijatyka-Stage3-Android-ARM64
+          path: |
+            build/Bijatyka-Stage3-Android-ARM64.apk
+            build/Bijatyka-Stage3-Android-ARM64.sha256
+            build/Bijatyka-Stage3-metadata.txt
+            build/Bijatyka-Stage3-badging.txt
+            build/Bijatyka-Stage3-signature.txt
+          if-no-files-found: error
+          retention-days: 14
