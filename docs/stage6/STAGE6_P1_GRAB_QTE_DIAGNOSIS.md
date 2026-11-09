@@ -1,5 +1,8 @@
 # Bijatyka Stage 6 / P1 — Android grab animation and QTE diagnostics
 
+> **LATEST OWNER ANDROID ACCEPTANCE — FAIL (2026-11-09): NO OBSERVABLE NATURAL ZOMBIE GRAB AND NO QTE in the delivered Stage 6 P1 APK.** Earlier CI PASS and Android PENDING statements below are historical; they do not supersede this physical-device result. No root cause established by this report.
+
+
 Date: 2026-11-09. Scope: diagnose physical Android feedback initially reported as **"nie ma animacji chwytów ani qte"**, then clarified as **"nie ma miejsca zadne chwytanie gracza ani nic takiego, tego nie ma"**. Source frozen from the verified Stage 5B game commit `f1989c8c675357427e2214796e14a5103f1cef01`. Owner-reported Android test: **FAIL — no grab occurs in natural gameplay**. Actual device screenshots and logs have not been supplied. This document is diagnostic only, not proof of a repaired APK.
 
 ## Branch/safety
@@ -176,3 +179,21 @@ These checks are **PENDING**, not inferred from CI.
 - This documentation update occurs *after* the build, so its new documentation-only commit is intentionally not the binary's exact source SHA. The verified APK source SHA remains `2949e9873ea64945ad508823b1878b7639a8aee8`.
 
 **Final CI matrix:** P1 NATURAL ZOMBIE GRAB CI **PASS**; QTE/R3 CI **PASS**; NATURAL GRAB RENDERING **PASS**; ANDROID ARM64 BUILD **PASS**; APK INTEGRITY **PASS**; FULLSCREEN BLACKOUT PRESERVED **YES**; ANDROID DEVICE ACCEPTANCE **PENDING**; MAIN CHANGED **NO**; STAGE 7 STARTED **NO**; APK COUNT **1**.
+
+---
+
+## 2026-11-09 — FINAL OWNER PHYSICAL ANDROID FEEDBACK: FAIL (supersedes CI-only acceptance status)
+
+**Owner's explicit on-device observation:** "nie ma ani qte ani grab" — there is **no observable natural zombie grab and no QTE** during gameplay.
+
+- **Natural zombie grab, Android device:** **FAIL / NOT OBSERVED**.
+- **QTE launch and HUD, Android device:** **FAIL / NOT OBSERVED**.
+- **R3 escape on a genuine hold:** **NOT TESTABLE** because the natural hold and QTE never appeared.
+- **Stage 6 / P1 Android acceptance:** **FAIL / OPEN**; do **not** declare the P1 defect repaired on a real device.
+- APK under test (latest delivered P1 build): `Bijatyka-Stage6-P1-GrabQTE-ARM64-debug.apk`; artifact [#13715370279](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/42707639776), build source SHA `2949e9873ea64945ad508823b1878b7639a8aee8`, SHA-256 `ec20129f701f12b97361f28bfec07e27682affebdd469eedf770a39ef9b08c1a`. The owner did not provide an independent on-device APK hash, recording or Android logs; the artifact reference identifies the delivered P1 build, **not independent forensic proof** of the file installed on the phone.
+- Existing successful CI run [#42707639776](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/42707639776) remains **CI PASS only**. It does **not** override real Android failure. The discrepancy requires root-cause investigation; do not assume that the remaining defect is solely a missing animation, a HUD rendering problem or a failed R3 binding.
+- Do not modify the game, grab parameters, QTE, visuals, Android export, Stage 5B, or `main` as part of recording this report.
+- No new APK, CI run, release, merge or Stage 7 was initiated for this feedback.
+- Zombie Fog Horizon and flashlight-tip artwork remain separately deferred.
+
+**Latest authoritative status:** P1 NATURAL ZOMBIE GRAB CI **PASS (previously)**; QTE / R3 CI **PASS (previously)**; REAL ANDROID NATURAL GRAB **FAIL**; REAL ANDROID QTE **FAIL**; ANDROID DEVICE ACCEPTANCE **FAIL / OPEN**.
