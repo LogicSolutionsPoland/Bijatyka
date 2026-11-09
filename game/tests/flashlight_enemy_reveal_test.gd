@@ -35,9 +35,14 @@ func _run() -> void:
 	for mesh in enemy._base_visual_meshes:
 		for surface in range(mesh.mesh.get_surface_count()):
 			var material := mesh.get_active_material(surface)
-			_check(material.render_priority > manager._material.render_priority, "enemy surface draws after the black mask")
+			_check(material != null and material.render_priority == Reveal.RENDER_PRIORITY, "revealed surface retains expected draw priority without blackout")
 			_check(material.has_meta(Reveal.SOURCE_META), "revealed surface retains its original textured material")
-			_check((material as ShaderMaterial).shader.code.contains("depth_draw_always"), "revealed skin writes depth while drawing after the mask")
+			if material is ShaderMaterial:
+				_check((material as ShaderMaterial).shader != null and (material as ShaderMaterial).shader.code.contains("depth_draw_always"), "revealed shader retains depth testing")
+			elif material is StandardMaterial3D:
+				_check((material as StandardMaterial3D).depth_draw_mode == BaseMaterial3D.DEPTH_DRAW_ALWAYS, "revealed standard material writes depth")
+			else:
+				_check(false, "revealed surface has a supported material type")
 	var reused_material := enemy._base_visual_meshes[0].get_active_material(0)
 	# Torso lies just outside the oval; one side still touches the light.
 	_place(camera, enemy, Vector2(0.735, 0.60), 8.0)
@@ -94,7 +99,8 @@ func _run() -> void:
 	crowd.configure(5)
 	scene.add_child(crowd)
 	var crowd_material := crowd.multimesh.mesh.surface_get_material(0) as ShaderMaterial
-	_check(crowd_material.render_priority > manager._material.render_priority and crowd_material.shader.code.contains("depth_draw_always"), "distant MultiMesh bodies also cross the mask edge with depth testing")
+	_check(crowd_material != null and crowd_material.shader != null and crowd_material.shader.code.contains("shader_type spatial"), "distant MultiMesh maintains a valid 3D crowd shader without a mask")
+	_check(manager._composite == null and manager._material == null, "light classifier never reinstates the removed fullscreen blackout")
 	manager.enabled = false
 	manager._classify_enemies()
 	_check(not enemy._flashlight_full_body_visible and manager.is_visible_to_flashlight(enemy), "disabling the flashlight returns normal unmasked rendering")

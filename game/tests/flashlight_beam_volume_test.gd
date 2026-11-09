@@ -40,8 +40,8 @@ func _run() -> void:
 	# Keep the shaft-only probe from reactivating the foreground fog artwork.
 	manager.set_process(false)
 	manager.set_physics_process(false)
-	# Measure the cross-sections themselves, independent of the screen overlay.
-	manager._composite.visible = false
+	# Measure cross-sections with the old fullscreen blackout permanently absent.
+	_check(manager._composite == null, "removed fullscreen overlay is not instantiated")
 	# The tip artwork has its own screen-space render probe. Keep it hidden here
 	# so the wall cutoff measurement contains only the 3D flashlight shaft.
 	if is_instance_valid(manager._tip_silhouettes):
@@ -119,7 +119,7 @@ func _run() -> void:
 	var roof_near := roof_image.get_pixelv(Vector2i(near_axis))
 	var roof_off_axis := roof_image.get_pixelv(Vector2i(off_axis))
 	print("FLASHLIGHT_ROOF_AIR_PIXEL " + JSON.stringify({"beam": roof_axis, "sky_only": warm_axis, "near": roof_near, "near_sky_only": warm_near, "outside": roof_off_axis}))
-	_check(not manager._composite.visible and not manager.spotlight.visible and absf(roof_axis.b - warm_axis.b) < 0.025,
+	_check(manager._composite == null and not manager.spotlight.visible and absf(roof_axis.b - warm_axis.b) < 0.025,
 		"rooftop disables the fullscreen blackout and air beam without recoloring the city")
 	_check(absf(roof_near.b - warm_near.b) < 0.025, "rooftop has no beam near the player")
 	_check(absf(roof_off_axis.b - warm_off_axis.b) < 0.025, "rooftop sky off-axis is unchanged")

@@ -38,6 +38,7 @@ jobs:
       - name: Execute host physics, gameplay, input and render state regressions
         shell: bash
         run: |
+          set +e
           set -uo pipefail
           failures=0
           for suite in \
@@ -72,6 +73,7 @@ jobs:
       - name: Render-focused software GL Compatibility probes
         shell: bash
         run: |
+          set +e
           set -uo pipefail
           failures=0
           for suite in environment_render_test flashlight_beam_volume_test; do
