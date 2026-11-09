@@ -6,6 +6,10 @@ on:
       - fix/bijatyka-stage6-grab-qte-android-20261109
     paths:
       - .github/workflows/bijatyka-stage6-grab-qte-diagnostics.yml
+      - game/tests/stage6_p1_natural_grab_test.gd
+      - game/scripts/enemy.gd
+      - game/scripts/player_controller.gd
+      - game/scripts/brutal_grab_limb_contact.gd
 
 permissions:
   contents: read
