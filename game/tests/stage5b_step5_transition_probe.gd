@@ -151,7 +151,7 @@ func _run() -> void:
 		grabber._limb_grab_limb = "LEFT ARM"
 		grabber._limb_grab_hand = "left"
 		grabber.state = "limb_grab_windup"
-		var reachable: bool = rig_ready and CONTACT.can_reach_contact(grabber, game.player, "LEFT ARM", "left")
+		var reachable: bool = rig_ready and game.player._grab_contact.can_reach_contact(grabber, game.player, "LEFT ARM", "left")
 		check(reachable, "real imported arm rig is within reach before contact")
 		var allowed: bool = game.spawn_director.try_acquire_attacker(grabber)
 		var reserved: bool = allowed and game.player.try_reserve_limb_grab(grabber, "LEFT ARM")
