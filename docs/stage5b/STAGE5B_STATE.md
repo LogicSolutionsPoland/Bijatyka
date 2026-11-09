@@ -120,14 +120,14 @@ CI audit of 23 workflows in .github/workflows/ as of Step 0: relevant push trigg
 ## I. Step 1 — completed implementation and verified evidence
 
 Step 1 outcome: **PASS** (2026-11-09). Last TESTED implementation SHA:
-\`738eb0064a02ba3aca13af31f3829733c695e40e\`.
+`738eb0064a02ba3aca13af31f3829733c695e40e`.
 GitHub Actions run **#42641061088**: https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/42641061088 — **SUCCESS**, exact head SHA above.
 Evidence artifact (no APK): https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/42641061088/artifacts/13686035749
 The current branch HEAD may become a later docs-only descendant after writing this handoff. Always fetch the live HEAD before editing.
 
 Changes on this branch, and nowhere else:
 - game/scripts/flashlight_visibility.gd: restored the former, camera-attached full-viewport blackout composite and existing shader at transparent priority 126. Existing cached classifier, deferred 3D beam geometry, 10 m range, debug mask visibility switch, 0.12 s update cadence, uniform deduplication and tip artwork manager remain intact.
-- game/scripts/foundation.gd: added \`flashlight_visibility_composite\` to independent visibility groups so Stage 5's cached culling never hides the mask; preserved Stage 5's existing floor policy, camera, combat, map, and mobile settings.
+- game/scripts/foundation.gd: added `flashlight_visibility_composite` to independent visibility groups so Stage 5's cached culling never hides the mask; preserved Stage 5's existing floor policy, camera, combat, map, and mobile settings.
 - game/shaders/flashlight_visibility.gdshader: retained the previously implemented depth-reconstructing full-screen mask; restricted the nearby character visibility exemption to the actual player region in normalized screen space. The original unrestricted exemption illuminated tall tower/elevator posts far outside the cone. After the fix, those off-beam posts are fully black in screenshots while player and HUD remain readable.
 - Adjusted tests only where older Stage 5 assertions incorrectly required no blackout: game/tests/flashlight_visibility_test.gd, stage5_visibility_regression_test.gd, flashlight_enemy_reveal_test.gd, general_cpu_optimization_test.gd and flashlight_beam_volume_test.gd. Tests continue checking existing mechanics and deduplicated uniforms.
 - game/tests/flashlight_render_probe.gd now captures real OpenGL frames and verifies lit center objects, black off-beam pixels, four additional off-beam tower-post points (outside HUD), player visibility, rooftop sky/disabled mask, boss indicator/HUD, at 3 render scales.
@@ -140,8 +140,8 @@ Exact verified tests on the implementation commit:
 4. Real software Mesa OpenGL 3D beam shaft pixel/opaque wall occlusion and rooftop beam absence: PASS.
 5. Real software Mesa OpenGL fullscreen blackout test **43 checks**: PASS. Green outside-beam sample RGB=(0,0,0) at all 1.00, 0.67 and 0.40 render scales; lit red sample remains visible; player and HUD remain readable. Four post-leak sample points black at all three scales. Rooftop remains unmasked.
 6. Paired pre/post host-only visibility CPU benchmark: PASS; no Android GPU, FPS, thermal or device claim.
-7. Screenshots in artifact: \`captures/ground-blackout-1.00.png\`, \`captures/ground-blackout-0.67.png\`, \`captures/ground-blackout-0.40.png\`, \`captures/rooftop-no-blackout.png\`. Logs include \`blackout-gl.log\`, \`flashlight-gl.log\` and each of the 20 suite logs.
-8. No APK/AAB, no release, no merge and no changes to original \`main\`, Stage 5, PR #68 or PR #70.
+7. Screenshots in artifact: `captures/ground-blackout-1.00.png`, `captures/ground-blackout-0.67.png`, `captures/ground-blackout-0.40.png`, `captures/rooftop-no-blackout.png`. Logs include `blackout-gl.log`, `flashlight-gl.log` and each of the 20 suite logs.
+8. No APK/AAB, no release, no merge and no changes to original `main`, Stage 5, PR #68 or PR #70.
 9. Earlier failing transient CI runs were diagnostic: outdated assertions expecting absent blackout and an initial tower-post light leak. These were explicitly corrected; #42641061088 is the final implementation verification.
 
 The narrow final design requirement remains: on the ground, game-world pixels outside the effective flashlight illumination must be black, except intended screen UI, kept-visible player and explicitly approved artistic fog/tip layers in later steps. Do not weaken fullscreen blackout to a black sky, a dark vignette, or actor-only hiding.
@@ -152,12 +152,12 @@ The narrow final design requirement remains: on the ground, game-world pixels ou
 **Current starting point for new AI:** Stage 5B / Step 2 (NOT STARTED).
 **Next stage after Step 2:** Stage 5B / Step 3 — flashlight-tip zombie fog artwork (PR #70).
 
-1. Read this file, fetch the LIVE HEAD of \`integration/bijatyka-stage5b-blackout-fog-20261109\` and compare to tested code commit \`738eb0064a02ba3aca13af31f3829733c695e40e\`. A later docs-only status commit is expected. Check recent changes before edits. Do not base on \`main\` or overwrite Stage 5, PR #68 or PR #70.
+1. Read this file, fetch the LIVE HEAD of `integration/bijatyka-stage5b-blackout-fog-20261109` and compare to tested code commit `738eb0064a02ba3aca13af31f3829733c695e40e`. A later docs-only status commit is expected. Check recent changes before edits. Do not base on `main` or overwrite Stage 5, PR #68 or PR #70.
 2. Before writes, re-inspect all GitHub Actions triggers and ensure no APK or release is triggered. Keep the verified Stage 5B NO-APK workflow and its 20 regression suites, GL beam probe, and 43-check blackout pixel probe.
-3. Inspect PR #68 live status, head, and narrow source diffs. Its last verified HEAD at Step 0 was \`63ea5a80c007bdedddbd7da41d2d62cdf1e9f6d4\`. Adapt ONLY the four \`game/assets/environment/zombie_fog_0*.webp\` images, \`game/scripts/burning_horizon.gd\`, \`game/shaders/burning_horizon.gdshader\`, focused \`foundation.gd\` references if required, ring-related regressions, and \`game/tests/zombie_fog_render_probe.gd\`. Do not merge/cherry-pick the historical PR or import unrelated workflow changes.
-4. Build a 96-segment, 6 m tall, capless player-following fog circle at \`FlashlightVisibilityManager.MAX_RADIUS\`=10 m, six image sectors ordered 1/2/3/4/3/2, subtle shader animation, and ground-floor only. Preserve rooftop panorama/camera and all Stage 5 systems.
+3. Inspect PR #68 live status, head, and narrow source diffs. Its last verified HEAD at Step 0 was `63ea5a80c007bdedddbd7da41d2d62cdf1e9f6d4`. Adapt ONLY the four `game/assets/environment/zombie_fog_0*.webp` images, `game/scripts/burning_horizon.gd`, `game/shaders/burning_horizon.gdshader`, focused `foundation.gd` references if required, ring-related regressions, and `game/tests/zombie_fog_render_probe.gd`. Do not merge/cherry-pick the historical PR or import unrelated workflow changes.
+4. Build a 96-segment, 6 m tall, capless player-following fog circle at `FlashlightVisibilityManager.MAX_RADIUS`=10 m, six image sectors ordered 1/2/3/4/3/2, subtle shader animation, and ground-floor only. Preserve rooftop panorama/camera and all Stage 5 systems.
 5. Resolve priority sorting against the **existing priority-126 blackout** and priority-127 3D beam and tip. PR #68 renders fog at priority 127 so it remains visible at the 10 m boundary. Precisely confine its artwork to the intended boundary and avoid leaking world geometry or general illumination outside the flashlight. The blackout must NEVER be removed or replaced by merely black sky.
-6. Update old four-panel horizon assertions in \`burning_horizon_test.gd\`, \`environment_render_test.gd\`, \`flashlight_visibility_test.gd\` and any tip regression expecting four panels. Keep the 43-check Stage 5B blackout regression, and add/use real Mesa/Xvfb framebuffer probes for six sectors, alpha, motion, 10 m ring radius, off-axis darkness, rooftop visibility and coexistence with the 3D beam.
+6. Update old four-panel horizon assertions in `burning_horizon_test.gd`, `environment_render_test.gd`, `flashlight_visibility_test.gd` and any tip regression expecting four panels. Keep the 43-check Stage 5B blackout regression, and add/use real Mesa/Xvfb framebuffer probes for six sectors, alpha, motion, 10 m ring radius, off-axis darkness, rooftop visibility and coexistence with the 3D beam.
 7. Run NO-APK GitHub Actions on the actual new Step 2 implementation HEAD, inspect artifacts and actual captures, handle failures rather than claiming success, then update this document's Step 2 status, exact tested SHA, run IDs, residual risks and Step 3 instructions. Final report in Polish.
 
 No PR #70 artwork integration in Step 2; it belongs to Step 3. Do not build an APK or merge to main.
