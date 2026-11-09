@@ -1,0 +1,305 @@
+name: Bijatyka Stage 6 frozen-source ARM64 debug APK
+run-name: Stage 6 ARM64 from f1989c8 (isolated)
+on:
+  push:
+    branches:
+      - build/bijatyka-stage6-final-arm64-20261109
+    paths:
+      - .github/workflows/bijatyka-stage6-final-arm64.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bijatyka-stage6-final-arm64-20261109
+  cancel-in-progress: false
+
+jobs:
+  stage6:
+    name: Verify Stage 5B and export exactly one debug ARM64 APK
+    if: github.ref == 'refs/heads/build/bijatyka-stage6-final-arm64-20261109'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    env:
+      SOURCE_SHA: f1989c8c675357427e2214796e14a5103f1cef01
+      SOURCE_BRANCH: integration/bijatyka-stage5b-blackout-fog-20261109
+      APK_NAME: Bijatyka-Stage6-Final-ARM64.apk
+    steps:
+      - name: Check out exact previously tested Stage 5B commit, not old main or build branch
+        uses: actions/checkout@v4
+        with:
+          ref: f1989c8c675357427e2214796e14a5103f1cef01
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Assert frozen SHA, feature sources and original source artwork
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          test -f game/project.godot
+          test -s game/scenes/foundation.tscn
+          test -s game/shaders/flashlight_visibility.gdshader
+          test -s game/shaders/burning_horizon.gdshader
+          test -s game/shaders/flashlight_tip_silhouettes.gdshader
+          test -s game/scripts/flashlight_visibility.gd
+          test -s game/scripts/burning_horizon.gd
+          test -s game/scripts/flashlight_tip_silhouettes.gd
+          test -s game/scripts/foundation.gd
+          test -s game/scripts/player_controller.gd
+          test -s game/scripts/brutal_grab_qte.gd
+          test -s game/scripts/brutal_grab_limb_contact.gd
+          test -s game/scripts/pencil_sketch_style.gd
+          test -s game/export_presets.cfg
+          grep -Fq 'architectures/arm64-v8a=true' game/export_presets.cfg
+          grep -Fq 'architectures/armeabi-v7a=false' game/export_presets.cfg
+          grep -Fq 'architectures/x86=false' game/export_presets.cfg
+          grep -Fq 'architectures/x86_64=false' game/export_presets.cfg
+          grep -Fq 'package/unique_name="org.logicsolutionspoland.bijatyka"' game/export_presets.cfg
+          grep -Fq 'renderer/rendering_method.mobile="gl_compatibility"' game/project.godot
+          grep -Fq 'run/main_scene="res://scenes/foundation.tscn"' game/project.godot
+          grep -Fq 'depth_test_disabled' game/shaders/flashlight_visibility.gdshader
+          grep -Fq 'const RING_SEGMENTS := 96' game/scripts/burning_horizon.gd
+          grep -Fq 'const SILHOUETTE_OPACITY := 0.40' game/scripts/flashlight_tip_silhouettes.gd
+          python3 - <<'PY'
+          import subprocess
+          expected = {
+            "game/assets/environment/zombie_fog_01.webp": "ac439b6723de2eeabae24a3902cfd7e23f979cf5",
+            "game/assets/environment/zombie_fog_02.webp": "6bdb5b5c84fe35d0f58d64f8651bd0fab31ddcf7",
+            "game/assets/environment/zombie_fog_03.webp": "da314476df4c60b4ca1007991721c9ccfafefd45",
+            "game/assets/environment/zombie_fog_04.webp": "ad87b8aa139c79fa67e65a4823f08fad3bf5b3ee",
+            "game/assets/effects/flashlight_tip_zombie_fog.webp": "7412ef0d087174c366c01003d5ec3596d0693693",
+          }
+          for path, wanted in expected.items():
+              actual = subprocess.check_output(["git", "hash-object", path], text=True).strip()
+              if actual != wanted:
+                  raise SystemExit(f"Source asset mismatch: {path}: {actual} != {wanted}")
+              print(f"SOURCE_ARTWORK_VERIFIED {path} {actual}")
+          PY
+          printf 'SELECTED_BUILD_SOURCE_SHA=%s\n' "$SOURCE_SHA"
+
+      - name: Install Godot 4.7.2 and official compatible Android export templates
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: true
+
+      - name: Inspect build environment and import game
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/stage6/logs build/stage6/captures
+          test -n "${ANDROID_HOME:-}"
+          test -d "$ANDROID_HOME"
+          java -version
+          godot --version | tee build/stage6/logs/godot-version.txt
+          grep -q '^4\.7\.2' build/stage6/logs/godot-version.txt
+          timeout 300s godot --headless --editor --path game --import --quit > build/stage6/logs/import.log 2>&1
+          cat build/stage6/logs/import.log
+          if grep -Eq 'SCRIPT ERROR:|Parse Error:|ERROR: Failed to load' build/stage6/logs/import.log; then exit 1; fi
+
+      - name: Run all 20 established gameplay and rendering regression suites
+        shell: bash
+        run: |
+          set -euo pipefail
+          passed=0
+          failed=0
+          for suite in \
+            stage4_character_only_test stage4_melee_lunge_test \
+            cinematic_chain_physics_test jump_state_regression_test \
+            brutal_grab_state_machine_test brutal_grab_qte_test \
+            brutal_grab_limb_contact_test brutal_grab_real_rig_test \
+            test_runner player_animation_test \
+            concealed_spawn_test ai_director_test \
+            elevator_loading_test stage6_integrated_headless_test \
+            flashlight_visibility_test flashlight_enemy_reveal_test \
+            general_cpu_optimization_test rig_budget_lifecycle_test \
+            environment_render_test stage5_visibility_regression_test; do
+            log="build/stage6/logs/${suite}.log"
+            if timeout 180s godot --headless --path game --script "res://tests/${suite}.gd" > "$log" 2>&1 && \
+                grep -q 'PASS:' "$log" && \
+                ! grep -Eq '^SCRIPT ERROR:|^ERROR:|^FAIL:' "$log"; then
+              echo "STAGE6_SUITE_PASS $suite"
+              passed=$((passed + 1))
+            else
+              echo "STAGE6_SUITE_FAIL $suite"
+              tail -80 "$log"
+              failed=$((failed + 1))
+            fi
+          done
+          echo "STAGE6_SUITES_PASSED=$passed" | tee build/stage6/logs/summary.txt
+          echo "STAGE6_SUITES_FAILED=$failed" | tee -a build/stage6/logs/summary.txt
+          test "$passed" -eq 20
+          test "$failed" -eq 0
+
+      - name: Startup and 600-frame playable scene smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 180s godot --headless --fixed-fps 60 --path game --quit-after 600 > build/stage6/logs/smoke.log 2>&1
+          if grep -Eq '^SCRIPT ERROR:|^ERROR:|^FAIL:' build/stage6/logs/smoke.log; then cat build/stage6/logs/smoke.log; exit 1; fi
+          echo 'STAGE6_SMOKE_600=PASS' | tee -a build/stage6/logs/summary.txt
+
+      - name: Actual Mesa OpenGL blackout, horizon, flashlight-tip, combined scene and transition checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          export BIJATYKA_CAPTURE_DIR="$PWD/build/stage6/captures"
+          for spec in \
+            'flashlight_beam_volume_test|PASS:' \
+            'flashlight_render_probe|PASS: flashlight Compatibility render mask' \
+            'zombie_fog_render_probe|PASS: zombie fog Compatibility pixels and motion' \
+            'flashlight_tip_silhouette_render_probe|PASS: flashlight tip silhouette Compatibility render' \
+            'stage5b_combined_render_probe|PASS: Stage5B Step4 combined real-render matrix' \
+            'stage5b_step5_transition_probe|PASS: Stage5B Step5 real gameplay-transition render checks'; do
+            suite="${spec%%|*}"
+            expected="${spec#*|}"
+            log="build/stage6/logs/${suite}.log"
+            echo "STAGE6_MESA_START $suite"
+            timeout 360s xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 \
+              --path game --script "res://tests/${suite}.gd" > "$log" 2>&1 || { tail -90 "$log"; exit 1; }
+            grep -Fq "$expected" "$log" || { tail -90 "$log"; exit 1; }
+            if grep -Eq '^SCRIPT ERROR:|^ERROR:|^FAIL:' "$log"; then tail -90 "$log"; exit 1; fi
+            echo "STAGE6_MESA_PASS $suite"
+          done
+          for image in rooftop-no-blackout.png ground-blackout-0.40.png step4-ground-s0.40-angle2.png step5-ground-0.40.png; do
+            test -s "build/stage6/captures/$image"
+          done
+          echo 'STAGE6_REAL_GL_PROBES=6_PASS' | tee -a build/stage6/logs/summary.txt
+
+      - name: Export exactly one Android ARM64 debug APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="$GITHUB_WORKSPACE/build/stage6/$APK_NAME"
+          godot --headless --path game --export-debug "Android ARM64" "$apk" > build/stage6/logs/android-export.log 2>&1 || { cat build/stage6/logs/android-export.log; exit 1; }
+          cat build/stage6/logs/android-export.log
+          if grep -Eq 'SCRIPT ERROR:|Parse Error:|^ERROR:' build/stage6/logs/android-export.log; then exit 1; fi
+          test -s "$apk"
+          test "$(find build/stage6 -maxdepth 1 -name '*.apk' | wc -l)" -eq 1
+
+      - name: Verify actual APK ZIP, ARM64, compiled assets, package, permissions and debug signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="build/stage6/$APK_NAME"
+          unzip -tqq "$apk"
+          unzip -Z1 "$apk" > build/stage6/logs/apk-entries.txt
+          python3 - <<'PY'
+          import zipfile, re
+          from pathlib import Path
+          apk=Path("build/stage6/Bijatyka-Stage6-Final-ARM64.apk")
+          with zipfile.ZipFile(apk) as z:
+              if z.testzip() is not None: raise SystemExit("APK ZIP CRC failure")
+              entries=set(z.namelist())
+              required=[
+                "AndroidManifest.xml",
+                "lib/arm64-v8a/libgodot_android.so",
+                "assets/project.binary",
+                "assets/scenes/foundation.tscn.remap",
+                "assets/shaders/flashlight_visibility.gdshader",
+                "assets/shaders/burning_horizon.gdshader",
+                "assets/shaders/flashlight_tip_silhouettes.gdshader",
+                "assets/scripts/flashlight_visibility.gdc",
+                "assets/scripts/burning_horizon.gdc",
+                "assets/scripts/flashlight_tip_silhouettes.gdc",
+                "assets/scripts/foundation.gdc",
+                "assets/scripts/player_controller.gdc",
+                "assets/scripts/brutal_grab_qte.gdc",
+                "assets/scripts/brutal_grab_limb_contact.gdc",
+                "assets/scripts/pencil_sketch_style.gdc",
+              ]
+              missing=[p for p in required if p not in entries or len(z.read(p))==0]
+              if missing: raise SystemExit("MISSING PACKAGED CONTENT: "+", ".join(missing))
+              abis={p.split("/")[1] for p in entries if p.startswith("lib/") and p.endswith(".so")}
+              if abis != {"arm64-v8a"}: raise SystemExit(f"Unexpected native ABIs: {abis}")
+              assets=[
+                "assets/environment/zombie_fog_01.webp",
+                "assets/environment/zombie_fog_02.webp",
+                "assets/environment/zombie_fog_03.webp",
+                "assets/environment/zombie_fog_04.webp",
+                "assets/effects/flashlight_tip_zombie_fog.webp",
+              ]
+              for path in assets:
+                  key="assets/"+path+".import"
+                  if key not in entries: raise SystemExit("Missing texture import metadata: "+key)
+                  value=z.read(key).decode("utf-8")
+                  imported=re.findall(r'res://(\.godot/imported/[^"\s,\]]+)',value)
+                  if not imported: raise SystemExit("Missing texture import target: "+key)
+                  for item in set(imported):
+                      if "assets/"+item not in entries: raise SystemExit("Missing imported texture bytes: "+item)
+                      if len(z.read("assets/"+item))==0: raise SystemExit("Empty imported texture bytes: "+item)
+                  print("PACKAGED_TEXTURE_OK",path,sorted(set(imported)))
+              print("PACKAGED_RESOURCES_OK",len(required),"ABI",sorted(abis))
+          PY
+          aapt_bin="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
+          test -x "$aapt_bin"
+          "$aapt_bin" dump badging "$apk" > build/stage6/logs/apk-badging.txt
+          "$aapt_bin" dump permissions "$apk" > build/stage6/logs/apk-permissions.txt
+          grep -Fq "package: name='org.logicsolutionspoland.bijatyka'" build/stage6/logs/apk-badging.txt
+          grep -Fxq 'application-debuggable' build/stage6/logs/apk-badging.txt
+          grep -Fq "native-code: 'arm64-v8a'" build/stage6/logs/apk-badging.txt
+          if grep -Ei 'android.permission.(ACCESS_FINE_LOCATION|ACCESS_COARSE_LOCATION|CAMERA|RECORD_AUDIO|READ_CONTACTS|WRITE_CONTACTS|READ_SMS|SEND_SMS|MANAGE_EXTERNAL_STORAGE)' build/stage6/logs/apk-permissions.txt; then
+            echo 'Unexpected sensitive permission detected'; exit 1
+          fi
+          apksigner="$(dirname "$aapt_bin")/apksigner"
+          test -x "$apksigner"
+          "$apksigner" verify --verbose --print-certs "$apk" > build/stage6/logs/apk-signature.txt
+          cat build/stage6/logs/apk-signature.txt
+          sha256sum "$apk" | tee build/stage6/logs/apk-sha256.txt
+          echo 'STAGE6_APK_INTEGRITY=PASS' | tee -a build/stage6/logs/summary.txt
+
+      - name: Record immutable build provenance and checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="build/stage6/$APK_NAME"
+          sha="$(sha256sum "$apk" | awk '{print $1}')"
+          size="$(stat -c '%s' "$apk")"
+          {
+            echo "project=Bijatyka"
+            echo "source_branch=$SOURCE_BRANCH"
+            echo "source_sha=$SOURCE_SHA"
+            echo "build_branch=$GITHUB_REF_NAME"
+            echo "workflow_sha=$GITHUB_SHA"
+            echo "godot_version=$(godot --version)"
+            echo "renderer=GL Compatibility"
+            echo "export_preset=Android ARM64"
+            echo "architecture=arm64-v8a"
+            echo "package_identifier=org.logicsolutionspoland.bijatyka"
+            echo "build_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "apk_filename=$APK_NAME"
+            echo "apk_size_bytes=$size"
+            echo "apk_sha256=$sha"
+            echo "github_actions_run_id=$GITHUB_RUN_ID"
+            echo "github_actions_run_url=https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo "github_actions_attempt=$GITHUB_RUN_ATTEMPT"
+            echo "device_testing=NOT_TESTED"
+          } | tee build/stage6/STAGE6_BUILD_MANIFEST.txt
+
+      - name: Upload one APK and integrity evidence as GitHub Actions artifact (no release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bijatyka-Stage6-Final-ARM64
+          path: |
+            build/stage6/Bijatyka-Stage6-Final-ARM64.apk
+            build/stage6/STAGE6_BUILD_MANIFEST.txt
+            build/stage6/logs/apk-sha256.txt
+            build/stage6/logs/apk-signature.txt
+            build/stage6/logs/apk-badging.txt
+            build/stage6/logs/apk-permissions.txt
+            build/stage6/logs/summary.txt
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: On failure preserve pre-export diagnostics without releasing an APK
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bijatyka-Stage6-Diagnostics-NO-APK
+          path: |
+            build/stage6/logs/*.log
+            build/stage6/logs/summary.txt
+          if-no-files-found: warn
+          retention-days: 7
