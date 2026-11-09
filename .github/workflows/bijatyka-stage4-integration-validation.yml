@@ -1,0 +1,96 @@
+name: Bijatyka Stage 4 current integration verification
+
+on:
+  push:
+    branches:
+      - integration/bijatyka-current-20261109
+    paths:
+      - 'game/scripts/**'
+      - 'game/shaders/**'
+      - 'game/project.godot'
+      - 'game/tests/**'
+      - '.github/workflows/bijatyka-stage4-integration-validation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+      - name: Import project and parse resources
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/stage4
+          echo "TESTED_SHA=$(git rev-parse HEAD)"
+          timeout 300s godot --headless --editor --path game --import --quit 2>&1 | tee build/stage4/import.log
+          if grep -E 'SCRIPT ERROR:|ERROR: Failed to load' build/stage4/import.log; then exit 1; fi
+      - name: Execute host physics, gameplay, input and render state regressions
+        shell: bash
+        run: |
+          set -uo pipefail
+          failures=0
+          for suite in \
+            stage4_character_only_test stage4_melee_lunge_test \
+            cinematic_chain_physics_test jump_state_regression_test \
+            brutal_grab_state_machine_test brutal_grab_qte_test \
+            brutal_grab_limb_contact_test brutal_grab_real_rig_test \
+            test_runner player_animation_test \
+            concealed_spawn_test ai_director_test \
+            elevator_loading_test stage6_integrated_headless_test \
+            flashlight_visibility_test flashlight_enemy_reveal_test \
+            general_cpu_optimization_test rig_budget_lifecycle_test; do
+            logfile="build/stage4/${suite}.log"
+            timeout 180s godot --headless --path game --script "res://tests/${suite}.gd" > "$logfile" 2>&1
+            rc=$?
+            cat "$logfile"
+            if [ "$rc" -ne 0 ] || grep -Eq '^SCRIPT ERROR:|^ERROR:|^FAIL:' "$logfile" || ! grep -q 'PASS:' "$logfile"; then
+              echo "SUITE_FAIL ${suite} exit=${rc}"
+              failures=$((failures+1))
+            else
+              echo "SUITE_PASS ${suite}"
+            fi
+          done
+          echo "FAILED_SUITES=$failures"
+          test "$failures" -eq 0
+      - name: Smoke-run playable scene for 600 simulation frames
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 180s godot --headless --fixed-fps 60 --path game --quit-after 600 2>&1 | tee build/stage4/scene-smoke.log
+          if grep -E 'SCRIPT ERROR:|^ERROR:' build/stage4/scene-smoke.log; then exit 1; fi
+      - name: Render-focused software GL Compatibility probes
+        shell: bash
+        run: |
+          set -uo pipefail
+          failures=0
+          for suite in environment_render_test flashlight_beam_volume_test; do
+            logfile="build/stage4/${suite}-gl.log"
+            timeout 180s xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script "res://tests/${suite}.gd" > "$logfile" 2>&1
+            rc=$?
+            cat "$logfile"
+            if [ "$rc" -ne 0 ] || grep -Eq '^SCRIPT ERROR:|^ERROR:|^FAIL:' "$logfile" || ! grep -q 'PASS:' "$logfile"; then
+              echo "GL_PROBE_FAIL ${suite} exit=${rc}"
+              failures=$((failures+1))
+            else
+              echo "GL_PROBE_PASS ${suite}"
+            fi
+          done
+          test "$failures" -eq 0
+      - name: Upload QA evidence (no APK)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bijatyka-stage4-integration-qa-logs
+          path: build/stage4/*.log
+          if-no-files-found: warn
