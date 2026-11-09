@@ -80,9 +80,8 @@ func _run() -> void:
 	# physics, AI updates, the Director's roles and flashlight/LOD remain enabled.
 	actor.global_position = Vector3(20.0, 0.05, 16.6)
 	actor.velocity = Vector3.ZERO
-	actor._finish_spawn_assault()
-	actor.combat_target = game.player
-	# Do not assign a slot or force attack, reservation, rig or QTE.
+	# Production assault handoff, target selection, attack slots and windup remain automatic.
+	# Do not assign a target, slot or force attack, reservation, rig or QTE.
 	var started := {"value": 0}
 	var ended := {"value": 0}
 	game.player.grab_windup_started.connect(func(enemy: FoundationEnemy, limb: String) -> void:
