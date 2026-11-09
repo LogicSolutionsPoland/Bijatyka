@@ -8,6 +8,7 @@ signal defeated(enemy: Node)
 const INFECTED_ALBEDO := preload("res://assets/characters/infected/Ashen_Worker.jpg")
 const ENEMY_MODEL_PATH := "res://assets/characters/universal_base/Universal_Base_Characters_Male.glb"
 const BOSS_MODEL_PATH := "res://assets/characters/universal_base/Universal_Base_Characters_Female.glb"
+const HEALTH_BAR := preload("res://scenes/enemy_health_bar.tscn")
 const UNIVERSAL_BASE_MOTION := preload("res://scripts/universal_base_motion.gd")
 const ENEMY_MODEL_YAW_OFFSET := PI
 const FIGHT_ANIMATION_BUILDER := preload("res://scripts/universal_base_enemy_combat.gd")
@@ -537,34 +538,12 @@ func attach_status_label(label: Label3D) -> void:
 	_update_health_display()
 
 func _build_health_display() -> void:
-	_health_bar_root = Node3D.new()
-	_health_bar_root.name = "EnemyHealthBar"
+	_health_bar_root = HEALTH_BAR.instantiate() as Node3D
+	_health_bar_fill = _health_bar_root.get_node("Fill") as MeshInstance3D
 	_health_bar_root.position.y = 3.05 if is_boss else 2.58
 	_health_bar_root.visible = is_boss
 	_visual_root.add_child(_health_bar_root)
-	var back := MeshInstance3D.new()
-	var back_mesh := QuadMesh.new()
-	back_mesh.size = Vector2(0.90, 0.085)
-	back.mesh = back_mesh
-	back.material_override = _health_bar_material(Color(0.035, 0.025, 0.03))
-	_health_bar_root.add_child(back)
-	_health_bar_fill = MeshInstance3D.new()
-	var fill_mesh := QuadMesh.new()
-	fill_mesh.size = Vector2(0.82, 0.044)
-	_health_bar_fill.mesh = fill_mesh
-	_health_bar_fill.position = Vector3(-0.41, 0.0, 0.006)
-	_health_bar_fill.material_override = _health_bar_material(Color(0.86, 0.12, 0.09))
-	_health_bar_root.add_child(_health_bar_fill)
 	_update_health_display()
-
-func _health_bar_material(tint: Color) -> StandardMaterial3D:
-	var material := StandardMaterial3D.new()
-	material.albedo_color = tint
-	material.emission_enabled = true
-	material.emission = tint * 0.45
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-	return material
 
 func _update_health_display() -> void:
 	var ratio := clampf(float(hp) / maxf(1.0, float(starting_health)), 0.0, 1.0)
