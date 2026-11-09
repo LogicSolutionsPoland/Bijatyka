@@ -49,4 +49,22 @@ No owner device observations beyond the reported partial outcome are currently a
 3. Confirm visible QTE display, 3 accepted R3 edges, timeouts and cleanup, ordinary combat/jumps/AI stability, and blackout/fog regression protection.
 4. Rebuild one explicitly authorized debug APK **from a separately tested fix SHA**, then repeat owner physical acceptance. Never replace the already validated Stage 6 binary.
 
-**Current P1 status: UNDER DIAGNOSIS. No gameplay/source/shader/art fixes made.**
+## Executed CI result — 2026-11-09
+
+- [GitHub Actions #42696826410](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/42696826410): **COMPLETED / SUCCESS**, test HEAD `218595208d51d823d9c0520b7956bdb004e0a2c1`.
+- Godot 4.7.2 import and parse: **PASS**.
+- Existing state machine: **PASS**.
+- Existing QTE logic: **PASS**.
+- Existing limb-contact IK: **PASS**.
+- Existing imported-rig grab checks: **PASS**.
+- New HUD/QTE/virtual R3 input routing: **PASS**.
+- **Five suites passed, zero failed.** No underlying gameplay file was modified relative to `f1989c8c675357427e2214796e14a5103f1cef01`.
+- Stage 5B controlled real Mesa/OpenGL transition capture: **PASS**. The test is scripted/controlled, not a naturally initiated Android encounter.
+- Log and PNG [artifact #13708699202](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/42696826410/artifacts/13708699202); no APK exported.
+- **Crucial interpretation:** all green tests prove that the framework *can* perform a hold and QTE when explicitly set up. They do **not** identify why the owner observes neither grab animation nor QTE during normal gameplay. Owner's Android **PARTIAL** finding is still unresolved.
+
+## Next minimal diagnostic gate
+
+Record the *naturally initiated* grab in a normal 20-zombie scenario, without calling `try_reserve_limb_grab` or `begin_limb_grab` from a test fixture. Instrument refusal reasons per existing rules (rig detailed, visual visibility, slot, clip, player grounded, actual Exo hand reach, HUD signal), but do not weaken gates. At least one ordinary zombie must enter windup, make true skeletal contact, emit `grab_qte_started`, display QTE and allow three physical R3 edges. Capture gameplay + logs from a physical Android test before declaring the defect repaired.
+
+**Current P1 status: AUTOMATED DIAGNOSTICS PASS; PHYSICAL ANDROID DEFECT OPEN. No gameplay/source/shader/art fixes made.**
