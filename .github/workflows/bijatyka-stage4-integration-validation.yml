@@ -50,7 +50,8 @@ jobs:
             concealed_spawn_test ai_director_test \
             elevator_loading_test stage6_integrated_headless_test \
             flashlight_visibility_test flashlight_enemy_reveal_test \
-            general_cpu_optimization_test rig_budget_lifecycle_test; do
+            general_cpu_optimization_test rig_budget_lifecycle_test \
+            environment_render_test; do
             logfile="build/stage4/${suite}.log"
             timeout 180s godot --headless --path game --script "res://tests/${suite}.gd" > "$logfile" 2>&1
             rc=$?
@@ -70,13 +71,17 @@ jobs:
           set -euo pipefail
           timeout 180s godot --headless --fixed-fps 60 --path game --quit-after 600 2>&1 | tee build/stage4/scene-smoke.log
           if grep -E 'SCRIPT ERROR:|^ERROR:' build/stage4/scene-smoke.log; then exit 1; fi
+      # Environment scene structural assertions run headless above. The test
+      # does not inspect pixels; running it with Mesa llvmpipe emits late
+      # GPU texture lifetime diagnostics when preloaded imported models exit.
+      # Do not suppress such diagnostics in actual pixel-render probes.
       - name: Render-focused software GL Compatibility probes
         shell: bash
         run: |
           set +e
           set -uo pipefail
           failures=0
-          for suite in environment_render_test flashlight_beam_volume_test; do
+          for suite in flashlight_beam_volume_test; do
             logfile="build/stage4/${suite}-gl.log"
             timeout 180s xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script "res://tests/${suite}.gd" > "$logfile" 2>&1
             rc=$?
