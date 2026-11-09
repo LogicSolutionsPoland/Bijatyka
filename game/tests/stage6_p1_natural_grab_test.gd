@@ -139,7 +139,7 @@ func _run() -> void:
 					"target_distance": dist, "upper": upper, "lower": lower,
 					"max_reach": upper + lower + CONTACT.REACH_MARGIN_M,
 					"min_reach": absf(upper - lower) + 0.02,
-					"reachable": CONTACT.can_reach_contact(enemy, game.player, arm, hand),
+					"reachable": game.player._grab_contact.can_reach_contact(enemy, game.player, arm, hand),
 					"shoulder": shoulder, "contact": contact_point
 				}))
 	)
