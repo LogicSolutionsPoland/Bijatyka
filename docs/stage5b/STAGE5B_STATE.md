@@ -1,6 +1,6 @@
 # Bijatyka Stage 5B — cross-chat state and safety checkpoint
 
-Checkpoint date: 2026-11-09. Step 0 PASS; Step 1 PASS on 2026-11-09; Step 2 NOT STARTED. This document is the single persistent coordination record for Stage 5B Steps 0–6. It must be consulted and updated by future steps on the dedicated integration branch. Inspect current GitHub refs before every edit; SHA values below describe Step 0 inspection, not permanent branch locks. Do not rely on a chat summary as the source of truth.
+Checkpoint date: 2026-11-09. Step 0 PASS; Step 1 PASS; Step 2 PASS on 2026-11-09 (verified Actions #42649851614). This document is the single persistent coordination record for Stage 5B Steps 0–6. It must be consulted and updated by future steps on the dedicated integration branch. Inspect current GitHub refs before every edit; SHA values below describe Step 0 inspection, not permanent branch locks. Do not rely on a chat summary as the source of truth.
 
 ## A. Project identity and scope
 
@@ -12,8 +12,8 @@ Checkpoint date: 2026-11-09. Step 0 PASS; Step 1 PASS on 2026-11-09; Step 2 NOT 
 - Main game scene: game/scenes/foundation.tscn, with runtime setup in game/scripts/foundation.gd
 - Previous completed stage: Stage 5
 - Current stage at checkpoint creation: Stage 5B / Step 0 — audit and safe setup (completed)
-- Latest completed stage: Stage 5B / Step 1 — Fullscreen Blackout Restoration (PASS)
-- Next stage: Stage 5B / Step 2 — Circular Zombie Fog Horizon integration (NOT STARTED)
+- Latest completed stage: Stage 5B / Step 2 — Circular Zombie Fog Horizon Integration (PASS)
+- Next stage: Stage 5B / Step 3 — Flashlight-Tip Zombie Artwork Integration from PR #70 (NOT STARTED)
 
 ## B. Verified Git state (live at Step 0)
 
@@ -54,7 +54,7 @@ Checkpoint date: 2026-11-09. Step 0 PASS; Step 1 PASS on 2026-11-09; Step 2 NOT 
 | --- | --- | --- | --- |
 | 0 | Audit live refs, rendering, source PRs, CI; protect baseline and create this checkpoint | PASS | Read-only audit, workflow-trigger inspection, dedicated branch and docs-only checkpoint; verify pushed SHA in the Step 0 report |
 | 1 | Restore ground-floor fullscreen blackout on Stage 5B, preserve roof/HUD/beam; test real pixels | PASS | Code SHA `738eb0064a02ba3aca13af31f3829733c695e40e`; [NO-APK Actions #42641061088](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/42641061088) SUCCESS: 20/20 suites, 600-frame smoke, Mesa beam probe, 43 pixel blackout checks at 100/67/40%, rooftop no-mask, CPU samples and screenshots. Artist post leakage fixed |
-| 2 | Adapt PR #68 circular animated zombie fog horizon | NOT STARTED | New mesh/texture layout and render priority require integration; do not copy its old foundation wholesale |
+| 2 | Adapt PR #68 circular animated zombie fog horizon | PASS | Implemented `a5d4c3e5bc722d3db8da840365974d5ac72bccb1`, final tested SHA `a51ed9c4de20df3126b0865f781b1a9a89ab9051`, NO-APK Actions [#42649851614](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/42649851614) SUCCESS: 20/20 regression suites, 600 frames, 43 blackout checks, Mesa beam and six-sector fog captures/animation at 100/67/40%; see section L |
 | 3 | Adapt PR #70 flashlight-tip artwork, movement, 13 Hz slices | NOT STARTED | Use narrow shader/script/assets/test changes; exclude Android workflow edits |
 | 4 | Verify combined effects by actual software OpenGL framebuffer images and comparisons | NOT STARTED | Need real sampling of blackout, fog, tip, beam, HUD, rooftop and animation |
 | 5 | Full gameplay regression + comparative CPU/render profiling | NOT STARTED | Preserve Stage 5 20-suite gate and host-only performance limitations; no APK |
@@ -165,3 +165,41 @@ No PR #70 artwork integration in Step 2; it belongs to Step 3. Do not build an A
 ## K. Persistent progress and safety protocol
 
 For each new chat: read STATE file; fetch live Git refs/PR state; check potential concurrent edits; inspect existing workflows; execute ONLY that step; validate; record exact evidence and any failures; update STEP status; explicitly hand over to the next step. Never assume a previous job passed based on written intent. Keep original Stage 5, main, and both PRs untouched. Do not build APK or merge at any Stage 5B step absent a separate explicit authorization.
+
+## L. Stage 5B / Step 2 — circular fog horizon, completed and tested (2026-11-09)
+
+**Previous completed stage:** Stage 5B / Step 1 — Fullscreen Blackout Restoration, PASS.
+**Current completed stage:** Stage 5B / Step 2 — Circular Zombie Fog Horizon Integration, PASS.
+**Next stage:** Stage 5B / Step 3 — Flashlight-Tip Zombie Artwork Integration from PR #70, NOT STARTED.
+
+### Verified Git and implementation record
+- Working branch: `integration/bijatyka-stage5b-blackout-fog-20261109`.
+- Initial Step 2 HEAD: `10415b53a53bc7f3bdb402d2e9f70b9715f5e211` (Step 1 docs checkpoint).
+- First implementation commit: `a5d4c3e5bc722d3db8da840365974d5ac72bccb1`. Imports PR #68's four original byte-identical WebP assets; reworks `game/scripts/burning_horizon.gd` and `game/shaders/burning_horizon.gdshader`; updates old horizon expectations, adds the real-frame fog probe and updates only the existing NO-APK Stage 5/5B CI workflow.
+- Follow-up narrow test-correction commit and **exact successful implementation/test HEAD**: `a51ed9c4de20df3126b0865f781b1a9a89ab9051`. Replaces obsolete `_pencil_screen_pass` test assumptions with the actual character-only Stage 5 Pencil Sketch pipeline. The production shader/mesh were NOT altered by this correction.
+- This state-document update is a later docs-only commit; distinguish the current branch HEAD from the **exact tested implementation SHA** above. Do not count documentation alone as a new rendering test.
+- Unmodified protected refs verified immediately before documentation: `main` = `ac12a215d95ce85d982f68b469aea99e75542883`; original Stage 5 = `b052aaf876f5cb141547494b62b8c2fdb473e6c4`; PR #68 source = `63ea5a80c007bdedddbd7da41d2d62cdf1e9f6d4`; PR #70 source = `65ec3780a6c1d3035494316170ea41db04481ae7`. Verify live again at Step 3 start.
+
+### Integrated PR #68 details and compatibility decisions
+- Imported **original, unmodified source images** `game/assets/environment/zombie_fog_01.webp` through `_04.webp` with source-identical Git blob SHAs `ac439b6723de2eeabae24a3902cfd7e23f979cf5`, `6bdb5b5c84fe35d0f58d64f8651bd0fab31ddcf7`, `da314476df4c60b4ca1007991721c9ccfafefd45`, `ad87b8aa139c79fa67e65a4823f08fad3bf5b3ee`.
+- One capless, six-meter-high `CylinderMesh` with exactly 96 radial segments and 10 m top/bottom radius from `FlashlightVisibilityManager.MAX_RADIUS`; centered on and following player, independent of camera yaw; group `distant_backdrop`; no collision or shadow casting, no mesh reconstruction per frame.
+- Single fog shader with four samplers, six texture sectors `1 → 2 → 3 → 4 → 3 → 2`, TIME-dependent image UV warp, fog-alpha motion, ordinary depth test, transparent render priority 127. Oval footprint uniforms are passed from the verified shared flashlight manager; shader discards fog outside the effective oval, so it cannot globally reveal the city. This is **decorative artwork only**, not environmental illumination.
+- Unchanged fullscreen blackout shader and manager, including priority 126 and rooftop mode; unchanged 3D beam, original pre-Step-3 tip overlay, native HUD, Stage 5 visibility registry, 20-zombie capacity, 40% mobile resolution preset and 60 FPS cap.
+- `game/scripts/foundation.gd` only changes an outdated comment; existing `follow_player()`, rooftop/ground switching, elevator, gameplay and cached visibility logic remain. Tests confirm ring outside cached culling registry. No wholesale PR merge/cherry-pick, no modifications to PR #68 or PR #70.
+
+### Genuine CI results and evidence
+- First diagnostic run: [Actions #42648523723](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/42648523723) **FAILURE** at the new `burning_horizon_test.gd`: it incorrectly referred to nonexistent Stage 5 `_pencil_screen_pass`. Core 20 regression suites, 600-frame scene smoke, GL beam, 43-check real blackout and CPU samples were PASS. `zombie_fog_render_probe.gd` was skipped due the failed earlier step. Narrowly corrected test in `a51ed9c...`; no blackout assertions weakened.
+- Final [Actions #42649851614](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/42649851614) **SUCCESS**, exact HEAD `a51ed9c4de20df3126b0865f781b1a9a89ab9051`. Import/parser PASS; **20/20** Stage 5 baseline suites PASS; playable-scene **600 frames** PASS; real Mesa/Xvfb OpenGL flashlight beam test PASS; **43** real fullscreen blackout checks PASS (100%, 67%, 40%, off-beam tower structure darkness, lit red sample, player, rooftop, HUD); new `burning_horizon_test.gd` PASS; original `flashlight_tip_silhouettes_test.gd` PASS (18 checks); real `zombie_fog_render_probe.gd` PASS (six sectors and all scales, edge mask, temporal animation); host visibility CPU benchmark PASS.
+- QA artifact: [`bijatyka-stage5-no-apk-qa-logs` — artifact 13688209795](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/42649851614/artifacts/13688209795). Contains `blackout-gl.log`, `flashlight-gl.log`, `zombie-fog-gl.log`, twenty suite logs, `visibility-before.log`, `visibility-after.log`, 18 sector PNGs (six × three scales), 3 `zombie-mask-*.png`, animation before/after PNGs, 3 `ground-blackout-*.png`, and `rooftop-no-blackout.png`.
+- Real framebuffer measurements: red boundary/fog compositing control **0.0000 → 0.48235** with horizon enabled at each of scales 1.00/0.67/0.40; off-oval dark pixel **(0,0,0)** in all three. Separate ground-screen blackout probe dark object RGB **(0,0,0)** at all scales; lit red intensity 0.9843 (1.00), 0.9569 (0.67), 0.8078 (0.40), while character and HUD remained readable. Sector 1–6 center pixel colors at full scale in 8-bit RGB: (126,2,2), (3,86,3), (2,2,165), (85,85,3), (2,2,162), (3,99,3), matching test swatches for source indices 1,2,3,4,3,2.
+- Temporal comparison of two real 1280×720 screenshots ~1 second apart finds nonzero RGB changes on 12,282 of 921,600 pixels, maximum 2/255 on one channel, so animation is real **but quite subtle**; later end-to-end visual verification must assess perceived motion, seam aliasing and Android appearance.
+- Host-only CPU comparison within final CI run: older Stage 4 baseline median (roof/ground) **759 µs / 1056 µs**; current Stage 5B **211 µs / 329 µs** (180 samples per scene; p95 Stage4 777/1075 µs, Stage5B 220/338 µs). This represents Stage 5 optimization vs Stage 4, **not an isolated measurement of added fog cost**; do NOT infer real-device Android frame rate, thermals, or GPU cost from this.
+- No APK/AAB build/export, release, branch deletion, force push or merge performed; source branches, `main`, and original Stage 5 remain unchanged.
+
+### Residual risks and handoff
+- Existing beam, tip and horizon all draw at transparent priority 127 above blackout priority 126; real isolated fog/mask and earlier beam probes pass. **A combined multi-layer occlusion and camera-rotation visual matrix is still a later Step 4 responsibility**; identical priority is not a universal ordering guarantee. Do not silently declare every angle/occlusion configuration proven by the Step 2 isolated probe.
+- Fog temporal animation is visible to a pixel comparator but subtle to a viewer (max ~2/255 in 1s). Preserve the original artwork and inspect perceptual motion, edge seams, backface behavior and any mobile overdraw in later steps without weakening blackout.
+- Hardware Android performance and thermal behavior untested; no APK authorized.
+- **Step 3 task only:** inspect the live current branch HEAD and this document; inspect PR #70 at live HEAD; adapt only the original `game/assets/effects/flashlight_tip_zombie_fog.webp` plus narrowly scoped `flashlight_tip_silhouettes.gd`, `flashlight_tip_silhouettes.gdshader`, relevant tests / safe NO-APK Mesa probes. Require **40% tip artwork opacity**, animated fog, short horizontal glitch slices, approximately **13 flicker steps/s**, live projected beam end tracking (pitch/yaw), appropriate occlusion/depth, rooftop absence; preserve this validated **priority-126 fullscreen blackout**, 10 m/96-segment/6-sector circular horizon and all Stage 5 optimizations. Do not import PR #70's Android export workflow changes, do not merge PRs or begin Step 4. Execute CI and update this file with exact SHA, outputs, and Step 4 handoff. No APK, main merge, release, or source-branch edit.
+
+**Historical section J is the archived Step 1 → Step 2 handoff and is superseded for future work by this verified Step 2 → Step 3 record.**
