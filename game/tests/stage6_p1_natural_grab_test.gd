@@ -3,6 +3,7 @@ extends SceneTree
 ## Never calls try_reserve_limb_grab(), begin_limb_grab() or emits QTE signals.
 ## Only test-time positioning is controlled; AI, slots, visibility and contact stay live.
 const WORLD := preload("res://scenes/foundation.tscn")
+const CONTACT := preload("res://scripts/brutal_grab_limb_contact.gd")
 const ELEVATOR := preload("res://scripts/starting_elevator.gd")
 
 var errors: Array[String] = []
@@ -104,8 +105,43 @@ func _run() -> void:
 	game.player.grab_fully_ended.connect(func(reason: String) -> void:
 		event_log.append("GRAB_FINALLY_ENDED reason=%s" % reason)
 	)
+	var geometry_count := {"value": 0}
 	game.player.grab_state_changed.connect(func(next_state: int, enemy: FoundationEnemy, limb: String) -> void:
 		event_log.append("PLAYER_GRAB_STATE=%d limb=%s enemy=%s" % [next_state, limb, str(enemy.get_instance_id()) if is_instance_valid(enemy) else "none"])
+		if next_state != FoundationPlayer.GrabState.GRABBED or not is_instance_valid(enemy) or int(geometry_count.value) >= 2:
+			return
+		geometry_count.value = int(geometry_count.value) + 1
+		var exo: Skeleton3D = game.player._exo_retarget.target_skeleton if is_instance_valid(game.player._exo_retarget) else null
+		var rig: Skeleton3D = enemy._skeleton
+		if not is_instance_valid(exo) or not is_instance_valid(rig):
+			event_log.append("CONTACT_METRIC missing visible rig")
+			return
+		for arm in ["LEFT ARM", "RIGHT ARM"]:
+			var p: Dictionary = CONTACT.resolve_player_bones(exo, arm, true)
+			if p.is_empty():
+				event_log.append("CONTACT_METRIC missing Exo bones for " + arm)
+				continue
+			var contact_point: Vector3 = CONTACT.forearm_contact_point(exo, int(p.forearm), int(p.wrist))
+			for hand in ["left", "right"]:
+				var e: Dictionary = CONTACT.resolve_enemy_bones(rig, hand)
+				if e.is_empty():
+					event_log.append("CONTACT_METRIC missing enemy bones for " + hand)
+					continue
+				var shoulder: Vector3 = CONTACT.bone_world(rig, int(e.root))
+				var elbow: Vector3 = CONTACT.bone_world(rig, int(e.middle))
+				var wrist: Vector3 = CONTACT.bone_world(rig, int(e.end))
+				var upper: float = shoulder.distance_to(elbow)
+				var lower: float = elbow.distance_to(wrist)
+				var dist: float = shoulder.distance_to(contact_point)
+				event_log.append("CONTACT_METRIC " + JSON.stringify({
+					"arm": arm, "hand": hand, "selected": arm == limb and hand == enemy._limb_grab_hand,
+					"actor_distance": enemy.global_position.distance_to(game.player.global_position),
+					"target_distance": dist, "upper": upper, "lower": lower,
+					"max_reach": upper + lower + CONTACT.REACH_MARGIN_M,
+					"min_reach": absf(upper - lower) + 0.02,
+					"reachable": CONTACT.can_reach_contact(enemy, game.player, arm, hand),
+					"shoulder": shoulder, "contact": contact_point
+				}))
 	)
 	var attacks := 0
 	var last_attack_sequence := actor._attack_sequence
