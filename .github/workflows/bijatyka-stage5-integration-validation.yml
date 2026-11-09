@@ -154,6 +154,59 @@ jobs:
           test "${before_status}" -eq 0 && test "${after_status}" -eq 0
           grep -q 'VISIBILITY_CPU_SAMPLE' build/stage5/visibility-before.log
           grep -q 'VISIBILITY_CPU_SAMPLE' build/stage5/visibility-after.log
+      - name: Step 5 actual elevator, combat-grab, respawn and Mesa render transitions (NO APK)
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIJATYKA_CAPTURE_DIR="$PWD/build/stage5/captures" timeout 360s xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/stage5b_step5_transition_probe.gd 2>&1 | tee build/stage5/step5-transitions-gl.log
+          grep -q 'PASS: Stage5B Step5 real gameplay-transition render checks' build/stage5/step5-transitions-gl.log
+          if grep -Eq '^SCRIPT ERROR:|^ERROR:|^FAIL:' build/stage5/step5-transitions-gl.log; then exit 1; fi
+          for picture in step5-roof-initial step5-call-loading step5-ground-1.00 step5-ground-0.67 step5-ground-0.40 step5-ground-aim step5-grab-active step5-roof-respawn step5-ground-forced-profile; do
+            test -s "build/stage5/captures/$picture.png"
+          done
+
+      - name: Step 5 paired Step4 versus Step5 host and software OpenGL at all scales (NO APK)
+        shell: bash
+        run: |
+          set -euo pipefail
+          baseline="$RUNNER_TEMP/bijatyka-step4-tested"
+          git worktree add --detach "$baseline" 64893ab496ec6cc28f0ad4287cf0697c1ce30a34
+          cp game/tests/stage5b_step5_host_benchmark.gd "$baseline/game/tests/stage5b_step5_host_benchmark.gd"
+          (cd "$baseline" && timeout 300s godot --headless --editor --path game --import --quit) > build/stage5/step5-baseline-import.log 2>&1
+          for scale in 1.00 0.67 0.40; do
+            for version in baseline candidate; do
+              if [ "$version" = baseline ]; then location="$baseline"; else location="$PWD"; fi
+              label="step5-$version-mesa-$scale"
+              (cd "$location" && BIJATYKA_BENCH_SHA="$(git rev-parse HEAD)" BIJATYKA_BENCH_RENDERER=mesa-software-opengl3 \
+                timeout 600s xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/stage5b_step5_host_benchmark.gd -- "--scale=$scale") > "build/stage5/$label.log" 2>&1
+              grep -q 'PASS: Step5 host CPU and software OpenGL benchmark' "build/stage5/$label.log"
+              grep -q 'STEP5_HOST_PERF_SAMPLE' "build/stage5/$label.log"
+            done
+          done
+          for version in baseline candidate; do
+            if [ "$version" = baseline ]; then location="$baseline"; else location="$PWD"; fi
+            (cd "$location" && BIJATYKA_BENCH_SHA="$(git rev-parse HEAD)" BIJATYKA_BENCH_RENDERER=headless-cpu \
+              timeout 360s godot --headless --fixed-fps 60 --path game --script res://tests/stage5b_step5_host_benchmark.gd -- --scale=0.40) > "build/stage5/step5-$version-headless-0.40.log" 2>&1
+            grep -q 'PASS: Step5 host CPU and software OpenGL benchmark' "build/stage5/step5-$version-headless-0.40.log"
+          done
+          python3 - <<'PY'
+          import json, pathlib
+          p=pathlib.Path("build/stage5")
+          logs=sorted(p.glob("step5-*-mesa-*.log"))+sorted(p.glob("step5-*-headless-*.log"))
+          records=[]
+          for log in logs:
+              for line in log.read_text(errors="replace").splitlines():
+                  if line.startswith("STEP5_HOST_PERF_SAMPLE "):
+                      records.append(json.loads(line.split(" ",1)[1]))
+          if len(records) != 8*11*2:
+              raise SystemExit(f"Incomplete comparable samples: {len(records)}")
+          (p/"step5-performance-samples.json").write_text(json.dumps({"step4_sha":"64893ab496ec6cc28f0ad4287cf0697c1ce30a34","candidate_sha":__import__("os").environ.get("GITHUB_SHA"),"note":"Linux Mesa software rendering, not Android GPU","records":records},indent=2))
+          with (p/"step5-performance-comparison.csv").open("w") as f:
+              f.write("driver,scale,scenario,repeat,sha,median_process_us,p95_process_us,median_physics_us,p95_wall_us,median_draw_calls,median_objects\n")
+              for r in records:
+                  f.write(f"{r['driver']},{r['scale']},{r['scenario']},{r['repeat']},{r['sha']},{r['process_us']['median']},{r['process_us']['p95']},{r['physics_us']['median']},{r['wall_us']['p95']},{r['draw_calls'].get('median','N/A')},{r['rendered_objects'].get('median','N/A')}\n")
+          print("STEP5_PROFILE_WINDOWS",len(records))
+          PY
       - name: Keep QA logs only; never export or publish APK
         if: always()
         uses: actions/upload-artifact@v4
@@ -162,4 +215,6 @@ jobs:
           path: |
             build/stage5/*.log
             build/stage5/captures/*.png
+            build/stage5/step5-performance-samples.json
+            build/stage5/step5-performance-comparison.csv
           if-no-files-found: warn
