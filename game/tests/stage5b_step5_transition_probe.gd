@@ -92,6 +92,19 @@ func _run() -> void:
 	check(game.burning_horizon.global_position.distance_to(game.player.global_position) < 0.06,
 		"fog stays centered during camera yaw")
 	save(await capture(), "step5-ground-aim.png")
+	# A teleported camera/player test position is not proof of floor contact.
+	# Unlike a physical walk, physics needs to settle after the test translation.
+	for frame in range(120):
+		await physics_frame
+		if frame > 5 and game.player.is_on_floor():
+			break
+	check(game.player.is_on_floor(), "fixture player grounded before limb grab")
+	print("STEP5_GRAB_PRECONDITIONS " + JSON.stringify({
+		"grounded": game.player.is_on_floor(),
+		"grab_state": game.player.grab_state,
+		"cooldown": game.player._limb_grab_cooldown,
+		"active_zombies": game.spawn_director.ordinary_population_count()
+	}))
 	# Genuine limb-grab state; existing QTE regressions cover button timing.
 	game.ai_director._refresh_formation()
 	var grabber: FoundationEnemy = null
@@ -109,6 +122,12 @@ func _run() -> void:
 		var allowed: bool = game.spawn_director.try_acquire_attacker(grabber)
 		var reserved: bool = allowed and game.player.try_reserve_limb_grab(grabber, "LEFT ARM")
 		var begun: bool = reserved and game.player.begin_limb_grab(grabber, "LEFT ARM")
+		print("STEP5_GRAB_ADMISSION " + JSON.stringify({
+			"acquired": allowed, "reserved": reserved, "begun": begun,
+			"enemy_director": is_instance_valid(grabber.attack_director),
+			"formation_role": game.spawn_director.formation_role_for(grabber),
+			"player_grounded": game.player.is_on_floor()
+		}))
 		check(begun, "grab begins through player state machine")
 		if begun:
 			for i in range(3):
@@ -128,7 +147,13 @@ func _run() -> void:
 		"actual respawn callback restores roof and disables ground effects")
 	check(not loader.is_active() and game.hud._root.visible, "respawn HUD and loading")
 	save(await capture(), "step5-roof-respawn.png")
-	# This is an explicit forced render-profile test, not a second elevator ride.
+	# Force a second ground render profile only after moving the fixture
+	# physically back to ground. On a 20m roof, _update_rooftop_sky
+	# correctly re-enables roof effects and would invalidate this test.
+	# This is not a second ridden elevator descent.
+	game.player.set_physics_process(false)
+	game.player.global_position = Vector3(20.0, 0.05, 20.0)
+	game._ground_map_ready = true
 	game._set_rooftop_render_profile(false)
 	for i in range(6):
 		await process_frame
