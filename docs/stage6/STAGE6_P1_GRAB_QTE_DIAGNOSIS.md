@@ -78,3 +78,39 @@ No owner device observations beyond the reported partial outcome are currently a
 Record the *naturally initiated* grab in a normal 20-zombie scenario, without calling `try_reserve_limb_grab` or `begin_limb_grab` from a test fixture. Instrument refusal reasons per existing rules (rig detailed, visual visibility, slot, clip, player grounded, actual Exo hand reach, HUD signal), but do not weaken gates. At least one ordinary zombie must enter windup, make true skeletal contact, emit `grab_qte_started`, display QTE and allow three physical R3 edges. Capture gameplay + logs from a physical Android test before declaring the defect repaired.
 
 **Current P1 status: AUTOMATED DIAGNOSTICS PASS; PHYSICAL ANDROID DEFECT OPEN. No gameplay/source/shader/art fixes made.**
+
+
+---
+
+## 2026-11-09 — P1 natural gameplay regression and isolated repair (supersedes the pre-repair status above)
+
+### Confirmed failure in real production AI
+
+The new deterministic `game/tests/stage6_p1_natural_grab_test.gd` instantiates `foundation.tscn`, completes the real elevator/ground activation, keeps the production spawn manager and AI Director running, and observes an ordinary live zombie. It controls only deterministic initial positioning; it does not directly reserve/start a grab, emit a QTE signal, assign an attacker slot, force an animation, or disable the actual AI.
+
+- **Pre-repair run:** [#42701499716](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/42701499716), SHA `ca0b9787d2a7d1a61982611ce45b07fe6fb025e1`, natural test **FAIL**.
+- Real AI attempted 18 attacks and initiated 12 grab windups, but started **0 QTEs**.
+- Captured rejection reasons: `visual_contact_unreachable` from visible-rig admission and `contact_failed` during final contact resolution. Existing attacker roles, visible rigs and player eligibility were present during the encounter.
+- The initial minimal approach correction closed center-to-center distance from about 1.45 m to about 1.015 m but still failed: [#42702534923](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/42702534923), SHA `935ed27fadbfe58d21b013d97ef36994dadd15d4`, natural test **FAIL**. This correction alone was insufficient.
+- **Real arm geometry:** [#42703104494](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/42703104494) measured zombie shoulder-to-Exo forearm target distances around **1.005 m** (selected left grip) and **0.669 m** (selected right grip). The actual shoulder–elbow–hand chain reached about **0.525 m**, including the existing safety margin. All four tested arm/hand combinations were outside valid reach. The obstacle was **geometric contact admission**, not missing QTE logic or AI attack selection.
+
+### Scoped implementation — only `game/scripts/enemy.gd`
+
+The zombie now approaches its selected arm from the **visible Exo Gray forearm side** during the existing natural grab windup. `_limb_grab_approach_point()` computes a local flank position from the forearm and player center. It leaves a center distance of approximately **0.84 m**, outside the original combined physical capsule radii (0.38 m player + 0.42 m ordinary zombie). Existing `CharacterBody3D` motion/collision via `move_and_slide()` remains authoritative, as do attack slots, line of sight, eligibility, real two-bone IK reach, QTE ownership and valid arm selection.
+
+This is a real locomotion/collision-based approach, **not teleportation, enlarged IK tolerance, a forced QTE, or increased attack probability**. No shaders, blackout, fog horizon, tip artwork, camera, gamepad assignments, AI Director implementation, zombie population limits, Stage 5B branch or `main` were modified.
+
+### Verified post-fix gates
+
+- [**#42703726486**](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/42703726486) at gameplay fix SHA `fdb3fe055b6d5b06c2f0bb75ac90cdcf987ee833`: **SUCCESS**. Natural ordinary zombie AI reached a real contact, established a grab and began/completed a QTE without test-forced admission. Five existing state/QTE/IK/rig/HUD suites **PASS**. Controlled Stage 5B Mesa OpenGL capture and blackout regression **PASS**. AI Director and jump regressions **PASS**. [Diagnostic artifact #13711744361](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/42703726486/artifacts/13711744361).
+- [**#42704177652**](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/42704177652) at test SHA `f124d51a8e7e0492988733a2397c45fb9a0fbef5`: **SUCCESS**. Extended natural AI test passed with three separate simulated R3 press/release input events routed through the actual viewport/HUD, QTE shown and dismissed, and player returned to READY. Existing suites, Mesa-controlled rendering, AI Director and jump regressions also **PASS**.
+- A further CI gate on `e2bb1097e1de2c97a540e366b8f4ca618a285853` adds **seven real Mesa-rendered stages** from the autonomous natural encounter (approach, windup, reaching, contact/QTE, restrained, escape, recovery). The outcome must be checked from its own run/artifact before the rendering stage can be called PASS.
+
+### Remaining risks and explicit acceptance boundaries
+
+- Original grab windup continues to use the existing punch-derived animation, although the opponent now physically moves into reachable forearm contact and the existing IK hold. The *aesthetic readability* of reach/hold/release still needs inspection of the seven GL frames and a phone test; do not claim AAA animation completion.
+- Host Mesa/OpenGL and virtual R3 are **not** Android GPU, thermal or real Bluetooth/USB controller acceptance. Physical Android still **PENDING**. No APK was built or authorized. A future phone test needs separate APK authorization.
+- No controlled comparative mobile FPS/thermal data exist for the new approach. Do not assert measured performance equivalence to the old phone APK.
+- Zombie Fog Horizon owner-reported FAIL and flashlight-tip artwork PARTIAL remain **deferred and untouched**. Fullscreen Blackout remains under the existing regression suite.
+- Do not merge to `main`, start Stage 7, release a build, alter source branch Stage 5B or replace the previous verified APK.
+- **Working branch:** `fix/bijatyka-stage6-grab-qte-android-20261109`. Production source modification limited to `game/scripts/enemy.gd`; other changes are a dedicated natural gameplay test, a no-APK CI workflow, and this diagnosis.
