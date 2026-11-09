@@ -4,6 +4,7 @@ extends SceneTree
 
 const WORLD := preload("res://scenes/foundation.tscn")
 const ELEVATOR := preload("res://scripts/starting_elevator.gd")
+const CONTACT := preload("res://scripts/brutal_grab_limb_contact.gd")
 var failures: Array[String] = []
 var checks := 0
 
@@ -118,12 +119,46 @@ func _run() -> void:
 	if check(is_instance_valid(grabber), "local grab attacker exists"):
 		grabber.set_physics_process(false)
 		grabber._player = game.player
-		grabber.global_position = game.player.global_position + Vector3(1.5, 0, 0)
+		grabber.global_position = game.player.global_position + Vector3(0.8, 0.0, 0.0)
+		# Exact imported Exo/zombie arm alignment from the existing proven
+		# brutal_grab_real_rig_test: real game geometry must be reachable.
+		# The earlier 1.5m rigid offset was intentionally rejected by the
+		# production visual-contact admission; do not weaken that guard.
+		grabber._set_full_animation_selected(true)
+		var enemy_rig := grabber._skeleton
+		var exo_rig: Skeleton3D = game.player._exo_retarget.target_skeleton
+		var rig_ready: bool = is_instance_valid(enemy_rig) and is_instance_valid(exo_rig)
+		check(rig_ready, "live imported zombie and Exo skeletal rigs available")
+		if rig_ready:
+			var punch_clip: String = String(FoundationEnemy.FIGHT_ANIMATION_BUILDER.clip_path("punch", "left", FoundationEnemy.ENEMY_FIGHT_LIBRARY))
+			grabber._animation_player.play(punch_clip, 0.0)
+			grabber._animation_player.seek(grabber._attack_clip_contact_time(punch_clip), true)
+			grabber._animation_player.pause()
+			game.player._animation_player.play(FoundationPlayer.CHARACTER_MOTION.clip_path("Hit"), 0.0)
+			game.player._animation_player.seek(0.12, true)
+			game.player._animation_player.pause()
+			game.player._exo_retarget.synchronize_pose()
+			await process_frame
+			var player_bones: Dictionary = CONTACT.resolve_player_bones(exo_rig, "LEFT ARM", true)
+			var enemy_bones: Dictionary = CONTACT.resolve_enemy_bones(enemy_rig, "left")
+			check(not player_bones.is_empty() and not enemy_bones.is_empty(),
+				"real Exo forearm and zombie arm chains resolve")
+			if not player_bones.is_empty() and not enemy_bones.is_empty():
+				var target: Vector3 = CONTACT.forearm_contact_point(exo_rig,
+					int(player_bones.forearm), int(player_bones.wrist))
+				var shoulder: Vector3 = CONTACT.bone_world(enemy_rig, int(enemy_bones.root))
+				grabber.global_position += target - shoulder + Vector3(0.0, 0.0, 0.20)
+		grabber._limb_grab_limb = "LEFT ARM"
+		grabber._limb_grab_hand = "left"
+		grabber.state = "limb_grab_windup"
+		var reachable: bool = rig_ready and CONTACT.can_reach_contact(grabber, game.player, "LEFT ARM", "left")
+		check(reachable, "real imported arm rig is within reach before contact")
 		var allowed: bool = game.spawn_director.try_acquire_attacker(grabber)
 		var reserved: bool = allowed and game.player.try_reserve_limb_grab(grabber, "LEFT ARM")
+		grabber.state = "limb_hold"
 		var begun: bool = reserved and game.player.begin_limb_grab(grabber, "LEFT ARM")
 		print("STEP5_GRAB_ADMISSION " + JSON.stringify({
-			"acquired": allowed, "reserved": reserved, "begun": begun,
+			"acquired": allowed, "reserved": reserved, "begun": begun, "reachable": reachable,
 			"enemy_director": is_instance_valid(grabber.attack_director),
 			"formation_role": game.spawn_director.formation_role_for(grabber),
 			"player_grounded": game.player.is_on_floor()
