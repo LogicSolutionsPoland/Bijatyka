@@ -121,8 +121,8 @@ func _run() -> void:
 			samples += 1
 			var rig_ok := actor._full_animation_selected and is_instance_valid(actor._skeleton) and is_instance_valid(actor._animation_player)
 			var visual_ok := rig_ok and is_instance_valid(actor._visual_root) and actor._visual_root.visible
-			var slot_ok := game.spawn_director.can_maintain_limb_grab(actor)
-			var player_ok := game.player._grab_player_eligible()
+			var slot_ok: bool = bool(game.spawn_director.can_maintain_limb_grab(actor))
+			var player_ok: bool = bool(game.player._grab_player_eligible())
 			if rig_ok:
 				rig_ready_samples += 1
 			if slot_ok:
