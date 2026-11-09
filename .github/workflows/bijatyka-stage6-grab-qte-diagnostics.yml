@@ -72,6 +72,21 @@ jobs:
           printf 'P1_PASSED=%s\nP1_FAILED=%s\n' "$passed" "$failed" | tee build/stage6-p1/logs/summary.txt
           test "$passed" -eq 5
           test "$failed" -eq 0
+      - name: Reproduce an ordinary zombie grab through production AI (never force a grab)
+        shell: bash
+        run: |
+          set -euo pipefail
+          log="build/stage6-p1/logs/stage6_p1_natural_grab_test.log"
+          if timeout 300s godot --headless --path game --script res://tests/stage6_p1_natural_grab_test.gd > "$log" 2>&1 \
+              && grep -q '^PASS: Stage6 P1 production natural AI grab/QTE' "$log" \
+              && ! grep -Eq '^FAIL:|^SCRIPT ERROR:|^ERROR:' "$log"; then
+            echo 'P1_NATURAL_AI_GRAB=PASS' | tee -a build/stage6-p1/logs/summary.txt
+          else
+            echo 'P1_NATURAL_AI_GRAB=FAIL' | tee -a build/stage6-p1/logs/summary.txt
+            grep -E '^P1_NATURAL_(DIAG|SAMPLE)' "$log" | tail -25 || true
+            tail -90 "$log"
+            exit 1
+          fi
       - name: Confirm Mesa Stage 5B grab transition visual regression
         shell: bash
         env:
@@ -92,21 +107,6 @@ jobs:
           test -s build/stage6-p1/captures/step5-grab-active.png
           test -s build/stage6-p1/captures/step5-ground-0.40.png
           echo 'P1_CONTROLLED_GL_TRANSITION=PASS' | tee -a build/stage6-p1/logs/summary.txt
-      - name: Reproduce an ordinary zombie grab through production AI (never force a grab)
-        shell: bash
-        run: |
-          set -euo pipefail
-          log="build/stage6-p1/logs/stage6_p1_natural_grab_test.log"
-          if timeout 300s godot --headless --path game --script res://tests/stage6_p1_natural_grab_test.gd > "$log" 2>&1 \
-              && grep -q '^PASS: Stage6 P1 production natural AI grab/QTE' "$log" \
-              && ! grep -Eq '^FAIL:|^SCRIPT ERROR:|^ERROR:' "$log"; then
-            echo 'P1_NATURAL_AI_GRAB=PASS' | tee -a build/stage6-p1/logs/summary.txt
-          else
-            echo 'P1_NATURAL_AI_GRAB=FAIL' | tee -a build/stage6-p1/logs/summary.txt
-            grep -E '^P1_NATURAL_(DIAG|SAMPLE)' "$log" | tail -25 || true
-            tail -90 "$log"
-            exit 1
-          fi
       - name: Verify AI Director and jumping regressions
         shell: bash
         run: |
