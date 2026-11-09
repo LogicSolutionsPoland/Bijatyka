@@ -100,6 +100,29 @@ func _run() -> void:
 		if frame > 5 and game.player.is_on_floor():
 			break
 	check(game.player.is_on_floor(), "fixture player grounded before limb grab")
+	# The live 18-zombie encounter remains active during floor settlement. A
+	# different zombie can enter WINDUP before this *controlled* rig/contact
+	# probe, nondeterministically occupying the player's only grab slot.
+	# Isolate autonomous AI after exercising the real elevator and encounter,
+	# then cleanly finish any pre-existing grab through the public player API.
+	# The intended grab below still must pass real rig reach, attacker-slot
+	# acquisition, player reservation, and begin_limb_grab; no guard is bypassed.
+	game.spawn_director.set_physics_process(false)
+	for live_value in game.spawn_director._live.values():
+		var live_enemy := live_value as FoundationEnemy
+		if is_instance_valid(live_enemy):
+			live_enemy.set_physics_process(false)
+			if is_instance_valid(live_enemy.attack_director):
+				live_enemy.attack_director.set_process(false)
+				live_enemy.attack_director.set_physics_process(false)
+	game.player.cancel_limb_grab("step5_fixture_prior_autonomous_grab")
+	for cooldown_frame in range(240):
+		if game.player._limb_grab_cooldown <= 0.0:
+			break
+		await physics_frame
+	check(game.player.grab_state == FoundationPlayer.GrabState.READY
+		and game.player._limb_grab_cooldown <= 0.0,
+		"controlled contact begins with a free, cooldown-expired player grab slot")
 	print("STEP5_GRAB_PRECONDITIONS " + JSON.stringify({
 		"grounded": game.player.is_on_floor(),
 		"grab_state": game.player.grab_state,
