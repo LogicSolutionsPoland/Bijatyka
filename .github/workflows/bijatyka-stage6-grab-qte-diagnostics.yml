@@ -133,6 +133,25 @@ jobs:
               exit 1
             fi
           done
+      - name: Capture seven real Mesa frames from naturally initiated AI grab and R3 escape
+        shell: bash
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: |
+          set -euo pipefail
+          export BIJATYKA_CAPTURE_DIR="$PWD/build/stage6-p1/captures"
+          log="build/stage6-p1/logs/stage6_p1_natural_grab_gl.log"
+          timeout 360s xvfb-run -a godot --audio-driver Dummy --rendering-driver opengl3 \
+            --path game --script res://tests/stage6_p1_natural_grab_test.gd > "$log" 2>&1 || {
+            tail -110 "$log"
+            exit 1
+          }
+          grep -q '^PASS: Stage6 P1 production natural AI grab/QTE' "$log"
+          ! grep -Eq '^FAIL:|^SCRIPT ERROR:|^ERROR:' "$log"
+          for stage in approach windup hand-reaching contact-qte restrained escape recovery; do
+            test -s "$BIJATYKA_CAPTURE_DIR/natural-$stage.png"
+          done
+          echo 'P1_NATURAL_GL_GRAB=PASS' | tee -a build/stage6-p1/logs/summary.txt
       - name: Publish diagnostic logs and non-APK captures only
         if: always()
         uses: actions/upload-artifact@v4
