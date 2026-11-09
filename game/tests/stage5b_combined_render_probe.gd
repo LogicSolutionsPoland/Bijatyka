@@ -60,8 +60,8 @@ func _run() -> void:
 	for scale in [1.0, 0.67, 0.40]:
 		root.scaling_3d_scale = scale
 		for angle in range(3):
-			var yaw := [-0.38, 0.0, 0.38][angle]
-			var pitch := [-0.14, -0.06, 0.05][angle]
+			var yaw: float = [-0.38, 0.0, 0.38][angle]
+			var pitch: float = [-0.14, -0.06, 0.05][angle]
 			game.camera_rig.rotation.y = yaw
 			game.camera_arm.rotation.x = pitch
 			await process_frame
