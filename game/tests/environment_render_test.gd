@@ -25,8 +25,12 @@ func _run() -> void:
 	_check(flames.size() == 2, "both brazier flames use one prepared material")
 	# The starting tower adds two shared finishes to the original arena set.
 	_check(game._ruin_materials.size() <= 10, "arena and rooftop tower use a small set of shared ruin materials")
-	_check(game.burning_horizon.get_child_count() == 4, "Burning Horizon retains four panels")
-	_check(game.burning_horizon.get_child(0).material_override == game.burning_horizon.get_child(1).material_override, "horizon panels share their material")
+	_check(game.burning_horizon.get_child_count() == 1, "Zombie Fog Horizon uses one circular mesh, not four panels")
+	var horizon_wall := game.burning_horizon.get_child(0) as MeshInstance3D
+	var horizon_ring := horizon_wall.mesh as CylinderMesh if horizon_wall != null else null
+	_check(horizon_ring != null and horizon_ring.radial_segments == 96, "horizon has 96 mesh segments")
+	_check(horizon_ring != null and is_equal_approx(horizon_ring.top_radius, 10.0), "horizon uses the shared 10 m range")
+	_check(horizon_wall != null and horizon_wall.material_override is ShaderMaterial, "ring uses a shared animated fog shader")
 	_check(game.get_node("QuarantineCourtyardGround") != null, "ground and collision remain")
 	var district := game.get_node("AshenQuarantineMap")
 	var district_batches := 0

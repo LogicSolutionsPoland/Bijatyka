@@ -87,6 +87,29 @@ jobs:
           if grep -Eq '^SCRIPT ERROR:|^ERROR:|^FAIL:' build/stage5/blackout-gl.log; then exit 1; fi
           test -s build/stage5/captures/rooftop-no-blackout.png
           test -s build/stage5/captures/ground-blackout-0.40.png
+      - name: Verify circular Zombie Fog Horizon and original flashlight-tip regressions (NO APK)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for suite in burning_horizon_test flashlight_tip_silhouettes_test; do
+            timeout 180s godot --headless --path game --script "res://tests/${suite}.gd" 2>&1 | tee "build/stage5/${suite}.log"
+            grep -q 'PASS:' "build/stage5/${suite}.log"
+            if grep -Eq '^SCRIPT ERROR:|^ERROR:|^FAIL:' "build/stage5/${suite}.log"; then exit 1; fi
+          done
+      - name: Real Mesa OpenGL circular fog sectors, animation, mask ordering and render scales (NO APK)
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIJATYKA_CAPTURE_DIR="$PWD/build/stage5/captures" timeout 240s xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/zombie_fog_render_probe.gd 2>&1 | tee build/stage5/zombie-fog-gl.log
+          grep -q 'PASS: zombie fog Compatibility pixels and motion' build/stage5/zombie-fog-gl.log
+          if grep -Eq '^SCRIPT ERROR:|^ERROR:|^FAIL:' build/stage5/zombie-fog-gl.log; then exit 1; fi
+          for scale in 1.00 0.67 0.40; do
+            test -s "build/stage5/captures/zombie-sector-1-${scale}.png"
+            test -s "build/stage5/captures/zombie-sector-6-${scale}.png"
+            test -s "build/stage5/captures/zombie-mask-${scale}.png"
+          done
+          test -s build/stage5/captures/zombie-fog-motion-before.png
+          test -s build/stage5/captures/zombie-fog-motion-after.png
       - name: Paired pre/post visibility CPU samples (host only)
         if: always()
         shell: bash

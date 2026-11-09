@@ -340,7 +340,7 @@ func _set_rooftop_render_profile(on_roof: bool) -> void:
 	_rooftop_sky_active = on_roof
 	_rooftop_camera_target = 1.0 if on_roof else 0.0
 	_environment.sky = _rooftop_city_sky if on_roof else _ground_sky
-	# Keep the original four-panel Burning Horizon for ground-level play.
+	# The 10 m circular Zombie Fog Horizon is ground-only and stays independent of cached culling.
 	burning_horizon.visible = not on_roof
 	flashlight_visibility_manager.set_rooftop_sky_visible(on_roof)
 	if flashlight_visibility_enabled:

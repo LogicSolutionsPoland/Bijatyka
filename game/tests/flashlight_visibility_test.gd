@@ -190,7 +190,7 @@ func _run() -> void:
 
 	game._set_rooftop_render_profile(true)
 	_check(Foundation.ZOMBIE_HORDE_SIZE == 4 and Foundation.ZOMBIE_PERFORMANCE_CAPACITY == 20, "game stores four rooftop zombies and never profiles more than 20")
-	_check(game.burning_horizon.get_child_count() == 4, "Burning Horizon remains present and independent of the fullscreen mask")
+	_check(game.burning_horizon.get_child_count() == 1, "circular Zombie Fog Horizon is independent of the fullscreen mask")
 	_check(game._boss_enemy != null and game._boss_enemy.hp > 0, "boss simulation remains independent from flashlight visibility")
 	_check(manager._tracked.has(game._boss_enemy.get_instance_id()), "boss is registered for the same whole-body flashlight reveal")
 	_check(is_equal_approx(Foundation.MOBILE_3D_RENDER_SCALE, 0.40), "Android 3D starts at 40 percent resolution with a native-resolution HUD")

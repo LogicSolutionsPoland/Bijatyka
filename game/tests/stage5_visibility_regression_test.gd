@@ -36,6 +36,12 @@ func _run() -> void:
 	world._set_rooftop_render_profile(true)
 	_check(not mask.visible, "return to rooftop hides blackout again")
 	_check(world._distance_visuals.size() > 0, "visible geometry is registered without repeated traversal")
+	var fog_wall := world.burning_horizon.get_child(0) as MeshInstance3D
+	_check(fog_wall != null and not world._distance_visuals.has(fog_wall),
+		"animated 10 m fog horizon bypasses the cached distance-culling registry")
+	_check(fog_wall != null and fog_wall.material_override is ShaderMaterial
+		and (fog_wall.material_override as ShaderMaterial).render_priority == 127,
+		"fog is depth-tested and composites after priority-126 fullscreen blackout")
 
 	var box := MeshInstance3D.new()
 	box.mesh = BoxMesh.new()

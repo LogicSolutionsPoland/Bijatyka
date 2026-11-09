@@ -37,8 +37,8 @@ func _run() -> void:
 		"zombie contour lines use 40 percent alpha")
 	_check(effect.find_children("*", "MeshInstance3D", true, false).size() == 1,
 		"effect creates one reusable fog quad instead of per-frame nodes")
-	_check(game.burning_horizon.get_child_count() == 4,
-		"the existing four-panel Zombie Horizon stays unchanged")
+	_check(game.burning_horizon.get_child_count() == 1,
+		"the circular Zombie Fog Horizon coexists with the original flashlight tip effect")
 
 	game.player.global_position = Vector3(0.0, 0.05, -5.2)
 	game.camera_rig.global_position = game.player.global_position + Vector3.UP * Foundation.CAMERA_PIVOT_HEIGHT
