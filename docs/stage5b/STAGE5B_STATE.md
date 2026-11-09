@@ -1,6 +1,6 @@
 # Bijatyka Stage 5B — cross-chat state and safety checkpoint
 
-Checkpoint date: 2026-11-09. This document is the single persistent coordination record for Stage 5B Steps 0–6. It must be consulted and updated by future steps on the dedicated integration branch. Inspect current GitHub refs before every edit; SHA values below describe Step 0 inspection, not permanent branch locks. Do not rely on a chat summary as the source of truth.
+Checkpoint date: 2026-11-09. Step 0 PASS; Step 1 PASS on 2026-11-09; Step 2 NOT STARTED. This document is the single persistent coordination record for Stage 5B Steps 0–6. It must be consulted and updated by future steps on the dedicated integration branch. Inspect current GitHub refs before every edit; SHA values below describe Step 0 inspection, not permanent branch locks. Do not rely on a chat summary as the source of truth.
 
 ## A. Project identity and scope
 
@@ -11,8 +11,9 @@ Checkpoint date: 2026-11-09. This document is the single persistent coordination
 - Godot project: game/project.godot
 - Main game scene: game/scenes/foundation.tscn, with runtime setup in game/scripts/foundation.gd
 - Previous completed stage: Stage 5
-- Current stage at checkpoint creation: Stage 5B / Step 0 — audit and safe setup
-- Next stage: Stage 5B / Step 1 — Fullscreen Blackout Implementation
+- Current stage at checkpoint creation: Stage 5B / Step 0 — audit and safe setup (completed)
+- Latest completed stage: Stage 5B / Step 1 — Fullscreen Blackout Restoration (PASS)
+- Next stage: Stage 5B / Step 2 — Circular Zombie Fog Horizon integration (NOT STARTED)
 
 ## B. Verified Git state (live at Step 0)
 
@@ -49,10 +50,10 @@ Checkpoint date: 2026-11-09. This document is the single persistent coordination
 
 ## D. Seven-step execution plan
 
-| Step | Responsibility | Status at Step 0 | Evidence / blocker |
+| Step | Responsibility | Latest status | Evidence / blocker |
 | --- | --- | --- | --- |
 | 0 | Audit live refs, rendering, source PRs, CI; protect baseline and create this checkpoint | PASS | Read-only audit, workflow-trigger inspection, dedicated branch and docs-only checkpoint; verify pushed SHA in the Step 0 report |
-| 1 | Implement ground-floor fullscreen blackout on Stage 5B, preserve roof/HUD/beam; test real pixels | NOT STARTED | Old shader exists but live manager allocates no composite. Existing tests assert absence and must be intentionally updated |
+| 1 | Restore ground-floor fullscreen blackout on Stage 5B, preserve roof/HUD/beam; test real pixels | PASS | Code SHA `738eb0064a02ba3aca13af31f3829733c695e40e`; [NO-APK Actions #42641061088](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/42641061088) SUCCESS: 20/20 suites, 600-frame smoke, Mesa beam probe, 43 pixel blackout checks at 100/67/40%, rooftop no-mask, CPU samples and screenshots. Artist post leakage fixed |
 | 2 | Adapt PR #68 circular animated zombie fog horizon | NOT STARTED | New mesh/texture layout and render priority require integration; do not copy its old foundation wholesale |
 | 3 | Adapt PR #70 flashlight-tip artwork, movement, 13 Hz slices | NOT STARTED | Use narrow shader/script/assets/test changes; exclude Android workflow edits |
 | 4 | Verify combined effects by actual software OpenGL framebuffer images and comparisons | NOT STARTED | Need real sampling of blackout, fog, tip, beam, HUD, rooftop and animation |
@@ -116,16 +117,51 @@ CI audit of 23 workflows in .github/workflows/ as of Step 0: relevant push trigg
 - Step 5: repeat all 20 Stage 5 regression suites plus added specific shader and visual tests, 600-frame playable scene, and paired host CPU/GPU-approx samples. Report no real Android FPS, thermal or stability acceptance without device test.
 - Do not implement any new test or workflow during Step 0. No fresh Godot tests were run at Step 0; source/CI audit was read-only.
 
-## I. Step 1 instructions for new AI session
+## I. Step 1 — completed implementation and verified evidence
 
-1. Fetch this document and live HEAD of integration/bijatyka-stage5b-blackout-fog-20261109, compare it with Stage 5 base b052aaf876f5cb141547494b62b8c2fdb473e6c4. Confirm the only Step 0 difference is docs/stage5b/STAGE5B_STATE.md. Detect unrelated changes and stop rather than overwrite.
-2. Inspect the live .github/workflows/ trigger patterns BEFORE any write or workflow dispatch. Preserve no-APK rule. Work only on the dedicated branch, never main or source Stage 5.
-3. Inspect current game/scripts/foundation.gd, game/scripts/flashlight_visibility.gd, game/shaders/flashlight_visibility.gdshader, game/shaders/flashlight_beam_volume.gdshader, game/shaders/flashlight_beam_sections.gdshader, game/scripts/mobile_hud.gd, game/scripts/flashlight_tip_silhouettes.gd, game/scenes/foundation.tscn and relevant tests.
-4. Implement real full-screen ground-floor blackout with a correct 3D-rendered composite/mask (potentially reusing PR #68's narrow _build_composite patterns) while preserving Stage 5 deduplicated uniforms, cached visibility, 3D beam and camera/gamepad aim; keep rooftop zero-blackout and canvas HUD readable.
-5. Add/update truthful headless plus REAL software OpenGL pixel tests for darkness, illuminated pixels, HUD, rooftop and beam; run no-APK CI on the actual implementation HEAD and collect artifacts. Do not claim static script tests establish visual correctness.
-6. Do NOT integrate PR #68 ring or PR #70 new image in Step 1; those are strictly Steps 2 and 3.
-7. Update this state file with Step 1 status, implementation/ref SHA, tests and blockers, and pass precise instructions to Step 2. Report in Polish.
+Step 1 outcome: **PASS** (2026-11-09). Last TESTED implementation SHA:
+\`738eb0064a02ba3aca13af31f3829733c695e40e\`.
+GitHub Actions run **#42641061088**: https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/42641061088 — **SUCCESS**, exact head SHA above.
+Evidence artifact (no APK): https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/42641061088/artifacts/13686035749
+The current branch HEAD may become a later docs-only descendant after writing this handoff. Always fetch the live HEAD before editing.
 
-## J. Persistent progress and safety protocol
+Changes on this branch, and nowhere else:
+- game/scripts/flashlight_visibility.gd: restored the former, camera-attached full-viewport blackout composite and existing shader at transparent priority 126. Existing cached classifier, deferred 3D beam geometry, 10 m range, debug mask visibility switch, 0.12 s update cadence, uniform deduplication and tip artwork manager remain intact.
+- game/scripts/foundation.gd: added \`flashlight_visibility_composite\` to independent visibility groups so Stage 5's cached culling never hides the mask; preserved Stage 5's existing floor policy, camera, combat, map, and mobile settings.
+- game/shaders/flashlight_visibility.gdshader: retained the previously implemented depth-reconstructing full-screen mask; restricted the nearby character visibility exemption to the actual player region in normalized screen space. The original unrestricted exemption illuminated tall tower/elevator posts far outside the cone. After the fix, those off-beam posts are fully black in screenshots while player and HUD remain readable.
+- Adjusted tests only where older Stage 5 assertions incorrectly required no blackout: game/tests/flashlight_visibility_test.gd, stage5_visibility_regression_test.gd, flashlight_enemy_reveal_test.gd, general_cpu_optimization_test.gd and flashlight_beam_volume_test.gd. Tests continue checking existing mechanics and deduplicated uniforms.
+- game/tests/flashlight_render_probe.gd now captures real OpenGL frames and verifies lit center objects, black off-beam pixels, four additional off-beam tower-post points (outside HUD), player visibility, rooftop sky/disabled mask, boss indicator/HUD, at 3 render scales.
+- .github/workflows/bijatyka-stage5-integration-validation.yml: dedicated Stage 5B branch added to the existing explicitly NO-APK validation workflow, with true Mesa/Xvfb Compatibility framebuffer test, saved screenshots and QA-only artifacts. The original Stage 5 branch itself was not changed. All APK workflows remain untouched.
+
+Exact verified tests on the implementation commit:
+1. Godot 4.7.2 project import and script parse: PASS (pre-existing duplicate animation-name diagnostics remain).
+2. All **20/20** previous Stage 5 gameplay, rendering, camera, AI/zombies, elevator, controls and CPU-regression suites: PASS.
+3. Playable scene smoke **600 frames**: PASS.
+4. Real software Mesa OpenGL 3D beam shaft pixel/opaque wall occlusion and rooftop beam absence: PASS.
+5. Real software Mesa OpenGL fullscreen blackout test **43 checks**: PASS. Green outside-beam sample RGB=(0,0,0) at all 1.00, 0.67 and 0.40 render scales; lit red sample remains visible; player and HUD remain readable. Four post-leak sample points black at all three scales. Rooftop remains unmasked.
+6. Paired pre/post host-only visibility CPU benchmark: PASS; no Android GPU, FPS, thermal or device claim.
+7. Screenshots in artifact: \`captures/ground-blackout-1.00.png\`, \`captures/ground-blackout-0.67.png\`, \`captures/ground-blackout-0.40.png\`, \`captures/rooftop-no-blackout.png\`. Logs include \`blackout-gl.log\`, \`flashlight-gl.log\` and each of the 20 suite logs.
+8. No APK/AAB, no release, no merge and no changes to original \`main\`, Stage 5, PR #68 or PR #70.
+9. Earlier failing transient CI runs were diagnostic: outdated assertions expecting absent blackout and an initial tower-post light leak. These were explicitly corrected; #42641061088 is the final implementation verification.
+
+The narrow final design requirement remains: on the ground, game-world pixels outside the effective flashlight illumination must be black, except intended screen UI, kept-visible player and explicitly approved artistic fog/tip layers in later steps. Do not weaken fullscreen blackout to a black sky, a dark vignette, or actor-only hiding.
+
+## J. Next chat: Stage 5B / Step 2 — circular Zombie Fog Horizon
+
+**Previous completed stage:** Stage 5B / Step 1 (fullscreen blackout restored, PASS).
+**Current starting point for new AI:** Stage 5B / Step 2 (NOT STARTED).
+**Next stage after Step 2:** Stage 5B / Step 3 — flashlight-tip zombie fog artwork (PR #70).
+
+1. Read this file, fetch the LIVE HEAD of \`integration/bijatyka-stage5b-blackout-fog-20261109\` and compare to tested code commit \`738eb0064a02ba3aca13af31f3829733c695e40e\`. A later docs-only status commit is expected. Check recent changes before edits. Do not base on \`main\` or overwrite Stage 5, PR #68 or PR #70.
+2. Before writes, re-inspect all GitHub Actions triggers and ensure no APK or release is triggered. Keep the verified Stage 5B NO-APK workflow and its 20 regression suites, GL beam probe, and 43-check blackout pixel probe.
+3. Inspect PR #68 live status, head, and narrow source diffs. Its last verified HEAD at Step 0 was \`63ea5a80c007bdedddbd7da41d2d62cdf1e9f6d4\`. Adapt ONLY the four \`game/assets/environment/zombie_fog_0*.webp\` images, \`game/scripts/burning_horizon.gd\`, \`game/shaders/burning_horizon.gdshader\`, focused \`foundation.gd\` references if required, ring-related regressions, and \`game/tests/zombie_fog_render_probe.gd\`. Do not merge/cherry-pick the historical PR or import unrelated workflow changes.
+4. Build a 96-segment, 6 m tall, capless player-following fog circle at \`FlashlightVisibilityManager.MAX_RADIUS\`=10 m, six image sectors ordered 1/2/3/4/3/2, subtle shader animation, and ground-floor only. Preserve rooftop panorama/camera and all Stage 5 systems.
+5. Resolve priority sorting against the **existing priority-126 blackout** and priority-127 3D beam and tip. PR #68 renders fog at priority 127 so it remains visible at the 10 m boundary. Precisely confine its artwork to the intended boundary and avoid leaking world geometry or general illumination outside the flashlight. The blackout must NEVER be removed or replaced by merely black sky.
+6. Update old four-panel horizon assertions in \`burning_horizon_test.gd\`, \`environment_render_test.gd\`, \`flashlight_visibility_test.gd\` and any tip regression expecting four panels. Keep the 43-check Stage 5B blackout regression, and add/use real Mesa/Xvfb framebuffer probes for six sectors, alpha, motion, 10 m ring radius, off-axis darkness, rooftop visibility and coexistence with the 3D beam.
+7. Run NO-APK GitHub Actions on the actual new Step 2 implementation HEAD, inspect artifacts and actual captures, handle failures rather than claiming success, then update this document's Step 2 status, exact tested SHA, run IDs, residual risks and Step 3 instructions. Final report in Polish.
+
+No PR #70 artwork integration in Step 2; it belongs to Step 3. Do not build an APK or merge to main.
+
+## K. Persistent progress and safety protocol
 
 For each new chat: read STATE file; fetch live Git refs/PR state; check potential concurrent edits; inspect existing workflows; execute ONLY that step; validate; record exact evidence and any failures; update STEP status; explicitly hand over to the next step. Never assume a previous job passed based on written intent. Keep original Stage 5, main, and both PRs untouched. Do not build APK or merge at any Stage 5B step absent a separate explicit authorization.
