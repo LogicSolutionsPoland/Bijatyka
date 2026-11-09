@@ -83,6 +83,16 @@ func _run() -> void:
 			var lit_pixel := _sample(image, lit_point)
 			var dark_pixel := _sample(image, dark_point)
 			var player_pixel := _sample(image, player_point)
+			# Assert fullscreen darkness over nearby tower posts, not just a
+			# deliberately green probe. The legacy height-only player exemption
+			# used to leak tall scenery at these off-axis screen coordinates.
+			for sample_uv in [
+				Vector2(0.063, 0.37), Vector2(0.625, 0.21),
+				Vector2(0.095, 0.86), Vector2(0.305, 0.14)
+			]:
+				var outside_pixel := _sample(image, Vector2(image.get_size()) * sample_uv)
+				_check(maxf(outside_pixel.r, maxf(outside_pixel.g, outside_pixel.b)) < 0.04,
+					"tower posts outside the effective flashlight remain black at %.2fx screen %s" % [scale, sample_uv])
 			print("FLASHLIGHT_RENDER_SAMPLE " + JSON.stringify({"renderer": "GL Compatibility software desktop", "render_scale": scale, "lit_pixel": lit_pixel, "dark_pixel": dark_pixel, "player_pixel": player_pixel, "lit_uv": lit_point / Vector2(image.get_width(), image.get_height()), "dark_uv": dark_point / Vector2(image.get_width(), image.get_height()), "player_uv": player_point / Vector2(image.get_width(), image.get_height())}))
 			_check(lit_pixel.r > 0.45 and lit_pixel.g < 0.35, "red object is visible inside the oval at %.2fx" % scale)
 			_check(dark_pixel.g < 0.12, "green object is black outside the oval at %.2fx" % scale)

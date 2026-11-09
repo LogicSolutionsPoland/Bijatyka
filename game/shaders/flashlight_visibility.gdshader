@@ -56,10 +56,17 @@ void fragment() {
 		// footprint. Keep the existing world range and facing as further limits.
 		vec2 oval_uv = (SCREEN_UV - oval_center_uv) / oval_radius_uv;
 		float oval_weight = 1.0 - smoothstep(1.0 - oval_feather, 1.0, length(oval_uv));
-		// The third-person character crosses the oval edge. Exempt its raised
-		// geometry without leaving a bright disc on the floor underneath it.
+		// The third-person character crosses the oval edge. The original height
+		// exemption accidentally lit nearby tall elevator/tower posts OUTSIDE
+		// the flashlight footprint. Keep it only within the known player
+		// framing region, not across the full viewport at any world height.
+		// Foundation's camera contract projects the player at x ~0.41 and feet
+		// at y ~0.88 for supported viewport shapes.
+		vec2 player_screen = (SCREEN_UV - vec2(0.412, 0.665)) / vec2(0.105, 0.265);
+		float player_screen_weight = 1.0 - smoothstep(0.82, 1.0, length(player_screen));
 		float player_weight = (1.0 - smoothstep(player_keep_radius * 0.72, player_keep_radius, distance_to_player))
-			* smoothstep(0.005, 0.08, world_position.y - flashlight_origin.y);
+			* smoothstep(0.005, 0.08, world_position.y - flashlight_origin.y)
+			* player_screen_weight;
 		illuminated_weight = max(sector_weight * range_weight * oval_weight, player_weight);
 	}
 	// This pass only applies the existing surface visibility footprint. The
