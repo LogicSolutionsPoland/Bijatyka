@@ -1,4 +1,4 @@
-extends Node
+extends Node3D
 class_name FoundationTransientCombatFx
 ## Reusable visual-only combat effect. It never owns a target or a collision body.
 
@@ -223,13 +223,15 @@ func _set_visual_visible(is_visible: bool) -> void:
 	if _visual is CanvasItem:
 		(_visual as CanvasItem).visible = is_visible
 	elif _visual is Node3D:
+		# The pooled parent also gates visibility after a released spell is culled.
+		visible = is_visible
 		(_visual as Node3D).visible = is_visible
 
 func is_effect_visible() -> bool:
 	if _visual is CanvasItem:
 		return (_visual as CanvasItem).visible
 	if _visual is Node3D:
-		return (_visual as Node3D).visible
+		return visible and (_visual as Node3D).visible
 	return false
 
 func get_visual_position() -> Vector3:
