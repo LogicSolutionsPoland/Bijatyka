@@ -1,6 +1,6 @@
 # Bijatyka Stage 5B — cross-chat state and safety checkpoint
 
-Checkpoint date: 2026-11-09. Step 0 PASS; Step 1 PASS; Step 2 PASS on 2026-11-09 (verified Actions #42649851614). This document is the single persistent coordination record for Stage 5B Steps 0–6. It must be consulted and updated by future steps on the dedicated integration branch. Inspect current GitHub refs before every edit; SHA values below describe Step 0 inspection, not permanent branch locks. Do not rely on a chat summary as the source of truth.
+Checkpoint date: 2026-11-09. Step 0 PASS; Step 1 PASS; Step 2 PASS (Actions #42649851614); Step 3 PASS (Actions #42654026061, tested SHA 8b641fe390c2de99d1859b2ea9130496f52a807e). This document is the single persistent coordination record for Stage 5B Steps 0–6. It must be consulted and updated by future steps on the dedicated integration branch. Inspect current GitHub refs before every edit; SHA values below describe Step 0 inspection, not permanent branch locks. Do not rely on a chat summary as the source of truth.
 
 ## A. Project identity and scope
 
@@ -12,8 +12,9 @@ Checkpoint date: 2026-11-09. Step 0 PASS; Step 1 PASS; Step 2 PASS on 2026-11-09
 - Main game scene: game/scenes/foundation.tscn, with runtime setup in game/scripts/foundation.gd
 - Previous completed stage: Stage 5
 - Current stage at checkpoint creation: Stage 5B / Step 0 — audit and safe setup (completed)
-- Latest completed stage: Stage 5B / Step 2 — Circular Zombie Fog Horizon Integration (PASS)
-- Next stage: Stage 5B / Step 3 — Flashlight-Tip Zombie Artwork Integration from PR #70 (NOT STARTED)
+- Previous completed stage: Stage 5B / Step 2 — Circular Zombie Fog Horizon Integration (PASS)
+- Current completed stage: Stage 5B / Step 3 — Flashlight-Tip Zombie Artwork Integration from PR #70 (PASS)
+- Next stage: Stage 5B / Step 4 — Combined Real-Rendering Verification (NOT STARTED)
 
 ## B. Verified Git state (live at Step 0)
 
@@ -55,7 +56,7 @@ Checkpoint date: 2026-11-09. Step 0 PASS; Step 1 PASS; Step 2 PASS on 2026-11-09
 | 0 | Audit live refs, rendering, source PRs, CI; protect baseline and create this checkpoint | PASS | Read-only audit, workflow-trigger inspection, dedicated branch and docs-only checkpoint; verify pushed SHA in the Step 0 report |
 | 1 | Restore ground-floor fullscreen blackout on Stage 5B, preserve roof/HUD/beam; test real pixels | PASS | Code SHA `738eb0064a02ba3aca13af31f3829733c695e40e`; [NO-APK Actions #42641061088](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/42641061088) SUCCESS: 20/20 suites, 600-frame smoke, Mesa beam probe, 43 pixel blackout checks at 100/67/40%, rooftop no-mask, CPU samples and screenshots. Artist post leakage fixed |
 | 2 | Adapt PR #68 circular animated zombie fog horizon | PASS | Implemented `a5d4c3e5bc722d3db8da840365974d5ac72bccb1`, final tested SHA `a51ed9c4de20df3126b0865f781b1a9a89ab9051`, NO-APK Actions [#42649851614](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/42649851614) SUCCESS: 20/20 regression suites, 600 frames, 43 blackout checks, Mesa beam and six-sector fog captures/animation at 100/67/40%; see section L |
-| 3 | Adapt PR #70 flashlight-tip artwork, movement, 13 Hz slices | NOT STARTED | Use narrow shader/script/assets/test changes; exclude Android workflow edits |
+| 3 | Adapt PR #70 flashlight-tip artwork, movement, 13 Hz slices | PASS | Original WebP and shader integrated; implementation 2fb61fdc..., test correction 8b641fe...; [NO-APK Actions #42654026061](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/42654026061) SUCCESS, 20/20 suites and real OpenGL tip probe (21 checks); see section M |
 | 4 | Verify combined effects by actual software OpenGL framebuffer images and comparisons | NOT STARTED | Need real sampling of blackout, fog, tip, beam, HUD, rooftop and animation |
 | 5 | Full gameplay regression + comparative CPU/render profiling | NOT STARTED | Preserve Stage 5 20-suite gate and host-only performance limitations; no APK |
 | 6 | Final CI validation, evidence collection, integration freeze and cross-chat handoff | NOT STARTED | No main merge; no APK; future step to update final exact SHA |
@@ -203,3 +204,59 @@ For each new chat: read STATE file; fetch live Git refs/PR state; check potentia
 - **Step 3 task only:** inspect the live current branch HEAD and this document; inspect PR #70 at live HEAD; adapt only the original `game/assets/effects/flashlight_tip_zombie_fog.webp` plus narrowly scoped `flashlight_tip_silhouettes.gd`, `flashlight_tip_silhouettes.gdshader`, relevant tests / safe NO-APK Mesa probes. Require **40% tip artwork opacity**, animated fog, short horizontal glitch slices, approximately **13 flicker steps/s**, live projected beam end tracking (pitch/yaw), appropriate occlusion/depth, rooftop absence; preserve this validated **priority-126 fullscreen blackout**, 10 m/96-segment/6-sector circular horizon and all Stage 5 optimizations. Do not import PR #70's Android export workflow changes, do not merge PRs or begin Step 4. Execute CI and update this file with exact SHA, outputs, and Step 4 handoff. No APK, main merge, release, or source-branch edit.
 
 **Historical section J is the archived Step 1 → Step 2 handoff and is superseded for future work by this verified Step 2 → Step 3 record.**
+
+
+## M. Stage 5B / Step 3 — implemented and verified, 2026-11-09
+
+**Status: PASS.** Previous completed stage: **Stage 5B / Step 2 — Circular Zombie Fog Horizon Integration**. Current stage: **Stage 5B / Step 3 — Flashlight-Tip Zombie Artwork Integration**. Next stage: **Stage 5B / Step 4 — Combined Real-Rendering Verification** (**NOT STARTED**). Step 5 and Step 6 are NOT STARTED.
+
+### Exact repository history and protection
+- Dedicated working ref: `integration/bijatyka-stage5b-blackout-fog-20261109`; initial verified HEAD before Step 3: `61db5d77f688b2be5a5658c93cacb7d8387c4505`.
+- Original source PR #70 (OPEN/DRAFT, not merged): `feat/flashlight-tip-user-image-20261107`, HEAD `65ec3780a6c1d3035494316170ea41db04481ae7`; original source PR #68: `63ea5a80c007bdedddbd7da41d2d62cdf1e9f6d4`.
+- **Production implementation commit:** `2fb61fdc3ca284fdeb9093f16c2af7aa8843a29a`. Narrow import, exact artwork + original PR #70 shader, adapted assertions, Mesa framebuffer probe, safe NO-APK CI probe step.
+- **Diagnostic test-only correction / exact successfully tested implementation SHA:** `8b641fe390c2de99d1859b2ea9130496f52a807e`. Changed only one printf-style assertion string (`40%` was mistaken for a formatting directive); no production code or shader changes.
+- The documentation-only commit containing this section is **later than the tested SHA**. Its exact SHA is the live HEAD of the Stage 5B branch, obtainable through `git rev-parse HEAD` / GitHub ref inspection; it is NOT the SHA used by the successful visual test. The final Step 3 report must give that observed final ref SHA.
+- Protected refs independently verified after implementation: `main` = `ac12a215d95ce85d982f68b469aea99e75542883`; original Stage 5 = `b052aaf876f5cb141547494b62b8c2fdb473e6c4`; PR #68 source = `63ea5a80c007bdedddbd7da41d2d62cdf1e9f6d4`; PR #70 source = `65ec3780a6c1d3035494316170ea41db04481ae7`. Neither source branch nor main was modified.
+- No merges, force pushes, deletions, APK/AAB builds, Android exports or release publication. No changes to Android export workflows.
+
+### Precisely integrated source content
+- Added **byte-identical source** `game/assets/effects/flashlight_tip_zombie_fog.webp`, Git blob SHA `7412ef0d087174c366c01003d5ec3596d0693693`, 768×512 imported texture (59,028 source bytes).
+- `game/scripts/flashlight_tip_silhouettes.gd`: imported exact PR #70 version. One persistent quad, original projection and floor-intercept behavior, shared 10 m beam range/cone, original source texture bound as `tip_artwork`, 0.40 silhouette opacity, 0.72 fog opacity, render priority 127.
+- `game/shaders/flashlight_tip_silhouettes.gdshader`: exact PR #70 shader. RGBA artwork sampling, moving/warped fog and density, five localized horizontal glitch slices, `floor(TIME * animation_time_scale * 13.0)` discrete glitch frames, conditional horizontal sampling offset. Existing `depth_test_disabled` and priority 127 preserved from the prior tip-overlay architecture; not a newly added pass.
+- `game/tests/flashlight_tip_silhouettes_test.gd`: updated for source texture, 768×512 size, five/13 Hz shader logic, existing 126-priority blackout, shared endpoint and downward ground intersection, rooftop/flashlight-off transitions. **22 checks PASS**.
+- `game/tests/flashlight_tip_silhouette_render_probe.gd`: extended REAL framebuffer capture and comparison in the live Foundation scene at scales 1.00, 0.67 and 0.40; on/off, 0%/40% artwork-only, time-separated animation, ground/off-beam blackout, circular horizon and rooftop profile. **21 checks PASS**.
+- `.github/workflows/bijatyka-stage5-integration-validation.yml`: one new focused Mesa/Xvfb OpenGL test step and PNG/log assertions; preserves original 20 suites and ALL established blackout/horizon tests; remains explicitly **NO APK**. Existing Android-export workflows remain unmodified.
+- `game/shaders/flashlight_visibility.gdshader`, `game/scripts/flashlight_visibility.gd`, circular horizon script/shader/mesh, 3D beam shaders, `foundation.gd`, gameplay systems, rooftop sky, native HUD, visibility registry, 20-enemy capacity, 40% mobile render scale and 60 FPS cap are **unchanged**.
+
+### Actual GitHub Actions runs and artifacts
+1. Diagnostic [#42652879855](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/42652879855), commit `2fb61fdc...`, **FAILURE** only in newly added tip framebuffer probe: a literal `40%` in a GDScript string formatted with `% scale` threw `unsupported format character`; command later reached timeout 124. Existing 20/20 suites, 600-frame smoke, real beam, 43-check blackout probe, source-tip unit test, circular horizon and fog animation tests, and host CPU samples all passed. Failure artifact [#13690613269](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/42652879855/artifacts/13690613269). The production renderer was not identified as the cause.
+2. Final [#42654026061](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/42654026061), tested commit **`8b641fe390c2de99d1859b2ea9130496f52a807e`**, **SUCCESS**. Godot 4.7.2 resource import/parser PASS; **20/20** Stage 5 suites (`STAGE5_FAILED_SUITES=0`); **600 frames** playable smoke PASS; actual Mesa OpenGL beam PASS; **43** real blackout pixel checks PASS; tip unit **22** checks PASS; six-sector circular fog render and time animation PASS; new tip OpenGL probe **21** checks PASS; paired host visibility CPU benchmark PASS.
+3. Final NO-APK artifact: [`bijatyka-stage5-no-apk-qa-logs` #13691217850](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/42654026061/artifacts/13691217850), 4,303,242 bytes zipped. Includes new `flashlight-tip-gl.log`, images `tip-hidden-{1.00,0.67,0.40}.png`, `tip-visible-*.png`, `tip-artwork-40pct-*.png`, `tip-animation-start.png`, `tip-animation-after-120ms.png`, `tip-animation-after-920ms.png`, `tip-rooftop-profile.png`, plus existing blackout and six-sector fog PNGs/logs, tests and CPU benchmarks.
+
+### Genuine framebuffer evidence, units and limitations
+- Pixel-comparison values below are **maximum Euclidean RGB deltas in a sampled region**, NOT physically measured alpha, percent opacity or frame rate. Exact `silhouette_opacity=0.40` and `fog_opacity=0.72` are verified shader parameters and visually tested by paired render toggles.
+- At 1.00 scale: tip enabled/disabled max delta **0.80679**; artwork-only 0%→40% max delta **0.81529**; off-beam pixel **(0,0,0)**.
+- At 0.67 scale: tip enabled/disabled **0.90707**; artwork-only 0%→40% **0.70123**; off-beam pixel **(0,0,0)**.
+- At 0.40 scale: tip enabled/disabled **0.90259**; artwork-only 0%→40% **0.84869**; off-beam pixel **(0,0,0)**.
+- Temporal pixels at fixed projection changed: **0.63864** max delta after ~120 ms, **0.62562** after ~920 ms. Five glitch slices and nominal **13 Hz** stepping are verified by the original shader formula; **13 Hz was not independently measured using a high-precision visual timing instrument**. Both image frames and the earlier/later differences are archived.
+- Real fullscreen blackout probe continued to pass at all three scales: off-beam ground sample RGB **(0,0,0)**; lit target red component **1.0000 / 1.0000 / 0.9961** at 1.00/0.67/0.40; player visible, rooftop panorama pixel `(0.6784,0.5765,0.5451)`; **43 checks**.
+- Circular horizon isolated mask test: 10 m 96 radial segments / six sectors from Step 2, unchanged and passing; boundary red **0.00000 → 0.48235** with horizon at each scale, off-oval pixel **(0,0,0)**. Ring animated texture comparison still PASS.
+- Beam test: real soft-OpenGL shaft blue sample **0.44314**, opaque wall cutoff **0.28235** after vs **0.44314** before. The new tip shader does not replace the beam.
+- Host CPU benchmark in this run (180 samples/scene): older Stage 4 comparison median roof/ground **1069/1434 µs** (p95 **1105/1462 µs**); Stage 5B with tip **273/430 µs** (p95 **285/440 µs**). This is a **cross-stage comparison**, not isolated cost of Step 3, not GPU timing, and NOT Android FPS, frame pacing or heat evidence.
+- No real Android device testing; no APK authorized.
+
+### Residual risks reserved for Step 4
+- Shared priority 127 among circular fog, beam, and new tip, with priority 126 blackout: measured Step 3 captures pass, but transparent depth ordering is **not comprehensively proved** for all yaw/pitch ranges, foreground walls, roof transitions, overlap with camera-near geometry, or HUD simultaneously.
+- The original tip shader has `depth_test_disabled` as inherited; verify potential drawing over foreground occluders during Step 4 rather than blindly assuming depth correctness. Inspect all new PNG frames for texture-rectangle edges and perceptual fog motion; automated pixel success alone does not prove artistic quality.
+- Confirm beam-tip position and ground interception in gameplay-specific camera pitch and movement with a broader combined camera matrix. The narrow tests already verify shared endpoint/yaw/movement and basic floor interception.
+- Exact hardware Android GPU cost, thermal behavior and long-session FPS remain unknown without a separately authorized later device build.
+
+### STAGE 5B — STEP 3 TO STEP 4 HANDOFF
+- **Repository:** `LogicSolutionsPoland/Bijatyka`.
+- **Branch:** `integration/bijatyka-stage5b-blackout-fog-20261109`. Inspect live HEAD before future edits; documentation commit follows the tested commit.
+- **Successfully tested Step 3 implementation SHA:** `8b641fe390c2de99d1859b2ea9130496f52a807e`; production art/renderer first committed `2fb61fdc3ca284fdeb9093f16c2af7aa8843a29a`.
+- **Step 1 PASS** verified run #42641061088; **Step 2 PASS** run #42649851614; **Step 3 PASS** run #42654026061. **Step 4 NOT STARTED; Step 5 NOT STARTED; Step 6 NOT STARTED**.
+- Original PR #70 WebP, 0.40 opacity, moving 0.72 fog, five horizontal 13 Hz glitch slices integrated; fullscreen blackout and circular 10 m 96-segment six-sector animated Zombie Fog Horizon preserved; 3D beam preserved.
+- Step 3 SUCCESS evidence [Actions #42654026061](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/42654026061), [artifact #13691217850](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/42654026061/artifacts/13691217850). One diagnosed test-string failure [run #42652879855](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/42652879855) was corrected.
+- **Step 4 objective only:** read this entire document; revalidate refs and workflow safety; create and run more comprehensive *combined* Godot 4.7.2 Mesa/Xvfb OpenGL framebuffer tests with ground, rooftop, return-from-elevator, respawn, player translation, camera yaw/pitch sweeps, beam on/off, terrain intersection, foreground wall occlusion, six-sector ring at 10 m, new tip 40% artwork, moving fog/13 Hz glitches, blackout darkness outside cone, HUD readability, three rendering scales and screen-edge/rectangle checks. Collect numeric pixel comparisons and actual screenshots with exact tested SHA; fix only evidenced Step 4 defects, then update Step 4 status in this same file. Do not preemptively start Stage 5B Step 5 or Step 6.
+- **Safety:** Stage 5B branch ONLY; never merge PR #68/#70 or main, never change original Stage 5 or source PR branches, no APK/AAB export, no releases, no force push or branch deletion, do not weaken blackout/horizon regression tests. No Android build without new explicit authorization.
