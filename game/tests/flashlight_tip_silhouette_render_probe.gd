@@ -91,7 +91,7 @@ func _run() -> void:
 		_save_capture(artwork_frame, "tip-artwork-40pct-%.2f.png" % scale)
 		var artwork_delta := _region_delta(fog_only, artwork_frame, sample_point, effect.projected_size)
 		_check(artwork_delta > 0.002,
-			"original artwork changes actual framebuffer when silhouette alpha rises 0 to 40% at %.2fx" % scale)
+			"original artwork changes actual framebuffer when silhouette alpha rises from 0 to 40 percent at %.2fx" % scale)
 		print("FLASHLIGHT_TIP_ALPHA " + JSON.stringify({
 			"scale": scale, "tip_on_off_delta": visible_delta,
 			"artwork_0_to_40_delta": artwork_delta, "off_beam_pixel": off_beam
