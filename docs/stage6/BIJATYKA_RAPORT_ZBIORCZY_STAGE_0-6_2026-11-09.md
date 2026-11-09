@@ -4,10 +4,38 @@
 **Repozytorium:** https://github.com/LogicSolutionsPoland/Bijatyka  
 **Silnik:** Godot 4.7.2; GL Compatibility; Android ARM64  
 **Zakres:** historia audytu, integracji, weryfikacji, budowy Android APK i brakujących testów urządzeniowych.  
-**Status całości:** **PARTIAL — BUILD PASS, PHYSICAL DEVICE TESTING NOT TESTED.**  
+**Status całości:** **PARTIAL — BUILD PASS, PHYSICAL DEVICE ACCEPTANCE FAIL (właściciel: 4 PASS, 2 PARTIAL, 1 FAIL).**  
 **Lokalizacja zapisu:** gałąź techniczna build/bijatyka-stage6-final-arm64-20261109; dokumentacja, bez zmian w grze.
 
 > **Zasada interpretacji:** PASS w GitHub Actions oznacza wyłącznie potwierdzoną bramkę CI. Zakończony build APK nie oznacza, że gra działa poprawnie na fizycznym telefonie. W historii są różne plany etapów o podobnych nazwach; niniejszy raport obejmuje ciąg weryfikacji z 8–9 listopada 2026 oraz powstałą z niego integrację Stage 5B i finalny build Stage 6. Historycznych osobnych etapów skoków/QTE nie uznaje się za tożsame z etapami tego audytu.
+
+## AKTUALIZACJA: WYNIKI FIZYCZNYCH TESTÓW ANDROIDA (2026-11-09, zgłoszenie właściciela)
+
+**Nadrzędna, najnowsza ocena:** **STAGE 6 PARTIAL / BUILD PASS / PHYSICAL DEVICE ACCEPTANCE FAIL / STAGE 7 BLOCKED.** Ten wpis aktualizuje starsze statusy „NOT TESTED” w historycznych sekcjach poniżej. Wyniki zgłosił właściciel po rzeczywistym uruchomieniu APK; nie dostarczył jeszcze zrzutów, logów ani liczbowych pomiarów.
+
+**Testowany pakiet deklarowany w bieżącym przebiegu:** `Bijatyka-Stage6-Final-ARM64.apk`, źródło `f1989c8c675357427e2214796e14a5103f1cef01`, SHA-256 referencyjnego builda `4e64243e254c8fb5b2a713dae6ea23be09447833a7ea49572197df5d3d392d4f`. Tożsamość pliku zainstalowanego przez właściciela nie została osobno potwierdzona hashem z telefonu.
+
+| Obszar | Wynik właściciela | Szczegóły / ograniczenia |
+| --- | --- | --- |
+| Uruchomienie i dach | **PASS** | Brak szczegółowego opisu |
+| Pełny przejazd windą | **PASS** | Brak szczegółowego opisu |
+| Fullscreen Blackout | **PASS** | Kluczowa funkcja działa według zgłoszenia; nie modyfikować przy naprawach |
+| Zombie Fog Horizon | **FAIL** | Brak opisu objawu; nie wolno jeszcze stwierdzić, czy efekt jest niewidoczny, złe pozycjonowany, czy niezgodny wizualnie |
+| Grafika końcówki latarki | **PARTIAL** | „jest brzydka i nie spełnia oczekiwań”; subiektywny problem jakości artystycznej, nie dowód błędu shaderów |
+| Walka i sterowanie | **PARTIAL** | „nie ma animacji chwytów ani qte”; nieustalone, czy chwyt/QTE nigdy się nie uruchamiają, czy brak tylko ich prezentacji wizualnej |
+| Wydajność i temperatura | **PASS** | Brak FPS, temperatury, czasu rozgrywki i pomiarów; ocena użytkownika, nie weryfikacja instrumentowana |
+
+**Stan:** 4 PASS, 2 PARTIAL, 1 FAIL; 7/7 obszarów spróbowano, **akceptacja fizycznego urządzenia FAIL** z uwagi na obowiązkowy Zombie Fog Horizon. Wyniki automatyczne CI i podpis/architektura/suma kontrolna APK nadal **PASS**; zielone CI nie unieważnia uwag z telefonu.
+
+### Kolejność napraw (wyłącznie plan; bez zmian produkcyjnych)
+
+1. **P0 — Zombie Fog Horizon / Android:** zebrać krótki opis „co jest widoczne” i screenshot/nagranie. Zbadać `game/scripts/burning_horizon.gd`, `game/shaders/burning_horizon.gdshader`, aktywację przez `foundation.gd`, pozycję względem gracza, blackout/depth/transparent sorting i mobilne GL Compatibility. Shader aktualnie ogranicza alfę horyzontu do ekranowego owalu latarki; jest to hipoteza przyczyny rozbieżności oczekiwań, **nie potwierdzona diagnoza**. Naprawiać na nowej, izolowanej gałęzi po reprodukcji, z testem rzeczywistych pikseli, bez zmiany blackoutu.
+2. **P1 — chwyt/QTE / Android:** rozróżnić brak wyzwolenia od niewidocznej animacji i niewidocznego HUD. `enemy.gd` wymaga pełnego riga, animacji zbliżenia, slotu AI oraz warunków kontaktu; `player_controller.gd` może odrzucić chwyt, gdy `can_reach_contact()` zwróci false; `mobile_hud.gd` posiada `begin_grab_qte()` i licznik. Weryfikować sygnały `grab_windup_started`, `grab_qte_started`, odrzucenia i działanie R3. Nie usuwać walidacji lub nie wymuszać sztucznego zaliczenia QTE.
+3. **P2 — grafika na końcu latarki:** zebrać referencję albo opis, co konkretnie jest brzydkie (sylwetki, mgła, skala, cięcia, alfa). Sprawdzić `flashlight_tip_silhouettes.gd`, jego shader i oryginalne WebP; prace artystyczne odseparować od P0 i P1. Zachować prawidłowe depth occlusion, rooftop exclusion i fullscreen blackout.
+
+**Niezmienne zabezpieczenia:** nie ruszać `main`, gałęzi Stage 5B, sprawdzonego źródła `f1989c8...`, obecnego APK, FPS cap 60, skali 40%, AI i sterowania. Nie scalać PR, nie wydawać nowego APK ani nie zaczynać Stage 7 w ramach tej aktualizacji. Wpis jest tylko dokumentacją wyników i planem napraw.
+
+---
 
 ## 1. Streszczenie i ostateczna decyzja
 
@@ -18,7 +46,7 @@
 - **APK:** Bijatyka-Stage6-Final-ARM64.apk, 66 373 509 bajtów, SHA-256 **4e64243e254c8fb5b2a713dae6ea23be09447833a7ea49572197df5d3d392d4f**.
 - **Archiwum GitHub Actions:** [artefakt #13706246072](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/42687863317/artifacts/13706246072), nazwa ZIP: Bijatyka-Stage6-Final-ARM64. Artefakt jest archiwum ZIP zawierającym APK, nie bezpośrednim linkiem do surowego APK. W momencie sprawdzenia: istnieje, expired=false, data wygaśnięcia 2026-12-09.
 - **Własności gry zachowane:** rzeczywisty fullscreen blackout na ziemi, 10 m circular Zombie Fog Horizon, oryginalne grafiki PR #68/#70, 3D snop latarki, Exo Gray, sterowanie padem, walka/skoki/magia, AI, chwyt i QTE, winda, respawn, character-only Pencil Sketch.
-- **Fizyczny Android:** brak przedstawionych dowodów instalacji, FPS, temperatury, zachowania pada i pełnego przejazdu windą. **Nie oznaczać Stage 6 jako pełnego DEVICE PASS.**
+- **Fizyczny Android:** właściciel zgłosił 7 wykonanych testów: 4 PASS, 2 PARTIAL, 1 FAIL. Krytyczny problem Zombie Fog Horizon oraz brak animacji chwytu/QTE blokują akceptację. Ocena wydajności/termiki PASS jest subiektywna, bez wartości liczbowych. Szczegóły w aktualizacji poniżej.
 
 ## 2. Mapa głównych etapów weryfikacji (8–9 listopada 2026)
 
@@ -165,9 +193,9 @@ Podstawowy test powinien odbyć się na telefonie ARM64 z padem. Bez rzeczywisty
 - **FULLSCREEN BLACKOUT INCLUDED:** YES (source + APK resource verification; device NOT TESTED).
 - **ZOMBIE FOG HORIZON INCLUDED:** YES (source + imported APK textures).
 - **FLASHLIGHT-TIP ARTWORK INCLUDED:** YES (oryginalny PR #70 WebP).
-- **PHYSICAL ANDROID TESTING:** NOT TESTED.
-- **PERFORMANCE AND THERMALS:** NOT TESTED.
-- **READY FOR STAGE 7 MAIN MERGE:** CONDITIONAL / NIE wykonywać bez dalszej akceptacji.
+- **PHYSICAL ANDROID TESTING:** FAIL (właściciel: Zombie Fog Horizon FAIL, chwyt/QTE PARTIAL; 4 PASS).
+- **PERFORMANCE AND THERMALS:** PARTIAL (właściciel ocenił PASS, bez liczb FPS i temperatur).
+- **READY FOR STAGE 7 MAIN MERGE:** NO — nierozwiązane defekty na fizycznym Androidzie; nie rozpoczynać Stage 7.
 - **Finalne testy Stage 6:** 20 PASS / 0 FAIL zestawów, dodatkowo 6 PASS sond Mesa i 600 klatek startu; w końcowym Stage 5B 43/43 blackout, 59/59 combined, 33/33 transitions.
 - **main changed:** NO. **PR merged:** NO. **Release published:** NO.
 
