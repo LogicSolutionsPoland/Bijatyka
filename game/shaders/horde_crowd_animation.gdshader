@@ -31,5 +31,11 @@ void vertex() {
 }
 
 void fragment() {
-	ALBEDO = texture(body_albedo, UV).rgb * COLOR.rgb * shape_light;
+	vec3 base = texture(body_albedo, UV).rgb * COLOR.rgb * shape_light;
+	float shade = clamp(1.0 - shape_light, 0.0, 1.0);
+	vec2 hatch_uv = UV * vec2(23.0, 17.0);
+	float stroke_a = 1.0 - smoothstep(0.035, 0.12, abs(fract(hatch_uv.x + hatch_uv.y) - 0.5));
+	float stroke_b = 1.0 - smoothstep(0.035, 0.12, abs(fract(hatch_uv.x - hatch_uv.y * 0.72) - 0.5));
+	float ink = max(stroke_a, stroke_b * 0.68) * smoothstep(0.12, 0.55, shade);
+	ALBEDO = mix(base, base * 0.38, ink * 0.30);
 }

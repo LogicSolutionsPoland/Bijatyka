@@ -10,6 +10,7 @@ var _pending_mesh_ids: Dictionary = {}
 var _pending_mesh_queue: Array[int] = []
 var _original_mesh_materials: Dictionary = {}
 var _gameplay_pencil_enabled := true
+var _character_only := false
 const MAX_MESHES_PER_FRAME := 6
 var _styled_surface_count := 0
 var _styled_mesh_count := 0
@@ -33,6 +34,17 @@ func set_gameplay_pencil_enabled(is_enabled: bool) -> void:
 		_pending_mesh_queue.clear()
 		set_process(false)
 		_restore_original_materials()
+
+func set_character_only(is_enabled: bool) -> void:
+	if _character_only == is_enabled:
+		return
+	_character_only = is_enabled
+	_pending_mesh_ids.clear()
+	_pending_mesh_queue.clear()
+	set_process(false)
+	_restore_original_materials()
+	if _gameplay_pencil_enabled:
+		_scan_tree(get_tree().root)
 
 
 func is_gameplay_style_ready() -> bool:
@@ -90,8 +102,23 @@ func _scan_tree(node: Node) -> void:
 	for child in node.get_children():
 		_scan_tree(child)
 
+func _is_character_mesh(mesh: MeshInstance3D) -> bool:
+	# Only meshes below the player's or an enemy's visual model receive graphite.
+	var inside_visual_root := false
+	var ancestor: Node = mesh
+	while ancestor != null:
+		if ancestor.name == "VisualRoot":
+			inside_visual_root = true
+		if ancestor.is_in_group("player") or ancestor.is_in_group("enemies"):
+			return inside_visual_root
+		ancestor = ancestor.get_parent()
+	return false
+
+
 func _queue_mesh(mesh: MeshInstance3D) -> void:
 	if not _gameplay_pencil_enabled or mesh.mesh == null or mesh.has_meta(STYLE_META):
+		return
+	if _character_only and not _is_character_mesh(mesh):
 		return
 	var instance_id := mesh.get_instance_id()
 	if _pending_mesh_ids.has(instance_id):
@@ -109,6 +136,8 @@ func _apply_to_mesh(instance_id: int) -> void:
 
 func apply_mesh(mesh: MeshInstance3D) -> void:
 	if not _gameplay_pencil_enabled or mesh.mesh == null or mesh.has_meta(STYLE_META):
+		return
+	if _character_only and not _is_character_mesh(mesh):
 		return
 
 	# Remember exact source overrides for a lossless rooftop restoration.
@@ -193,6 +222,7 @@ func is_enabled() -> bool:
 func get_style_stats() -> Dictionary:
 	return {
 		"enabled": _gameplay_pencil_enabled,
+		"character_only": _character_only,
 		"styled_meshes": _styled_mesh_count,
 		"styled_surfaces": _styled_surface_count,
 		"shared_materials": _material_cache.size()
