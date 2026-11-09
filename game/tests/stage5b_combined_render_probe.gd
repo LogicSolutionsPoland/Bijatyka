@@ -145,15 +145,26 @@ func _run() -> void:
 	for frame in range(3):
 		await process_frame
 
+	# Paired border pixels need a genuinely visible unoccluded artwork region.
+	# Keep blackout, the real ring and beam active; hide only local blockers
+	# during this focused A/B, then restore all gameplay geometry.
+	var tower_visible := game.starting_tower.visible
+	var map_visible := game.arena_map.visible
+	var player_visible := game.player.visible
+	game.starting_tower.visible = false
+	game.arena_map.visible = false
+	game.player.visible = false
+	var edge_range := 3.0
+	tip.update_beam(manager.beam_origin, manager.beam_direction,
+		edge_range, Visibility.BEAM_TANGENT, true)
 	# Paired real pixels verify that the artwork image has no hard quad borders.
-	# Freeze tip time while leaving the real blackout, ring, beam and scene on.
 	tip.set_effect_visible(false)
 	for frame in range(3):
 		await process_frame
 	var edge_off := await _capture()
 	_save(edge_off, "step4-tip-edge-off.png")
 	tip.update_beam(manager.beam_origin, manager.beam_direction,
-		Visibility.MAX_RADIUS, Visibility.BEAM_TANGENT, true)
+		edge_range, Visibility.BEAM_TANGENT, true)
 	for frame in range(3):
 		await process_frame
 	var edge_on := await _capture()
@@ -179,6 +190,13 @@ func _run() -> void:
 	}))
 	_check(center_artwork_delta > 0.02, "animated artwork stays visually present at flashlight tip")
 	_check(largest_edge_delta < 0.045, "all four flashlight-tip quad borders fade to transparent")
+	game.starting_tower.visible = tower_visible
+	game.arena_map.visible = map_visible
+	game.player.visible = player_visible
+	tip.update_beam(manager.beam_origin, manager.beam_direction,
+		Visibility.MAX_RADIUS, Visibility.BEAM_TANGENT, true)
+	for frame in range(3):
+		await process_frame
 
 	# Opaque foreground wall between camera and tip: compare the SAME pixels.
 	# A disabled depth test on the tip makes it incorrectly paint through this wall.
