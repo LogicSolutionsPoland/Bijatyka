@@ -30,6 +30,7 @@ func _run() -> void:
 	_check(ring != null and ring.radial_segments == 96 and is_equal_approx(ring.top_radius, 10.0),
 		"actual 96-segment circular fog horizon still has 10m radius")
 
+	print("STAGE5B_INITIAL_ROOF " + JSON.stringify({"on_roof": game._rooftop_sky_active, "mask": manager._composite.visible, "horizon": game.burning_horizon.visible, "tip": tip.overlay.visible}))
 	var roof_before := await _capture()
 	_save(roof_before, "step4-roof-before.png")
 	_check(not manager._composite.visible and not game.burning_horizon.visible and not tip.overlay.visible,
@@ -47,6 +48,8 @@ func _run() -> void:
 	game.camera_arm.spring_length = Foundation.CAMERA_FOLLOW_DISTANCE
 	game._update_camera_framing()
 	game._set_rooftop_render_profile(false)
+	# Foundation is frozen for this reproducible visual sweep; explicitly advance the normal follow_player update.
+	game.burning_horizon.follow_player(game.player.global_position)
 	game.hud._root.visible = true
 	if is_instance_valid(game._boss_enemy):
 		game._boss_enemy.global_position = game.player.global_position + Vector3(3.0, 0.05, 5.0)

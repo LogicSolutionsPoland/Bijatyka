@@ -1,5 +1,6 @@
 shader_type spatial;
-render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, fog_disabled, depth_test_disabled;
+// Respect opaque foreground depth: tip fog must never paint through walls.
+render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, fog_disabled;
 
 uniform sampler2D tip_artwork : source_color, filter_linear_mipmap, repeat_disable;
 uniform float silhouette_opacity : hint_range(0.0, 1.0) = 0.40;
