@@ -1,6 +1,6 @@
 # Bijatyka Stage 6 / P1 — Android grab animation and QTE diagnostics
 
-Date: 2026-11-09. Scope: diagnose physical Android feedback **"nie ma animacji chwytów ani qte"**. Source frozen from the verified Stage 5B game commit `f1989c8c675357427e2214796e14a5103f1cef01`. Owner-reported Android test: **PARTIAL**. Actual device screenshots and logs have not been supplied. This document is diagnostic only, not proof of a repaired APK.
+Date: 2026-11-09. Scope: diagnose physical Android feedback initially reported as **"nie ma animacji chwytów ani qte"**, then clarified as **"nie ma miejsca zadne chwytanie gracza ani nic takiego, tego nie ma"**. Source frozen from the verified Stage 5B game commit `f1989c8c675357427e2214796e14a5103f1cef01`. Owner-reported Android test: **FAIL — no grab occurs in natural gameplay**. Actual device screenshots and logs have not been supplied. This document is diagnostic only, not proof of a repaired APK.
 
 ## Branch/safety
 
@@ -8,6 +8,16 @@ Date: 2026-11-09. Scope: diagnose physical Android feedback **"nie ma animacji c
 - Do not touch `main`, the Stage 5B integration branch, old APK, the original blackout, fog horizon, tip artwork, 20-zombie limit or gamepad mappings.
 - Do not merge, publish a release, export an APK or start Stage 7.
 - Work on tests/documentation only until the root cause is independently reproduced.
+
+## Owner clarification — no grab is initiated at all
+
+The observable defect is not merely missing animation or missing HUD. **No enemy-to-player limb grab ever occurs during the owner's actual Android gameplay**, so the player never enters an observable hold and QTE never begins. Mark physical-Android grab/QTE **FAIL** rather than PARTIAL. This supersedes earlier ambiguous language. No videos or device logs were provided; root cause is not yet established.
+
+Five green CI suites test the mechanisms in artificially controlled states. They do not prove naturally initiated grabs. Do not label this as an animation-only defect or declare QTE functional on the owner's phone.
+
+The next investigation must begin at `enemy.gd::_update_ai` -> `_try_begin_limb_grab` -> `_resolve_limb_grab` and collect the actual gate-rejection reasons before considering artwork or tweaking odds. Do not bypass validated contact / AI ownership checks.
+
+---
 
 ## Verified code path
 
@@ -61,7 +71,7 @@ No owner device observations beyond the reported partial outcome are currently a
 - **Five suites passed, zero failed.** No underlying gameplay file was modified relative to `f1989c8c675357427e2214796e14a5103f1cef01`.
 - Stage 5B controlled real Mesa/OpenGL transition capture: **PASS**. The test is scripted/controlled, not a naturally initiated Android encounter.
 - Log and PNG [artifact #13708699202](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/42696826410/artifacts/13708699202); no APK exported.
-- **Crucial interpretation:** all green tests prove that the framework *can* perform a hold and QTE when explicitly set up. They do **not** identify why the owner observes neither grab animation nor QTE during normal gameplay. Owner's Android **PARTIAL** finding is still unresolved.
+- **Crucial interpretation:** all green tests prove that the framework *can* perform a hold and QTE when explicitly set up. They do **not** identify why the owner observes neither grab animation nor QTE during normal gameplay. Owner's Android **FAIL: no natural grab occurs** is still unresolved.
 
 ## Next minimal diagnostic gate
 
