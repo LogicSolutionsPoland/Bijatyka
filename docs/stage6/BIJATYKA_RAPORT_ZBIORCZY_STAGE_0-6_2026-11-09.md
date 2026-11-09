@@ -4,10 +4,25 @@
 **Repozytorium:** https://github.com/LogicSolutionsPoland/Bijatyka  
 **Silnik:** Godot 4.7.2; GL Compatibility; Android ARM64  
 **Zakres:** historia audytu, integracji, weryfikacji, budowy Android APK i brakujących testów urządzeniowych.  
-**Status całości:** **PARTIAL — BUILD PASS, PHYSICAL DEVICE ACCEPTANCE FAIL (właściciel: 4 PASS, 2 PARTIAL, 1 FAIL).**  
+**Status całości:** **PARTIAL — BUILD PASS, PHYSICAL DEVICE ACCEPTANCE FAIL (po korekcie: 4 PASS, 1 PARTIAL, 2 FAIL).**  
 **Lokalizacja zapisu:** gałąź techniczna build/bijatyka-stage6-final-arm64-20261109; dokumentacja, bez zmian w grze.
 
 > **Zasada interpretacji:** PASS w GitHub Actions oznacza wyłącznie potwierdzoną bramkę CI. Zakończony build APK nie oznacza, że gra działa poprawnie na fizycznym telefonie. W historii są różne plany etapów o podobnych nazwach; niniejszy raport obejmuje ciąg weryfikacji z 8–9 listopada 2026 oraz powstałą z niego integrację Stage 5B i finalny build Stage 6. Historycznych osobnych etapów skoków/QTE nie uznaje się za tożsame z etapami tego audytu.
+
+## KOREKTA OBSERWACJI P1 — BRAK JAKIEGOKOLWIEK CHWYTU (2026-11-09)
+
+**Właściciel jednoznacznie sprostował objaw:** „nie ma miejsca zadne chwytanie gracza ani nic takiego, tego nie ma”.
+
+- **P1 fizyczny Android: FAIL** — w zwykłej rozgrywce zombie **ani razu nie chwytają gracza**. W rezultacie nie pojawiają się także sekwencje chwytu i QTE. To nie jest wyłącznie problem animacji lub estetyki.
+- **Co istnieje w repo:** ścieżka enemy-to-player grab, IK, QTE HUD i sterowanie R3, które przechodzą testy kontrolowane. To nie dowodzi działania w naturalnej walce.
+- **Status dowodu:** bez dodatkowych zrzutów/logów; przyczyna braku faktycznych chwytów w zwykłym gameplayu niepotwierdzona.
+- **Podejrzane bramki (do pomiaru, nie diagnozy):** przypadek jednej próby na trzy ataki, pełny widoczny rig zwykłego zombie, rola/slot atakującego, wybór kości rąk na base skeleton vs test zasięgu na widocznym Exo, kontakt i `visual_contact_unreachable`.
+- **Wymaganie naprawy:** bez ręcznego wywoływania funkcji chwytu w teście, przeciwnik naturalnie inicjuje i kończy widoczny chwyt, uruchamia HUD QTE, a trzy poprawne naciśnięcia R3 umożliwiają ucieczkę.
+- **Zabezpieczenie:** bez zmian w blackout, Zombie Fog Horizon (odłożony), tip artwork, `main`, Stage 5B. Stage 7 zablokowany. Nowego APK nie budowano.
+
+**Nadrzędna, aktualna punktacja Stage 6 po sprostowaniu:** 4 PASS, 1 PARTIAL (grafika końcówki latarki), **2 FAIL** (Zombie Fog Horizon i brak chwytania/QTE). P0 Zombie Fog odłożono decyzją właściciela, P1 jest aktualnym aktywnym problemem.
+
+---
 
 ## AKTUALIZACJA P1 — DIAGNOSTYKA CHWYTÓW / QTE (2026-11-09)
 
