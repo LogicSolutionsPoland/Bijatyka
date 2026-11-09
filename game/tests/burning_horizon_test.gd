@@ -56,8 +56,10 @@ func run() -> void:
 	check(arena.flashlight_visibility_manager.rooftop_sky_visible, "flashlight lets rooftop sky pixels through")
 	check(not arena.flashlight_visibility_manager._composite.visible, "rooftop hides the flashlight blackout pass")
 	check(not arena.flashlight_visibility_manager.spotlight.visible, "rooftop has no 3D flashlight beam")
-	check(not arena._pencil_screen_pass.visible, "rooftop has no Pencil Sketch screen pass")
-	check(not root.get_node("PencilSketchStyle").is_enabled(), "rooftop meshes retain normal materials")
+	check(not bool(root.get_node("PencilSketchStyle").get("_gameplay_pencil_enabled")),
+		"rooftop disables the current character-only Pencil Sketch pipeline")
+	check(bool(root.get_node("PencilSketchStyle").get("_character_only")),
+		"Stage 5 Pencil Sketch remains character-only and never converts the environment")
 	# A real material checks the global converter as well as the screen pass.
 	var material_fixture := MeshInstance3D.new()
 	material_fixture.mesh = SphereMesh.new()
@@ -67,7 +69,8 @@ func run() -> void:
 	await process_frame
 	check(material_fixture.material_override == plain_material, "rooftop keeps the source PBR material")
 	arena._update_distance_visibility()
-	check(not arena.flashlight_visibility_manager._composite.visible and not arena._pencil_screen_pass.visible,
+	check(not arena.flashlight_visibility_manager._composite.visible
+		and not bool(root.get_node("PencilSketchStyle").get("_gameplay_pencil_enabled")),
 		"distance culling cannot re-enable hidden rooftop screen effects")
 	for at in [Vector3.ZERO, Vector3(70, 0, -50), Vector3(-40, 15, 60)]:
 		arena.player.global_position = at
@@ -105,14 +108,12 @@ func run() -> void:
 	check(not arena.flashlight_visibility_manager.rooftop_sky_visible, "ground floor retains black sky in flashlight mode")
 	check(arena.flashlight_visibility_manager._composite.visible, "ground floor enables flashlight blackout")
 	check(arena.flashlight_visibility_manager.spotlight.visible, "ground floor enables the flashlight beam")
-	check(arena._pencil_screen_pass.visible, "ground floor restores Pencil Sketch screen pass")
-	check(root.get_node("PencilSketchStyle").is_enabled(), "ground floor enables Pencil Sketch materials")
-	for frame in range(60):
-		if root.get_node("PencilSketchStyle").is_gameplay_style_ready():
-			break
-		await process_frame
-	check(material_fixture.material_override is ShaderMaterial,
-		"ground floor converts source materials to Pencil Sketch in bounded batches")
+	check(bool(root.get_node("PencilSketchStyle").get("_gameplay_pencil_enabled")),
+		"ground floor restores current character-only Pencil Sketch processing")
+	check(bool(root.get_node("PencilSketchStyle").get("_character_only")),
+		"ground floor does not change the Stage 5 character-only style selection")
+	check(material_fixture.material_override == plain_material,
+		"Stage 5 character-only Pencil Sketch never converts unrelated environment geometry")
 	arena.player._reset_at_safe_base()
 	arena._update_rooftop_sky()
 	check(arena.player.global_position.is_equal_approx(Foundation.PLAYER_BASE_POSITION), "respawn returns to the tower rooftop")
@@ -120,7 +121,8 @@ func run() -> void:
 	check(arena.flashlight_visibility_manager.rooftop_sky_visible, "respawn restores visible rooftop sky")
 	check(not arena.flashlight_visibility_manager._composite.visible, "respawn hides flashlight blackout")
 	check(not arena.flashlight_visibility_manager.spotlight.visible, "respawn hides flashlight cone")
-	check(not arena._pencil_screen_pass.visible and not root.get_node("PencilSketchStyle").is_enabled(), "respawn disables Pencil Sketch again")
+	check(not bool(root.get_node("PencilSketchStyle").get("_gameplay_pencil_enabled")),
+		"respawn disables gameplay Pencil Sketch again")
 	check(material_fixture.material_override == plain_material, "respawn restores the exact PBR material")
 	check(Foundation.ZOMBIE_HORDE_SIZE == 4 and Foundation.ZOMBIE_SPAWN_DISTANCE == 50.0, "four dormant rooftop entries keep 50 m concealed replacements")
 	check(Foundation.ZOMBIE_PERFORMANCE_CAPACITY == 20, "debug scenarios respect the 20-zombie gameplay cap")
