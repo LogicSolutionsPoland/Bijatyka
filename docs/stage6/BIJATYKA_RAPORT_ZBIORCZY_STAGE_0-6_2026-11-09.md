@@ -9,6 +9,26 @@
 
 > **Zasada interpretacji:** PASS w GitHub Actions oznacza wyłącznie potwierdzoną bramkę CI. Zakończony build APK nie oznacza, że gra działa poprawnie na fizycznym telefonie. W historii są różne plany etapów o podobnych nazwach; niniejszy raport obejmuje ciąg weryfikacji z 8–9 listopada 2026 oraz powstałą z niego integrację Stage 5B i finalny build Stage 6. Historycznych osobnych etapów skoków/QTE nie uznaje się za tożsame z etapami tego audytu.
 
+## AKTUALIZACJA P1 — DIAGNOSTYKA CHWYTÓW / QTE (2026-11-09)
+
+**P1 diagnostic test status: PASS (automated), Android bug OPEN.**
+
+- Branch: `fix/bijatyka-stage6-grab-qte-android-20261109`, based directly on frozen gameplay SHA `f1989c8c675357427e2214796e14a5103f1cef01`.
+- Github Actions run: [#42696826410 — SUCCESS](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/42696826410).
+- Run source commit: `218595208d51d823d9c0520b7956bdb004e0a2c1`.
+- Godot 4.7.2 project import: **PASS**.
+- Five automated test suites: **5 PASS / 0 FAIL**: brutal_grab_state_machine_test, brutal_grab_qte_test, brutal_grab_limb_contact_test, brutal_grab_real_rig_test, stage6_grab_qte_hud_diagnostic_test.
+- Controlled Mesa/OpenGL grab transition with PNG evidence: **PASS**.
+- CI artifact containing logs and screenshots: [#13708699202](https://github.com/LogicSolutionsPoland/Bijatyka/actions/runs/42696826410/artifacts/13708699202).
+- Production gameplay, shaders, blackout, fog and tip source: **unchanged**. All new commits are test/workflow/documentation.
+- **Interpretation:** under controlled fixture conditions, existing grab contact, QTE logic and HUD/R3 route work; this does *not* demonstrate that a naturally initiated zombie grab appears in actual Android gameplay. The owner-reported absence of animations/QTE remains **PARTIAL / OPEN**.
+- Code observations: zombie grab uses a punch clip and held contact pose, player uses frozen Hit pose, two-bone IK handles zombie wrist. Natural initiation depends on full rig visibility, slot, line of sight, distance, player eligibility and Exo forearm reach.
+- Next diagnostic: log and capture a naturally initiated enemy grab without force-calling the reservation/start methods; check all admission rejections and real Android R3 and HUD before any production fix.
+- Full diagnostic document: [Stage 6 P1 Grab/QTE diagnosis](https://github.com/LogicSolutionsPoland/Bijatyka/blob/fix/bijatyka-stage6-grab-qte-android-20261109/docs/stage6/STAGE6_P1_GRAB_QTE_DIAGNOSIS.md).
+- **Stage 6 overall:** PARTIAL / physical-device acceptance FAIL; Stage 7 BLOCKED; main unchanged; no APK built in P1 and no merge.
+
+---
+
 ## AKTUALIZACJA: WYNIKI FIZYCZNYCH TESTÓW ANDROIDA (2026-11-09, zgłoszenie właściciela)
 
 **Nadrzędna, najnowsza ocena:** **STAGE 6 PARTIAL / BUILD PASS / PHYSICAL DEVICE ACCEPTANCE FAIL / STAGE 7 BLOCKED.** Ten wpis aktualizuje starsze statusy „NOT TESTED” w historycznych sekcjach poniżej. Wyniki zgłosił właściciel po rzeczywistym uruchomieniu APK; nie dostarczył jeszcze zrzutów, logów ani liczbowych pomiarów.
