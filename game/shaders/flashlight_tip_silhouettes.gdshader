@@ -88,5 +88,9 @@ void fragment() {
 	vec3 premultiplied_color = artwork.rgb * artwork_alpha
 		+ fog_color * mist_alpha * (1.0 - artwork_alpha);
 	ALBEDO = premultiplied_color / max(combined_alpha, 0.001);
-	ALPHA = combined_alpha;
+	// The source art and moving mist must feather to a transparent oval at
+	// every image border; never show the underlying quad as a rectangle.
+	vec2 artwork_ellipse = (UV - vec2(0.5)) / vec2(0.5);
+	float artwork_edge_fade = 1.0 - smoothstep(0.70, 1.0, length(artwork_ellipse));
+	ALPHA = combined_alpha * artwork_edge_fade;
 }

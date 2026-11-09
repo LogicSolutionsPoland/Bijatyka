@@ -26,6 +26,8 @@ func configure(camera_node: Camera3D) -> void:
 	overlay = MeshInstance3D.new()
 	overlay.name = "MovingZombieSilhouettes"
 	overlay.mesh = quad
+	# This independently toggled effect must never be re-enabled by Foundation's distance cache.
+	overlay.add_to_group("flashlight_beam")
 	overlay.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	overlay.visible = false
 	material = ShaderMaterial.new()

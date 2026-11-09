@@ -22,6 +22,8 @@ func _run() -> void:
 		"all three independently integrated layers are instantiated"):
 		_finish()
 		return
+	_check(tip.overlay.is_in_group("flashlight_beam"),
+		"tip overlay is excluded from cached distance visibility and honors roof mode")
 	_check(manager._material.render_priority == 126, "fullscreen blackout has render priority 126")
 	_check(game.burning_horizon.get_child(0).material_override.render_priority == 127,
 		"10m fog horizon is layered after blackout")
@@ -142,6 +144,41 @@ func _run() -> void:
 	manager._sync_tip_silhouettes()
 	for frame in range(3):
 		await process_frame
+
+	# Paired real pixels verify that the artwork image has no hard quad borders.
+	# Freeze tip time while leaving the real blackout, ring, beam and scene on.
+	tip.set_effect_visible(false)
+	for frame in range(3):
+		await process_frame
+	var edge_off := await _capture()
+	_save(edge_off, "step4-tip-edge-off.png")
+	tip.update_beam(manager.beam_origin, manager.beam_direction,
+		Visibility.MAX_RADIUS, Visibility.BEAM_TANGENT, true)
+	for frame in range(3):
+		await process_frame
+	var edge_on := await _capture()
+	_save(edge_on, "step4-tip-edge-on.png")
+	var edge_center: Vector2 = tip.projected_center
+	var size: Vector2 = tip.projected_size
+	var largest_edge_delta := 0.0
+	for edge in [
+		edge_center + Vector2(-size.x * 0.49, 0.0),
+		edge_center + Vector2(size.x * 0.49, 0.0),
+		edge_center + Vector2(0.0, -size.y * 0.49),
+		edge_center + Vector2(0.0, size.y * 0.49)
+	]:
+		var a := _sample(edge_off, edge)
+		var c := _sample(edge_on, edge)
+		largest_edge_delta = maxf(largest_edge_delta,
+			Vector3(a.r - c.r, a.g - c.g, a.b - c.b).length())
+	var center_artwork_delta := _region_delta(edge_off, edge_on, edge_center, Vector2(45.0, 45.0))
+	print("STAGE5B_TIP_EDGE_AB " + JSON.stringify({
+		"quad_edge_max_rgb_delta": largest_edge_delta,
+		"center_max_rgb_delta": center_artwork_delta,
+		"feather_in_shader": tip.material.shader.code.contains("artwork_edge_fade")
+	}))
+	_check(center_artwork_delta > 0.02, "animated artwork stays visually present at flashlight tip")
+	_check(largest_edge_delta < 0.045, "all four flashlight-tip quad borders fade to transparent")
 
 	# Opaque foreground wall between camera and tip: compare the SAME pixels.
 	# A disabled depth test on the tip makes it incorrectly paint through this wall.
