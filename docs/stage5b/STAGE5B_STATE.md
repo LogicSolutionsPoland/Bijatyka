@@ -13,8 +13,8 @@ Checkpoint date: 2026-11-09. Step 0 PASS; Step 1 PASS; Step 2 PASS (Actions #426
 - Previous completed stage: Stage 5
 - Current stage at checkpoint creation: Stage 5B / Step 0 — audit and safe setup (completed)
 - Previous completed stage: Stage 5B / Step 2 — Circular Zombie Fog Horizon Integration (PASS)
-- Current completed stage: Stage 5B / Step 3 — Flashlight-Tip Zombie Artwork Integration from PR #70 (PASS)
-- Stage 5B / Step 4 — Combined Real-Rendering Verification (PASS)
+- Previous completed stage: Stage 5B / Step 3 — Flashlight-Tip Zombie Artwork Integration from PR #70 (PASS)
+- Current completed stage: Stage 5B / Step 4 — Combined Real-Rendering Verification (PASS)
 - Next stage: Stage 5B / Step 5 — Full Gameplay Regression and CPU/Render Profiling (NOT STARTED)
 
 ## B. Verified Git state (live at Step 0)
