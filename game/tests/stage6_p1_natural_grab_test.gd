@@ -156,8 +156,24 @@ func _run() -> void:
 	var active_slot_samples := 0
 	var samples := 0
 	var r3_edges_sent := 0
+	var capture_enabled := not OS.get_environment("BIJATYKA_CAPTURE_DIR").is_empty()
+	var captured: Dictionary = {}
 	for frame in range(1800):
 		await physics_frame
+		if capture_enabled and frame == 0:
+			await _capture("approach", captured)
+		if capture_enabled and game.player.grab_state == FoundationPlayer.GrabState.WINDUP and not captured.has("windup"):
+			await _capture("windup", captured)
+		if capture_enabled and game.player.grab_state == FoundationPlayer.GrabState.WINDUP and not captured.has("hand-reaching"):
+			var candidate: FoundationEnemy = game.player._limb_grab_candidate
+			if is_instance_valid(candidate) and candidate.state == "limb_grab_windup" and candidate.state_time < 0.20:
+				await _capture("hand-reaching", captured)
+		if capture_enabled and qte_count > 0 and qte_end_count == 0 and not captured.has("contact-qte"):
+			await _capture("contact-qte", captured)
+		if capture_enabled and qte_count > 0 and qte_end_count == 0 and r3_edges_sent >= 1 and not captured.has("restrained"):
+			await _capture("restrained", captured)
+		if capture_enabled and qte_end_count > 0 and not captured.has("escape"):
+			await _capture("escape", captured)
 		if not is_instance_valid(actor) or not is_instance_valid(game.player):
 			break
 		if qte_count > 0 and qte_end_count == 0:
@@ -210,6 +226,11 @@ func _run() -> void:
 			event_log.append("PLAYER_DIED before natural completion")
 			break
 
+	if capture_enabled and qte_end_count > 0:
+		for recovery_frame in range(5):
+			await physics_frame
+		await _capture("recovery", captured)
+		_assert(captured.size() == 7, "seven real GL natural-grab stages must be saved, found %d" % captured.size())
 	print("P1_NATURAL_DIAG " + JSON.stringify({
 		"attacks": attacks, "windups": windup_count, "qte_started": qte_count,
 		"qte_finished": qte_end_count, "qte_outcome": qte_outcome.value,
@@ -228,6 +249,25 @@ func _run() -> void:
 	_assert(not game.hud._limb_grab_button.visible, "HUD clears after a natural escape")
 	_assert(game.player.grab_state == FoundationPlayer.GrabState.READY, "player regains movement after natural escape")
 	_finish(game)
+
+func _capture(label: String, captured: Dictionary) -> void:
+	if captured.has(label):
+		return
+	var folder := OS.get_environment("BIJATYKA_CAPTURE_DIR")
+	if folder.is_empty():
+		return
+	DirAccess.make_dir_recursive_absolute(folder)
+	await process_frame
+	var frame_image: Image = root.get_texture().get_image()
+	if frame_image == null or frame_image.is_empty():
+		_assert(false, "real GL frame unavailable at " + label)
+		return
+	var filename := folder.path_join("natural-" + label + ".png")
+	if frame_image.save_png(filename) != OK:
+		_assert(false, "failed to save real GL frame at " + label)
+		return
+	captured[label] = true
+	print("P1_NATURAL_GL_CAPTURE " + filename)
 
 func _finish(game: Node) -> void:
 	if is_instance_valid(game):
