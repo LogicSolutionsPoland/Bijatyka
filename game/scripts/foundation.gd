@@ -896,6 +896,7 @@ func _on_elevator_call_arrived(destination_floor: StringName) -> void:
 
 func _on_elevator_ride_started(destination_floor: StringName) -> void:
 	player.cancel_limb_grab()
+	player.cancel_melee_lunge()
 	# The car is closed and the rider is inside before this signal is emitted.
 	# Keep the camera inside the enclosure throughout the reveal sequence.
 	camera_rig.global_position = player.global_position + Vector3.UP * CAMERA_PIVOT_HEIGHT

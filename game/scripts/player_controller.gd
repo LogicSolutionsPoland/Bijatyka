@@ -44,6 +44,8 @@ enum JumpState { READY, ORDINARY, FORWARD }
 enum GrabState { READY, WINDUP, GRABBED, ESCAPED, FAILED, RECOVERY }
 const TARGET_MELEE_HITS_PER_SECOND := 5.0
 const TARGET_MELEE_CYCLE_SECONDS := 1.0 / TARGET_MELEE_HITS_PER_SECOND
+const MELEE_LUNGE_SPEED_MPS := 1.5
+const MELEE_LUNGE_DURATION_SECONDS := TARGET_MELEE_CYCLE_SECONDS
 const MELEE_TIMER_EPSILON := 0.0001
 const ATTACK_ANIMATION_BLEND_SECONDS := 0.06
 const CHAIN_TARGET_RADIUS := 5.0
@@ -83,6 +85,8 @@ var attack_count := 0
 var _queued_attack_kind := ""
 var _queued_attack_side := ""
 var _attack_recovery_locked := false
+var _melee_lunge_time := 0.0
+var _melee_lunge_direction := Vector3.ZERO
 var movement_slow_time := 0.0
 var movement_slow_factor := 1.0
 var _jump_state: JumpState = JumpState.READY
@@ -258,6 +262,7 @@ func _add_debug_visual() -> void:
 func _physics_process(delta: float) -> void:
 	_update_limb_grab(delta)
 	if rage.current_soul_condemned:
+		cancel_melee_lunge()
 		return
 	_character_action_time = maxf(0.0, _character_action_time - delta)
 	_read_desktop_input(delta)
@@ -276,6 +281,10 @@ func _physics_process(delta: float) -> void:
 		velocity.y = 0.0
 	var started_airborne := not is_on_floor() or velocity.y > 0.1
 	move_and_slide()
+	if _melee_lunge_time > 0.0:
+		_melee_lunge_time = maxf(0.0, _melee_lunge_time - delta)
+		if _melee_lunge_time == 0.0:
+			_melee_lunge_direction = Vector3.ZERO
 	if _parabolic_jump_active and is_on_wall():
 		# Keep vertical motion and landing intact while a wall stops forward travel.
 		velocity.x = 0.0
@@ -339,10 +348,12 @@ func move_input() -> Vector2:
 
 func _update_movement(delta: float) -> void:
 	if _limb_grab_owner != null:
+		cancel_melee_lunge()
 		velocity.x = 0.0
 		velocity.z = 0.0
 		return
 	if attack_phase == "approach" and is_instance_valid(_engagement_target) and _engagement_target.hp > 0:
+		cancel_melee_lunge()
 		var offset := _engagement_target.global_position - global_position
 		offset.y = 0.0
 		var distance := offset.length()
@@ -356,6 +367,7 @@ func _update_movement(delta: float) -> void:
 			velocity.z = 0.0
 		return
 	if attack_phase == "grapple":
+		cancel_melee_lunge()
 		velocity.x = 0.0
 		velocity.z = 0.0
 		return
@@ -371,8 +383,31 @@ func _update_movement(delta: float) -> void:
 			_play_character_action(turn_action, float(CHARACTER_MOTION.ACTIONS.get(turn_action, 0.28)))
 		rotation.y = lerp_angle(rotation.y, target_yaw, minf(1.0, delta * 16.0))
 	var speed := 4.8 * movement_slow_factor
-	velocity.x = direction.x * speed
-	velocity.z = direction.z * speed
+	var horizontal_velocity := direction * speed
+	if _melee_lunge_time > 0.0:
+		horizontal_velocity += _melee_lunge_direction * MELEE_LUNGE_SPEED_MPS * movement_slow_factor
+	velocity.x = horizontal_velocity.x
+	velocity.z = horizontal_velocity.z
+
+func cancel_melee_lunge() -> void:
+	_melee_lunge_time = 0.0
+	_melee_lunge_direction = Vector3.ZERO
+
+func _start_melee_lunge() -> void:
+	# CharacterBody3D move_and_slide handles collision; never change position directly.
+	# Ordinary/forward jumps and enemy limb grabs have exclusive movement ownership.
+	if attack_phase != "active" or _parabolic_jump_active or _jump_state != JumpState.READY:
+		return
+	if not is_on_floor() or grab_state != GrabState.READY or _limb_grab_owner != null:
+		return
+	if rage.current_soul_condemned or get_tree().paused:
+		return
+	var forward := -global_transform.basis.z
+	forward.y = 0.0
+	if forward.length_squared() < 0.01:
+		return
+	_melee_lunge_direction = forward.normalized()
+	_melee_lunge_time = MELEE_LUNGE_DURATION_SECONDS
 
 func request_attack(kind: String, side: String = "right") -> bool:
 	if not ATTACKS.has(kind) or side not in ["left", "right"] or rage.current_soul_condemned or _limb_grab_owner != null:
@@ -575,8 +610,12 @@ func _update_attack(delta: float) -> void:
 		var flat := _engagement_target.global_position - global_position
 		flat.y = 0.0
 		if flat.length() <= CHAIN_GRAB_DISTANCE:
-			_begin_grapple()
-			return
+			# Previously locked targets can move behind a wall during approach.
+			var sight := PhysicsRayQueryParameters3D.create(global_position + Vector3.UP, _engagement_target.global_position + Vector3.UP, 1)
+			sight.exclude = [get_rid(), _engagement_target.get_rid()]
+			if get_world_3d().direct_space_state.intersect_ray(sight).is_empty():
+				_begin_grapple()
+				return
 		attack_phase_time -= elapsed_time
 		if attack_phase_time <= 0.0:
 			# A blocked hop must not hit or warp through an obstacle.
@@ -594,6 +633,7 @@ func _update_attack(delta: float) -> void:
 			_begin_strike()
 		"windup":
 			attack_phase = "active"
+			_start_melee_lunge()
 			_resolve_attack()
 			attack_phase_time = EXO_KICK_ACTIVE_SECONDS if _exo_kick_active else float(ATTACKS[attack_kind].active)
 		"active":
@@ -645,6 +685,7 @@ func _resolve_attack() -> void:
 func try_jump() -> bool:
 	if _jump_state != JumpState.READY or not is_on_floor() or rage.current_soul_condemned or grab_state == GrabState.GRABBED:
 		return false
+	cancel_melee_lunge()
 	if grab_state == GrabState.WINDUP:
 		cancel_limb_grab("jump_evaded")
 	if attack_phase in ["approach", "grapple"]:
@@ -671,6 +712,7 @@ func _resolve_jump_impact() -> void:
 func try_parabolic_jump() -> bool:
 	if _jump_state != JumpState.READY or not is_on_floor() or _parabolic_jump_active or rage.current_soul_condemned or grab_state == GrabState.GRABBED:
 		return false
+	cancel_melee_lunge()
 	if grab_state == GrabState.WINDUP:
 		cancel_limb_grab("jump_evaded")
 	if attack_phase in ["approach", "grapple"]:
@@ -727,6 +769,8 @@ func _set_grab_state(next_state: GrabState) -> void:
 	if grab_state == next_state:
 		return
 	grab_state = next_state
+	if next_state != GrabState.READY:
+		cancel_melee_lunge()
 	grab_state_changed.emit(grab_state, get_active_grab_enemy(), get_grab_limb())
 
 func _grab_player_eligible() -> bool:
@@ -915,6 +959,7 @@ func _exit_tree() -> void:
 	cancel_limb_grab("scene_exit")
 
 func interrupt_by_zombie(slow_seconds: float = 0.7, recovery_penalty: float = 0.45) -> void:
+	cancel_melee_lunge()
 	if _limb_grab_owner != null:
 		return
 	if attack_phase in ["approach", "grapple"]:
@@ -1252,10 +1297,12 @@ func _on_selection_resolved(_milestone: int, aura_id: String) -> void:
 	current_spell = aura_id
 
 func _on_condemned(_threshold: float, _maximum: float) -> void:
+	cancel_melee_lunge()
 	cancel_limb_grab("player_condemned")
 	call_deferred("_reset_at_safe_base")
 
 func _reset_at_safe_base() -> void:
+	cancel_melee_lunge()
 	cancel_limb_grab("respawn")
 	_jump_state = JumpState.READY
 	_parabolic_jump_active = false
