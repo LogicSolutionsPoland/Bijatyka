@@ -85,6 +85,8 @@ func _run() -> void:
 	# Do not assign a target, slot or force attack, reservation, rig or QTE.
 	var started := {"value": 0}
 	var ended := {"value": 0}
+	var qte_outcome := {"value": ""}
+	var qte_hud_seen := {"value": false}
 	game.player.grab_windup_started.connect(func(enemy: FoundationEnemy, limb: String) -> void:
 		windup_count += 1
 		event_log.append("GRAB_WINDUP %s limb=%s" % [str(enemy.get_instance_id()), limb])
@@ -97,6 +99,7 @@ func _run() -> void:
 	game.player.grab_qte_finished.connect(func(id: int, outcome: String) -> void:
 		qte_end_count += 1
 		ended.value = id
+		qte_outcome.value = outcome
 		event_log.append("QTE_FINISHED id=%d outcome=%s" % [id, outcome])
 	)
 	game.player.grab_interrupted.connect(func(reason: String, enemy: FoundationEnemy, limb: String) -> void:
@@ -152,10 +155,24 @@ func _run() -> void:
 	var rig_ready_samples := 0
 	var active_slot_samples := 0
 	var samples := 0
+	var r3_edges_sent := 0
 	for frame in range(1800):
 		await physics_frame
 		if not is_instance_valid(actor) or not is_instance_valid(game.player):
 			break
+		if qte_count > 0 and qte_end_count == 0:
+			if game.hud._limb_grab_button.visible and game.hud._active_grab_qte_session_id == int(started.value):
+				qte_hud_seen.value = true
+			# Exercise the *real* viewport/HUD/gamepad event route, not a direct
+			# try_escape_limb_grab call. Each of three R3 presses has a release.
+			if r3_edges_sent < 6:
+				var r3 := InputEventJoypadButton.new()
+				r3.device = 0
+				r3.button_index = JOY_BUTTON_RIGHT_STICK
+				r3.pressed = r3_edges_sent % 2 == 0
+				Input.parse_input_event(r3)
+				event_log.append("VIRTUAL_R3 %s" % ("press" if r3.pressed else "release"))
+				r3_edges_sent += 1
 		if actor._attack_sequence > last_attack_sequence:
 			attacks += actor._attack_sequence - last_attack_sequence
 			last_attack_sequence = actor._attack_sequence
@@ -195,7 +212,8 @@ func _run() -> void:
 
 	print("P1_NATURAL_DIAG " + JSON.stringify({
 		"attacks": attacks, "windups": windup_count, "qte_started": qte_count,
-		"qte_finished": qte_end_count, "sample_count": samples,
+		"qte_finished": qte_end_count, "qte_outcome": qte_outcome.value,
+		"hud_visible": qte_hud_seen.value, "r3_edges_sent": r3_edges_sent, "sample_count": samples,
 		"rig_ready": rig_ready_samples, "slot_allowed": active_slot_samples,
 		"visual_rejected_samples": rejected_visual, "slot_rejected_samples": rejected_slot,
 		"player_ineligible_samples": rejected_player, "target_state": actor.state if is_instance_valid(actor) else "invalid",
@@ -205,6 +223,10 @@ func _run() -> void:
 	_assert(windup_count > 0, "production AI must initiate real grab windup")
 	_assert(qte_count > 0, "natural grab must start QTE from real contact")
 	_assert(qte_end_count > 0, "natural QTE must finish and release session")
+	_assert(qte_outcome.value == "escaped", "three virtual R3 press/release edges must escape the natural grip")
+	_assert(bool(qte_hud_seen.value), "production HUD displays a natural grab QTE")
+	_assert(not game.hud._limb_grab_button.visible, "HUD clears after a natural escape")
+	_assert(game.player.grab_state == FoundationPlayer.GrabState.READY, "player regains movement after natural escape")
 	_finish(game)
 
 func _finish(game: Node) -> void:
