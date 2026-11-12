@@ -1041,7 +1041,7 @@ func _on_enemy_defeated(enemy: Node) -> void:
 		return
 	if is_instance_valid(spawn_director):
 		var was_registered: bool = spawn_director._live.has(enemy.get_instance_id())
-		var reserved_replacements := spawn_director.replace_enemy(enemy)
+		var reserved_replacements: int = spawn_director.replace_enemy(enemy)
 		if was_registered and is_instance_valid(ai_director):
 			ai_director.on_ordinary_defeated(reserved_replacements)
 

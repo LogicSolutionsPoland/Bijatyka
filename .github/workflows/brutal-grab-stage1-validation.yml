@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feat/jump-horde-stage1-20261105
+      - feat/endless-dark-horde-20261112
     paths:
       - game/scripts/player_controller.gd
       - game/scripts/brutal_grab_qte.gd
@@ -11,12 +12,23 @@ on:
       - game/scripts/mobile_hud.gd
       - game/scripts/foundation.gd
       - game/scripts/enemy.gd
+      - game/scripts/ai_director.gd
+      - game/scripts/concealed_spawn.gd
       - game/tests/brutal_grab_state_machine_test.gd
       - game/tests/brutal_grab_qte_test.gd
       - game/tests/brutal_grab_limb_contact_test.gd
       - game/tests/brutal_grab_real_rig_test.gd
       - docs/brutal-grab-stage3-limb-contact-20261107.md
       - game/tests/stage6_integrated_headless_test.gd
+      - game/tests/ai_director_test.gd
+      - game/tests/concealed_spawn_test.gd
+      - game/tests/burning_horizon_test.gd
+      - game/tests/player_animation_test.gd
+      - game/tests/enemy_attack_animation_test.gd
+      - game/tests/zombie_animation_test.gd
+      - game/tests/zombie_20_optimization_test.gd
+      - game/tests/horde_performance_test.gd
+      - game/tests/test_runner.gd
       - .github/workflows/brutal-grab-stage1-validation.yml
   workflow_dispatch:
 
@@ -40,11 +52,11 @@ jobs:
           set -euo pipefail
           godot --headless --editor --path game --import --quit 2>&1 | tee grab-import.log
           if grep -E 'SCRIPT ERROR:|ERROR: Failed to load' grab-import.log; then exit 1; fi
-      - name: Grab stages 1-3, jump, combat and control regressions
+      - name: Horde, grab, jump, combat and control regressions
         id: regressions
         run: |
           set -euo pipefail
-          for script in brutal_grab_state_machine_test.gd brutal_grab_qte_test.gd brutal_grab_limb_contact_test.gd brutal_grab_real_rig_test.gd stage6_integrated_headless_test.gd jump_state_regression_test.gd test_runner.gd; do
+          for script in brutal_grab_state_machine_test.gd brutal_grab_qte_test.gd brutal_grab_limb_contact_test.gd brutal_grab_real_rig_test.gd stage6_integrated_headless_test.gd jump_state_regression_test.gd ai_director_test.gd concealed_spawn_test.gd burning_horizon_test.gd player_animation_test.gd enemy_attack_animation_test.gd zombie_animation_test.gd zombie_20_optimization_test.gd horde_performance_test.gd test_runner.gd; do
             timeout 180s godot --headless --path game --script "res://tests/$script" 2>&1 | tee "$script.log"
             grep -q 'PASS:' "$script.log"
             if grep -E 'SCRIPT ERROR:|ERROR:' "$script.log"; then exit 1; fi
@@ -65,8 +77,8 @@ jobs:
               state: passed ? 'success' : 'failure',
               context: 'brutal-grab/stage3-headless',
               description: passed
-                ? 'Godot import and seven headless test suites passed'
-                : 'Godot import or headless test suite did not pass',
+                ? 'Godot import and fifteen headless test suites passed'
+                : 'Godot import or horde/combat regression suite did not pass',
               target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
             });
       - name: Keep validation logs

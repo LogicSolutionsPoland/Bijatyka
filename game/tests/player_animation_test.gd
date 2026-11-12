@@ -41,7 +41,7 @@ func _run() -> void:
 			_check_repeated_strikes(player, kind, side)
 
 	_check_attack_priority(player)
-	_check_cinematic_chain(player)
+	await _check_cinematic_chain(player)
 	_check_airborne_strikes(player)
 
 	_check_locomotion_does_not_restart(animator, player)
@@ -152,6 +152,10 @@ func _check_hit_timing(player: FoundationPlayer, kind: String, side: String) -> 
 	player.rotation.y = 0.0
 	enemy.global_position = Vector3(0.0, 0.0, -1.0)
 	await process_frame
+	# This animation timing test uses a training dummy, while gameplay zombies have 1 HP.
+	enemy.starting_health = 100
+	enemy.hp = 100
+	enemy._update_health_display()
 	connected_hits.clear()
 	if not player.attack_connected.is_connected(_on_attack_connected):
 		player.attack_connected.connect(_on_attack_connected)
@@ -278,6 +282,14 @@ func _check_cinematic_chain(player: FoundationPlayer) -> void:
 	root.add_child(second)
 	first.set_physics_process(false)
 	second.set_physics_process(false)
+	await process_frame
+	# Keep the two-hit cinematic chain test independent of ordinary 1 HP zombies.
+	first.starting_health = 100
+	first.hp = 100
+	first._update_health_display()
+	second.starting_health = 100
+	second.hp = 100
+	second._update_health_display()
 	player.global_position = Vector3.ZERO
 	player.rotation.y = 0.0
 	first.global_position = Vector3(0.0, 0.0, -1.1)

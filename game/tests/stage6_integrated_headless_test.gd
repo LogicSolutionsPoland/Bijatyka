@@ -103,7 +103,7 @@ func _run() -> void:
 	director._refresh_formation()
 	_check(director.attacker_role_count == 4 and director.reserve_role_count == 7,
 		"confirmed landing assigns four attackers and seven reserves")
-	_check(director.local_living_count <= 14 and director.attacker_role_count <= 4
+	_check(director.local_living_count <= BijatykaAIDirector.LOCAL_LIVING_LIMIT and director.attacker_role_count <= 4
 		and director.reserve_role_count <= 7 and spawns._attackers.size() <= 4,
 		"local, attacker and reserve counts stay within their caps")
 	_check(world.horde_far_visuals.get_resident_rig_count() <= 7,

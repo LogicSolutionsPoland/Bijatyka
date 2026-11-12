@@ -95,7 +95,7 @@ func _test_placement_and_visibility() -> void:
 	camera.rotation.y = 0.0
 	for index in range(160):
 		var at: Vector3 = director._sample_candidate()
-		check(at.length() >= 46.0 and at.length() <= 54.0 and at.normalized().dot(Vector3.FORWARD) >= cos(Director.FORWARD_HALF_ANGLE) - 0.001, "sample stays in the forward 50 m band")
+		check(at.length() >= 46.0 and at.length() <= 54.0 and at.normalized().dot(Vector3.FORWARD) >= cos(Director.SPAWN_FORWARD_HALF_ANGLE) - 0.001, "sample stays in the forward 50 m band")
 	var far := Vector3(0, 0.05, -50)
 	check(director.is_valid_spawn(far), "concealed open ground at 50 m is accepted")
 	check(director._grounded_candidate(far).distance_to(far) < 0.01, "floor ray places feet above actual ground")
@@ -570,8 +570,11 @@ func _test_population_and_replacements() -> void:
 		enemy.set_physics_process(false)
 		var offset := at - arena.player.global_position
 		offset.y = 0.0
-		check(offset.length() >= 46.0 and offset.length() <= 54.0, "newborn remains around the preserved 50 m spawn distance")
-		check(offset.normalized().dot(director.forward_direction()) >= cos(Director.FORWARD_HALF_ANGLE) - 0.001, "newborn is ahead of current movement/facing")
+		var configured_distance: float = float(director.spawn_distance)
+		var minimum_spawn_distance: float = maxf(Director.MIN_PLAYER_DISTANCE, configured_distance - Director.RADIAL_SPREAD)
+		var maximum_spawn_distance: float = configured_distance + Director.RADIAL_SPREAD
+		check(offset.length() >= minimum_spawn_distance - 0.01 and offset.length() <= maximum_spawn_distance + 0.01, "newborn stays within the configured spawn band")
+		check(offset.normalized().dot(director.forward_direction()) >= cos(Director.SPAWN_FORWARD_HALF_ANGLE) - 0.001, "newborn is ahead of current movement/facing")
 		check(enemy.state == "assault" and enemy._spawn_assault_time > 0.0, "every actual new horde member receives its initial burst")
 		check(not enemy._visual_root.visible, "actual birth cannot render beyond the visibility limit")
 	)
@@ -657,6 +660,6 @@ func _test_population_and_replacements() -> void:
 	check(director._live.size() == 20 and director._pending.is_empty(), "spawn queue recovers after the camera returns")
 	arena._boss_enemy.receive_hit(10000)
 	check(director._live.size() == 20 and director._pending.is_empty(), "boss defeat does not add a 21st ordinary zombie")
-	check(Foundation.ZOMBIE_HORDE_SIZE == 4 and Foundation.ZOMBIE_SPAWN_DISTANCE == 50.0 and Foundation.VISIBILITY_RADIUS == 30.0, "four dormant entries, 50 m replacement distance and 30 m visibility remain intact")
+	check(Foundation.ZOMBIE_HORDE_SIZE == 4 and Foundation.ZOMBIE_SPAWN_DISTANCE == 15.0 and Foundation.VISIBILITY_RADIUS == 30.0, "four dormant entries, 15 m replacement distance and 30 m visibility remain intact")
 	arena.queue_free()
 	await process_frame

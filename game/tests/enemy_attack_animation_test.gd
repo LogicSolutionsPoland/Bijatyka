@@ -110,6 +110,10 @@ func _check_playback(enemy: FoundationEnemy) -> void:
 	enemy.global_position = Vector3.ZERO
 	victim.global_position = Vector3(0.0, 0.0, -enemy.attack_range * 0.80)
 	await physics_frame
+	# The animation test needs a durable victim; ordinary zombies have 1 HP.
+	victim.starting_health = 100
+	victim.hp = 100
+	victim._update_health_display()
 	enemy.combat_target = victim
 	enemy._player = null
 	enemy.state = "windup"

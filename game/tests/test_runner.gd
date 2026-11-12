@@ -180,6 +180,10 @@ func _test_manual_attack_and_hit_window() -> void:
 	target.set_physics_process(false)
 	root.add_child(target)
 	await process_frame
+	# This combo test needs a durable training target; ordinary gameplay zombies have 1 HP.
+	target.starting_health = 100
+	target.hp = 100
+	target._update_health_display()
 	_check(player.request_attack("punch"), "punch press starts a cinematic engagement")
 	_check(player.attack_phase == "grapple" and target._player_grapple_owner == player, "first enemy is grabbed before striking")
 	player._update_attack(Player.CHAIN_GRAB_SECONDS)
@@ -240,6 +244,10 @@ func _test_magic_unlock_and_damage() -> void:
 	target.set_physics_process(false)
 	root.add_child(target)
 	await process_frame
+	# Keep the spell and burn assertions independent of ordinary zombies' 1 HP.
+	target.starting_health = 100
+	target.hp = 100
+	target._update_health_display()
 	_check(player.rage.unlocked_spells.is_empty() and not player.cast_spell() and not player.cast_blast(), "new soul cannot cast magic or Blast before an aura choice")
 	player.rage.gain_per_effective_hit = 10.0
 	_check(player.rage.record_effective_hit(1.0), "verified hit opens the first spell choice")
@@ -285,7 +293,7 @@ func _test_jump_and_enemy_interrupt_rules() -> void:
 	await process_frame
 
 func _test_enemy_variant_health() -> void:
-	var variants := {"shambler": 90, "brute": 150, "stalker": 75, "boss": 360}
+	var variants := {"shambler": 1, "brute": 1, "stalker": 1, "boss": 360}
 	var spawned: Array[FoundationEnemy] = []
 	for kind in variants.keys():
 		var enemy := Enemy.new() as FoundationEnemy
@@ -524,7 +532,11 @@ func _test_gamepad_controls() -> void:
 	player.rage.unlocked_spells.assign(["light", "fire"])
 	arena._refresh_hud()
 	var blast_target := get_nodes_in_group("enemies")[0] as FoundationEnemy
-	# Horde members now spawn 50 m away; put this test target inside Blast range.
+	# Keep this spell-control target durable; ordinary zombies have 1 HP.
+	blast_target.starting_health = 100
+	blast_target.hp = 100
+	blast_target._update_health_display()
+	# Move the target inside Blast range regardless of its configured spawn distance.
 	var blast_direction := -player.global_transform.basis.z
 	blast_direction.y = 0.0
 	blast_target.global_position = player.global_position + blast_direction.normalized() * 4.0

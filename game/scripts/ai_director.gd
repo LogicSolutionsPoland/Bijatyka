@@ -393,8 +393,8 @@ func _assign_lane(members: Array[FoundationEnemy], role: String, slot_count: int
 			continue
 		var enemy := available[best_index]
 		var safe := Vector3.INF
-		for lateral_adjust in [0.0, -0.22, 0.22]:
-			var candidate := player.global_position + forward * offset.y + right * (offset.x + lateral_adjust)
+		for lateral_adjust: float in [0.0, -0.22, 0.22]:
+			var candidate: Vector3 = player.global_position + forward * offset.y + right * (offset.x + lateral_adjust)
 			safe = spawns.safe_formation_position(candidate, enemy, occupied, FORMATION_RADIUS)
 			if safe.is_finite():
 				break

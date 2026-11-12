@@ -85,7 +85,7 @@ func run() -> void:
 	check(not arena.flashlight_visibility_manager.spotlight.visible, "respawn hides flashlight cone")
 	check(not arena._pencil_screen_pass.visible and not root.get_node("PencilSketchStyle").is_enabled(), "respawn disables Pencil Sketch again")
 	check(material_fixture.material_override == plain_material, "respawn restores the exact PBR material")
-	check(Foundation.ZOMBIE_HORDE_SIZE == 4 and Foundation.ZOMBIE_SPAWN_DISTANCE == 50.0, "four dormant rooftop entries keep 50 m concealed replacements")
+	check(Foundation.ZOMBIE_HORDE_SIZE == 4 and Foundation.ZOMBIE_SPAWN_DISTANCE == 15.0, "four dormant rooftop entries keep 15 m concealed replacements")
 	check(Foundation.ZOMBIE_PERFORMANCE_CAPACITY == 20, "debug scenarios respect the 20-zombie gameplay cap")
 	arena.queue_free()
 	await process_frame

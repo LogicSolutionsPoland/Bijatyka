@@ -110,9 +110,17 @@ func _test_behavior_animation_connections() -> void:
 
 	_check(not enemy._play_animation("Missing_Clip"), "missing animation fails safely")
 	_check(animations.current_animation == "enemy_combat/right_kick", "missing clip leaves the current visual fallback intact")
+	# First exercise Hit_React with an animation-only training dummy.
+	enemy.starting_health = 100
+	enemy.hp = 100
+	enemy._update_health_display()
 	_check(enemy.receive_hit(5, Vector3(0.0, 0.0, 1.0)) == 5, "nonlethal hit still applies its existing damage")
 	_check(animations.current_animation == "Hit_React", "nonlethal hit plays Hit_React")
 
+	# Restore the real ordinary-zombie rule before checking the one-hit death path.
+	enemy.starting_health = 1
+	enemy.hp = 1
+	enemy._update_health_display()
 	defeated_count = 0
 	enemy.defeated.connect(_on_defeated)
 	enemy.state = "approach"
