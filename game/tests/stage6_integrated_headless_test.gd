@@ -50,6 +50,13 @@ func _run() -> void:
 		and HUD.GAMEPAD_ACTIONS.get(&"pad_jump_forward") == "jump_forward"
 		and HUD.GAMEPAD_ACTIONS.get(&"pad_escape_limb_grab") == "escape_limb_grab",
 		"A/Cross, X/Square and R3 remain routed to jump, forward jump and grab escape")
+	# Keep the live 20-zombie population registered but prevent its 15 m assault from interrupting this deterministic jump/grab scenario.
+	spawns.spawn_requested.connect(func(_at: Vector3) -> void:
+		if not spawns._live.is_empty():
+			var spawned: FoundationEnemy = spawns._live.values().back() as FoundationEnemy
+			if is_instance_valid(spawned):
+				spawned.set_physics_process(false)
+	)
 	spawns.activate_ground_population(20)
 	spawns.begin_local_pool_preparation()
 	director.activate()
