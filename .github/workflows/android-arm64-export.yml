@@ -34,6 +34,7 @@ on:
       - codex/exo-mixamo-arm64-build-20261031
       - codex/exo-gray-kick-arm64-apk-20261031
       - feat/jump-horde-stage1-20261105
+      - feat/endless-dark-horde-20261112
 
 permissions:
   contents: read
