@@ -3,6 +3,19 @@ extends SceneTree
 const Director := preload("res://scripts/concealed_spawn.gd")
 const Foundation := preload("res://scripts/foundation.gd")
 const Player := preload("res://scripts/player_controller.gd")
+
+class TestFlashlightVisibility:
+	extends Node
+	const MAX_RADIUS := 10.0
+	var player: Node3D
+	var enabled := true
+
+	func is_world_position_visible(world_position: Vector3) -> bool:
+		if not is_instance_valid(player):
+			return false
+		var offset := world_position - player.global_position
+		offset.y = 0.0
+		return offset.length() <= MAX_RADIUS
 const Enemy := preload("res://scripts/enemy.gd")
 
 var failures: Array[String] = []
@@ -217,6 +230,10 @@ func _test_assault() -> void:
 	enemy.set_physics_process(false)
 	fixture.add_child(enemy)
 	await physics_frame
+	# This animation/assault test needs a durable training target; ordinary zombies have 1 HP.
+	enemy.starting_health = 100
+	enemy.hp = 100
+	enemy._update_health_display()
 	check(enemy.begin_spawn_assault(player), "new ordinary zombie activates its assault")
 	check(enemy.state == "assault" and enemy.combat_target == player, "activation targets the player without changing existing AI targets")
 	check(enemy.velocity.z > enemy.move_speed * 1.45, "pursuit burst is faster than existing chase immediately")
@@ -282,7 +299,11 @@ func _test_initial_population_distribution() -> void:
 	var fixture := _fixture()
 	var director = fixture.get_node("Director")
 	var player := fixture.get_node("Player") as FoundationPlayer
-	director.population_limit = Foundation.ZOMBIE_HORDE_SIZE
+	var flashlight := TestFlashlightVisibility.new()
+	flashlight.player = player
+	fixture.add_child(flashlight)
+	director.flashlight_visibility_manager = flashlight
+	director.activate_profiling_population(Foundation.ZOMBIE_HORDE_SIZE)
 	var positions: Array[Vector3] = []
 	director.spawn_requested.connect(func(at: Vector3) -> void: positions.append(at))
 	director.request_initial_population()
@@ -296,20 +317,16 @@ func _test_initial_population_distribution() -> void:
 	check(positions.size() == 4, "initial population finishes at exactly 4 zombies")
 	check(director._initial_population_pending == 0 and director._pending.is_empty(), "initial population does not create replacement debt")
 	check(budgets_ok, "initial map spread respects candidate and per-tick spawn budgets")
-	var sectors := [0, 0, 0, 0]
 	for at in positions:
 		var offset := at - player.global_position
 		offset.y = 0.0
 		var radius := offset.length()
-		check(radius >= Director.INITIAL_SPAWN_MIN_DISTANCE - 0.1 and radius <= Director.INITIAL_SPAWN_MAX_DISTANCE + 0.1, "opening zombie stays in the concealed 36–64 m arena band")
-		check(director.is_concealed(at), "opening zombie stays outside the full 30 m visible envelope")
+		check(radius >= Director.INITIAL_SPAWN_MIN_DISTANCE - 0.1 and radius <= Director.INITIAL_SPAWN_MAX_DISTANCE + 0.1, "opening zombie stays in the 13–17 m flashlight-hidden band")
+		check(director.is_concealed(at), "opening zombie stays outside the flashlight beam")
 		var base_offset := at - player.safe_base_position
 		base_offset.y = 0.0
 		check(base_offset.length() >= Director.BASE_EXCLUSION_RADIUS, "opening zombie stays outside the player base")
-		var sector := clampi(int(floor((atan2(offset.z, offset.x) + PI) / (TAU / 4.0))), 0, 3)
-		sectors[sector] += 1
-	for count in sectors:
-		check(count > 0, "opening horde covers all four directions around the player")
+		check(offset.normalized().dot(director.forward_direction()) >= cos(Director.SPAWN_FORWARD_HALF_ANGLE) - 0.001, "opening horde arrives inside the concealed forward corridor")
 	fixture.queue_free()
 	await process_frame
 
@@ -388,9 +405,10 @@ func _test_elevator_ground_wave() -> void:
 	for at in positions:
 		var horizontal := at - player.global_position
 		horizontal.y = 0.0
-		check(horizontal.length() >= 34.0 and horizontal.length() <= 45.0
+		check(horizontal.length() >= Director.INITIAL_SPAWN_MIN_DISTANCE - 0.1
+			and horizontal.length() <= Director.INITIAL_SPAWN_MAX_DISTANCE + 0.1
 			and absf(at.y - 0.05) < 0.1 and director.is_concealed(at),
-			"each opening fighter starts on valid concealed ground")
+			"each opening fighter starts in the concealed 13–17 m band")
 	elevator.rider_arrived.emit(&"ground")
 	check(director._live.size() == 4 and director._pending.is_empty() and director._initial_population_pending == 0,
 		"repeat ground arrival does not add a zombie")
@@ -611,8 +629,13 @@ func _test_population_and_replacements() -> void:
 		defeated._complete_death() # Advance the death animation deterministically for this spawn-director test.
 		arena._on_enemy_defeated(defeated) # Duplicate notifications are harmless.
 	check(director._live.size() == 16 and director._pending.size() == 4, "four deaths queue exactly four replacements")
-	director._physics_process(0.99)
-	check(director._live.size() == 16, "one second replacement delay is retained")
+	var replacement_deadline: float = float(director._pending.front())
+	var until_replacement: float = replacement_deadline - director._clock
+	check(until_replacement > 0.0 and until_replacement <= Director.REPLACEMENT_SECONDS + 0.01,
+		"replacement delay follows the current Director pacing")
+	if until_replacement > 0.01:
+		director._physics_process(until_replacement - 0.01)
+	check(director._live.size() == 16, "replacement waits until its scheduled deadline")
 	await physics_frame
 	director._physics_process(0.02)
 	check(director.last_spawn_count <= 2 and director._live.size() <= 18, "simultaneous deaths cannot create an unbounded spawn frame")
