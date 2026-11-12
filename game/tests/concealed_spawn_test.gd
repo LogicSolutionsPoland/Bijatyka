@@ -608,6 +608,7 @@ func _test_population_and_replacements() -> void:
 		if director._live.size() == 20:
 			break
 	check(budgets_ok, "startup never exceeds shared query or spawn budget")
+	print("HORDE_STARTUP_DIAG live=%d pending=%d retry=%.2f sample=%d candidates=%d spawns=%d" % [director._live.size(), director._pending.size(), director._retry_time, director._sample_index, director.last_candidate_count, director.last_spawn_count])
 	check(director._live.size() == 20 and director._pending.is_empty(), "budgeted startup reaches all 20 ordinary zombies")
 	check(is_instance_valid(arena._boss_enemy), "existing boss remains separate from the horde cap")
 	if director._live.size() < 10:
@@ -628,6 +629,7 @@ func _test_population_and_replacements() -> void:
 		defeated.receive_hit(10000)
 		defeated._complete_death() # Advance the death animation deterministically for this spawn-director test.
 		arena._on_enemy_defeated(defeated) # Duplicate notifications are harmless.
+	print("HORDE_REPLACEMENT_DIAG live=%d pending=%d delay=%.2f clock=%.2f" % [director._live.size(), director._pending.size(), director.director_replacement_delay, director._clock])
 	check(director._live.size() == 16 and director._pending.size() == 4, "four deaths queue exactly four replacements")
 	var replacement_deadline: float = float(director._pending.front())
 	var until_replacement: float = replacement_deadline - director._clock
@@ -656,6 +658,7 @@ func _test_population_and_replacements() -> void:
 	arena.camera.global_position = arena.player.global_position + Vector3(0, 2.5, 4)
 	arena.camera.global_rotation = Vector3.ZERO
 	director._physics_process(1.1)
+	print("HORDE_EDGE_DIAG candidates=%d spawns=%d pending=%d live=%d" % [director.last_candidate_count, director.last_spawn_count, director._pending.size(), director._live.size()])
 	check(director.last_candidate_count == 8 and director.last_spawn_count == 0 and director._pending.size() == 1, "outward-facing edge defers instead of spawning behind or outside the map")
 	check(behind.transform == behind_transform and visible.transform == visible_transform, "edge recovery never moves an existing enemy")
 	arena.player.rotation.y = PI
