@@ -110,7 +110,12 @@ func _check_playback(enemy: FoundationEnemy) -> void:
 	enemy.global_position = Vector3.ZERO
 	victim.global_position = Vector3(0.0, 0.0, -enemy.attack_range * 0.80)
 	await physics_frame
-	# The animation test needs a durable victim; ordinary zombies have 1 HP.
+	# Use a durable attacker for nonlethal animation checks; ordinary zombies have 1 HP.
+	if not enemy.is_boss:
+		enemy.starting_health = 100
+		enemy.hp = 100
+		enemy._update_health_display()
+	# The victim also needs to survive the contact-damage assertion.
 	victim.starting_health = 100
 	victim.hp = 100
 	victim._update_health_display()
