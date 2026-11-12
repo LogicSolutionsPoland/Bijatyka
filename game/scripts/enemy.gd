@@ -248,7 +248,11 @@ func _choose_target() -> void:
 		return
 	# Spawn-rushing and alerted zombies stay committed through distance and cover.
 	# They pursue the player instead of switching to other zombies.
-	if combat_target == _player or _spawn_assault_time > 0.0 or global_position.distance_to(_player.global_position) <= 14.0:
+	var role := ""
+	if is_instance_valid(attack_director) and attack_director.has_method("formation_role_for"):
+		role = String(attack_director.call("formation_role_for", self))
+	var is_stream_member := role in ["crowd", "dark_stream"]
+	if combat_target == _player or _spawn_assault_time > 0.0 or global_position.distance_to(_player.global_position) <= 14.0 or is_stream_member:
 		combat_target = _player
 		if not _player_alert_shared:
 			_alert_nearby_allies()
@@ -348,6 +352,8 @@ func _ready() -> void:
 	collision_mask = 1 | 4
 	name = enemy_variant.capitalize()
 	_apply_variant()
+	if not is_boss:
+		starting_health = 1
 	hp = starting_health
 	_decision_time = randf_range(0.0, 0.45)
 	_wander_time = randf_range(0.1, 2.5)
@@ -996,7 +1002,7 @@ func _follow_local_formation(delta: float, distance: float) -> bool:
 	if is_boss or combat_target != _player or not is_instance_valid(attack_director) or not attack_director.has_method("is_local_formation_active") or not bool(attack_director.call("is_local_formation_active")):
 		return false
 	var role: String = String(attack_director.call("formation_role_for", self))
-	if role == "attacker":
+	if role == "attacker" or _spawn_assault_time > 0.0:
 		return false
 	if role.is_empty() and distance > 4.9:
 		return false

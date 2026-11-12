@@ -10,15 +10,14 @@ enum State { PRESSURE, SURGE, PEAK, FRENZY }
 const EVALUATION_SECONDS := 1.0
 const NEARBY_DISTANCE_SQUARED := 18.0 * 18.0
 const KILL_WINDOW_SECONDS := 6
-const LOCAL_RADIUS := 4.0
-const LOCAL_LIVING_LIMIT := 14
+const FORMATION_RADIUS := 18.0
+const LOCAL_LIVING_LIMIT := 20
 const ATTACKER_COUNT := 4
 const RESERVE_COUNT := 7
+const CROWD_COUNT := 4
+const DARK_STREAM_COUNT := 5
 const FORMATION_INTERVAL := 0.25
-const ADMISSION_RADIUS_SQUARED := 6.0 * 6.0
-const ATTACKER_RING_RADIUS := 1.55
-const RESERVE_RING_RADIUS := 3.1
-const PERIMETER_RING_RADIUS := 3.7
+const ADMISSION_RADIUS_SQUARED := 20.0 * 20.0
 const ROTATION_COOLDOWN := 1.25
 
 var player: FoundationPlayer
@@ -133,13 +132,17 @@ func _on_player_hit(_kind: String, _target: Node) -> void:
 	if active:
 		_quiet_seconds = 0.0
 
-func on_ordinary_defeated() -> void:
+func on_ordinary_defeated(reserved_replacements: int = 0) -> void:
 	if not active:
 		return
 	_formation_dirty = true
 	_kills[_kill_bucket] += 1
 	_quiet_seconds = 0.0
 	_refresh_formation()
+	var local_replacement := 1 if spawns._local_reinforcement_pending else 0
+	var missing_dark_arrivals := maxi(0, 2 - reserved_replacements - local_replacement)
+	if missing_dark_arrivals > 0:
+		spawns.rush_dark_arrivals(missing_dark_arrivals)
 	_evaluate(false)
 
 func _evaluate(advance_clock: bool = true) -> void:
@@ -297,27 +300,34 @@ func _refresh_formation() -> void:
 			break
 		attackers.append(entry.enemy)
 	var reserves: Array[FoundationEnemy] = []
-	var perimeter: Array[FoundationEnemy] = []
+	var crowd: Array[FoundationEnemy] = []
+	var dark_stream: Array[FoundationEnemy] = []
 	for entry in admitted:
 		var enemy: FoundationEnemy = entry.enemy
 		if attackers.has(enemy):
 			continue
 		if reserves.size() < RESERVE_COUNT:
 			reserves.append(enemy)
+		elif crowd.size() < CROWD_COUNT:
+			crowd.append(enemy)
 		else:
-			perimeter.append(enemy)
+			dark_stream.append(enemy)
 	var roles: Dictionary = {}
 	var targets: Dictionary = {}
 	var occupied: Array[Vector3] = []
-	_assign_ring(attackers, "attacker", ATTACKER_COUNT, ATTACKER_RING_RADIUS, forward, roles, targets, occupied)
-	_assign_ring(reserves, "reserve", RESERVE_COUNT, RESERVE_RING_RADIUS, forward, roles, targets, occupied)
-	_assign_ring(perimeter, "perimeter", 3, PERIMETER_RING_RADIUS, forward, roles, targets, occupied)
+	_assign_lane(attackers, "attacker", ATTACKER_COUNT, forward, roles, targets, occupied)
+	_assign_lane(reserves, "reserve", RESERVE_COUNT, forward, roles, targets, occupied)
+	_assign_lane(crowd, "crowd", CROWD_COUNT, forward, roles, targets, occupied)
+	_assign_lane(dark_stream, "dark_stream", DARK_STREAM_COUNT, forward, roles, targets, occupied)
 	var promoted_reserve := false
 	for enemy in attackers:
 		if spawns.formation_role_for(enemy) == "reserve":
 			promoted_reserve = true
 			break
 	spawns.set_local_formation(roles, targets)
+	for enemy in dark_stream:
+		if enemy._spawn_assault_time <= 0.0 and enemy.combat_target != player and enemy.state not in ["windup", "limb_grab_windup", "limb_hold", "hit", "recovery"]:
+			enemy.begin_spawn_assault(player)
 	local_living_count = roles.size()
 	attacker_role_count = 0
 	reserve_role_count = 0
@@ -326,7 +336,7 @@ func _refresh_formation() -> void:
 			attacker_role_count += 1
 		elif role == "reserve":
 			reserve_role_count += 1
-	var deficit := maxi(0, ATTACKER_COUNT + RESERVE_COUNT - attacker_role_count - reserve_role_count)
+	var deficit := maxi(0, LOCAL_LIVING_LIMIT - local_living_count)
 	if deficit != _last_requested_deficit:
 		_last_requested_deficit = deficit
 		if deficit > 0:
@@ -336,18 +346,42 @@ func _refresh_formation() -> void:
 		# The spawn owner coalesces requests while one is already pending.
 		local_reinforcement_requested.emit(1)
 
-func _assign_ring(members: Array[FoundationEnemy], role: String, slot_count: int,
-		radius: float, forward: Vector3, roles: Dictionary, targets: Dictionary,
+func _lane_offset(role: String, slot: int) -> Vector2:
+	match role:
+		"attacker":
+			var lateral: Array[float] = [-0.65, 0.65, -0.65, 0.65]
+			var depth: Array[float] = [1.55, 1.55, 2.80, 2.80]
+			return Vector2(lateral[slot], depth[slot])
+		"reserve":
+			if slot < 4:
+				var front_row: Array[float] = [-1.8, -0.6, 0.6, 1.8]
+				return Vector2(front_row[slot], 4.15)
+			var rear_row: Array[float] = [-1.2, 0.0, 1.2]
+			return Vector2(rear_row[slot - 4], 5.45)
+		"crowd":
+			var crowd_lateral: Array[float] = [-0.65, 0.65]
+			var phase := float(Time.get_ticks_msec()) * 0.001 * 0.8 + float(slot) * 1.6
+			var sway := sin(phase) * 0.22
+			return Vector2(crowd_lateral[slot % 2] + sway, 7.2 + float(floori(float(slot) / 2.0)) * 1.4)
+		"dark_stream":
+			var phase := float(Time.get_ticks_msec()) * 0.001 * 0.65 + float(slot) * 1.35
+			var lateral := 0.5 if slot % 2 == 0 else -0.5
+			return Vector2(lateral + sin(phase) * 0.28, 11.0 + float(slot) * 1.4 + cos(phase) * 0.12)
+	return Vector2.ZERO
+
+
+func _assign_lane(members: Array[FoundationEnemy], role: String, slot_count: int,
+		forward: Vector3, roles: Dictionary, targets: Dictionary,
 		occupied: Array[Vector3]) -> void:
 	if members.is_empty():
 		return
 	var available: Array[FoundationEnemy] = members.duplicate()
+	var right := forward.cross(Vector3.UP).normalized()
 	for slot in range(slot_count):
 		if available.is_empty():
 			break
-		# The three optional perimeter positions sit between reserve slots.
-		var angle := TAU * (float(slot * 2) + 0.5) / float(RESERVE_COUNT) if role == "perimeter" else TAU * float(slot) / float(slot_count)
-		var raw := player.global_position + forward.rotated(Vector3.UP, angle) * radius
+		var offset := _lane_offset(role, slot)
+		var raw := player.global_position + forward * offset.y + right * offset.x
 		var best_index := -1
 		var best_distance := INF
 		for index in range(available.size()):
@@ -359,11 +393,9 @@ func _assign_ring(members: Array[FoundationEnemy], role: String, slot_count: int
 			continue
 		var enemy := available[best_index]
 		var safe := Vector3.INF
-		# Bounded alternatives accommodate a nearby wall without pathfinding
-		# every physics frame or moving a living actor to a new position.
-		for angle_offset in [0.0, -0.16, 0.16]:
-			var candidate := player.global_position + forward.rotated(Vector3.UP, angle + angle_offset) * radius
-			safe = spawns.safe_formation_position(candidate, enemy, occupied, LOCAL_RADIUS)
+		for lateral_adjust in [0.0, -0.22, 0.22]:
+			var candidate := player.global_position + forward * offset.y + right * (offset.x + lateral_adjust)
+			safe = spawns.safe_formation_position(candidate, enemy, occupied, FORMATION_RADIUS)
 			if safe.is_finite():
 				break
 		if not safe.is_finite():

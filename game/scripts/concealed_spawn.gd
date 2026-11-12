@@ -31,13 +31,13 @@ const DORMANT_SLEEP_DISTANCE_SQUARED := 10.0 * 10.0
 const DORMANT_WAKE_DISTANCE_SQUARED := 5.0 * 5.0
 const DORMANT_SCAN_INTERVAL := 0.20
 const MAX_DORMANT_CHANGES_PER_SCAN := 2
-const FORWARD_HALF_ANGLE := deg_to_rad(80.0)
+const SPAWN_FORWARD_HALF_ANGLE := deg_to_rad(20.0)
 const RADIAL_SPREAD := 4.0
 const WORLD_LIMIT := 94.0
 const MIN_PLAYER_DISTANCE := 12.0
 const BASE_EXCLUSION_RADIUS := 7.5
-const INITIAL_SPAWN_MIN_DISTANCE := 36.0
-const INITIAL_SPAWN_MAX_DISTANCE := 64.0
+const INITIAL_SPAWN_MIN_DISTANCE := 13.0
+const INITIAL_SPAWN_MAX_DISTANCE := 17.0
 const RECENT_SPACING := 2.0
 const RECENT_SECONDS := 8.0
 # Includes outstretched arms and the health display, not just the physics capsule.
@@ -45,6 +45,7 @@ const VISUAL_EXTENTS := Vector3(1.5, 1.6, 1.5)
 
 var player: FoundationPlayer
 var camera: Camera3D
+var flashlight_visibility_manager: Node
 var population_limit := 4:
 	set(value):
 		population_limit = clampi(value, 0, MAX_ORDINARY_POPULATION)
@@ -79,6 +80,7 @@ var _prepared_local: Array[FoundationEnemy] = []
 var _local_pool_reservations := 0
 var _skip_preparation_through_frame := -1
 var _local_members: Dictionary = {}
+var _dark_rush_cooldowns: Dictionary = {}
 var _initial_horde_activated := false
 var _local_reinforcement_pending := false
 var _local_reinforcement_delay := 0.0
@@ -119,6 +121,7 @@ func store_upstairs_population(count: int) -> void:
 	_pending.clear()
 	_initial_population_pending = 0
 	_recent.clear()
+	_dark_rush_cooldowns.clear()
 	_retry_time = 0.0
 	_mobile_spawn_cooldown = 0.0
 	_stored_population.clear()
@@ -217,13 +220,14 @@ func register_enemy(enemy: FoundationEnemy) -> void:
 	enemy.attack_director = self
 	enemy.tree_exiting.connect(_on_removed.bind(id))
 
-func replace_enemy(enemy: FoundationEnemy) -> void:
-	if not enemy.is_boss:
-		_on_removed(enemy.get_instance_id(), 2)
+func replace_enemy(enemy: FoundationEnemy) -> int:
+	if enemy.is_boss:
+		return 0
+	return _on_removed(enemy.get_instance_id(), 2)
 
-func _on_removed(id: int, replacements: int = 1) -> void:
+func _on_removed(id: int, replacements: int = 1) -> int:
 	if not _live.has(id):
-		return
+		return 0
 	var enemy := _live[id] as FoundationEnemy
 	if is_instance_valid(enemy):
 		if enemy.state == "limb_hold":
@@ -234,17 +238,57 @@ func _on_removed(id: int, replacements: int = 1) -> void:
 	_attackers.erase(id)
 	_formation_roles.erase(id)
 	_formation_targets.erase(id)
+	_dark_rush_cooldowns.erase(id)
 	_live.erase(id)
 	var was_local := _local_members.erase(id)
 	if _ground_active and _local_reinforcement_pending and _prepared_local.is_empty() and _local_pool_reservations == 0 and _population_claims() < population_limit:
 		_local_pool_reservations = 1
 		set_process(true)
+	var queued_replacements := 0
 	if _ground_active and not was_local:
-		# Pending births reserve slots. A death at the cap therefore adds one;
-		# a death in the opening group can add both requested replacements.
+		# Pending births reserve slots, so a full population creates only into
+		# slots actually freed by the defeated actor.
 		var available := maxi(0, population_limit - _population_claims())
-		for index in range(mini(replacements, available)):
+		queued_replacements = mini(replacements, available)
+		for index in range(queued_replacements):
 			_queue_birth(_clock + director_replacement_delay)
+	return queued_replacements
+
+
+func rush_dark_arrivals(requested_count: int) -> int:
+	if requested_count <= 0 or not _ground_active or not is_instance_valid(player):
+		return 0
+	var candidates: Array[Dictionary] = []
+	for id in _live:
+		var enemy := _live[id] as FoundationEnemy
+		if not is_instance_valid(enemy) or enemy.is_queued_for_deletion() or enemy.hp <= 0:
+			continue
+		var role := formation_role_for(enemy)
+		if role not in ["dark_stream", "crowd"]:
+			continue
+		var distance := enemy.global_position.distance_to(player.global_position)
+		if distance < 10.5 or enemy._spawn_assault_time > 0.0:
+			continue
+		if enemy.state in ["dead", "windup", "limb_grab_windup", "limb_hold", "hit", "recovery"]:
+			continue
+		if float(_dark_rush_cooldowns.get(id, 0.0)) > _clock:
+			continue
+		if is_instance_valid(flashlight_visibility_manager) and flashlight_visibility_manager.has_method("is_world_position_visible") and bool(flashlight_visibility_manager.get("enabled")):
+			if bool(flashlight_visibility_manager.call("is_world_position_visible", enemy.global_position + Vector3.UP * 0.85)):
+				continue
+		candidates.append({"id": id, "enemy": enemy, "distance": distance})
+	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return float(a.distance) > float(b.distance)
+	)
+	var started := 0
+	for entry in candidates:
+		if started >= requested_count:
+			break
+		var enemy := entry.enemy as FoundationEnemy
+		if enemy.begin_spawn_assault(player):
+			_dark_rush_cooldowns[entry.id] = _clock + 2.0
+			started += 1
+	return started
 
 # No scene node, animator, AI or physics is retained for a dormant entry.
 # A living zombie returns to the SAME previously occupied offscreen position.
@@ -555,21 +599,17 @@ func _update_local_reinforcement(delta: float) -> void:
 		set_process(true)
 	if _local_reinforcement_delay > 0.0 or _prepared_local.is_empty():
 		return
-	var rear := -forward_direction()
-	var candidates: Array[Vector3] = [
-		rear * 3.65, rear.rotated(Vector3.UP, 0.4) * 3.65,
-		rear.rotated(Vector3.UP, -0.4) * 3.65,
-		rear.rotated(Vector3.UP, 0.8) * 3.65,
-		rear.rotated(Vector3.UP, -0.8) * 3.65,
-	]
-	var no_occupied: Array[Vector3] = []
-	for offset in candidates:
-		var point := _safe_local_birth_position(player.global_position + offset, player.global_position, no_occupied)
-		if point.is_finite():
-			_local_reinforcement_pending = false
-			_activate_prepared_local(point)
-			local_group_activated.emit()
-			return
+	for attempt in range(MAX_CANDIDATES_PER_TICK):
+		var point := _grounded_candidate(_sample_candidate())
+		if not point.is_finite() or not is_valid_spawn(point, true):
+			continue
+		_recent.append({"position": point, "time": _clock})
+		if _recent.size() > 64:
+			_recent.pop_front()
+		_local_reinforcement_pending = false
+		_activate_prepared_local(point)
+		local_group_activated.emit()
+		return
 	_local_reinforcement_delay = RETRY_SECONDS
 
 func set_local_formation(roles: Dictionary, targets: Dictionary) -> void:
@@ -777,25 +817,23 @@ func forward_direction() -> Vector3:
 func _sample_candidate() -> Vector3:
 	# Low discrepancy sampling spreads replacement waves across the forward arc.
 	_sample_index += 1
-	var angle := clampf(lerpf(-FORWARD_HALF_ANGLE, FORWARD_HALF_ANGLE, fmod(float(_sample_index) * 0.61803398875, 1.0)) + director_flank_bias, -FORWARD_HALF_ANGLE, FORWARD_HALF_ANGLE)
+	var angle := clampf(lerpf(-SPAWN_FORWARD_HALF_ANGLE, SPAWN_FORWARD_HALF_ANGLE, fmod(float(_sample_index) * 0.61803398875, 1.0)) + director_flank_bias, -SPAWN_FORWARD_HALF_ANGLE, SPAWN_FORWARD_HALF_ANGLE)
 	var radius := spawn_distance + lerpf(-RADIAL_SPREAD, RADIAL_SPREAD, fmod(float(_sample_index) * 0.41421356237, 1.0))
 	return player.global_position + forward_direction().rotated(Vector3.UP, angle) * radius
 
 func _sample_initial_candidate() -> Vector3:
-	# Start with a full 360-degree annulus so the opening invasion is already
-	# distributed around the arena. The default 36–64 m band stays concealed
-	# and within the zombie AI's 70 m active radius.
+	# Opening actors use the same narrow forward lane as reinforcements and begin
+	# just beyond the 10 m flashlight edge.
 	_initial_sample_index += 1
 	var index := float(_initial_sample_index)
-	var angle := TAU * fmod(index * 0.61803398875, 1.0)
-	var radial_fraction := fmod(index * 0.7548776662466927, 1.0)
-	var radius_squared := lerpf(
-		initial_spawn_min_distance * initial_spawn_min_distance,
-		initial_spawn_max_distance * initial_spawn_max_distance,
-		radial_fraction
+	var angle := lerpf(
+		-SPAWN_FORWARD_HALF_ANGLE,
+		SPAWN_FORWARD_HALF_ANGLE,
+		fmod(index * 0.61803398875, 1.0)
 	)
-	var radius := sqrt(radius_squared)
-	return player.global_position + Vector3(cos(angle) * radius, 0.0, sin(angle) * radius)
+	var radial_fraction := fmod(index * 0.7548776662466927, 1.0)
+	var radius := lerpf(initial_spawn_min_distance, initial_spawn_max_distance, radial_fraction)
+	return player.global_position + forward_direction().rotated(Vector3.UP, angle) * radius
 
 func _grounded_candidate(at: Vector3) -> Vector3:
 	if absf(at.x) > WORLD_LIMIT or absf(at.z) > WORLD_LIMIT:
@@ -814,7 +852,7 @@ func is_valid_spawn(at: Vector3, require_forward: bool = true) -> bool:
 	offset.y = 0.0
 	if offset.length() < MIN_PLAYER_DISTANCE:
 		return false
-	if require_forward and offset.normalized().dot(forward_direction()) < cos(FORWARD_HALF_ANGLE):
+	if require_forward and offset.normalized().dot(forward_direction()) < cos(SPAWN_FORWARD_HALF_ANGLE):
 		return false
 	var base_offset := at - player.safe_base_position
 	base_offset.y = 0.0
@@ -857,6 +895,11 @@ func is_concealed(at: Vector3) -> bool:
 	if not is_instance_valid(camera) or not camera.is_current():
 		return false
 	var center := at + Vector3.UP * VISUAL_EXTENTS.y
+	if is_instance_valid(flashlight_visibility_manager) and flashlight_visibility_manager.has_method("is_world_position_visible") and bool(flashlight_visibility_manager.get("enabled")):
+		# The blackout mask makes points outside the real 10 m beam fully dark,
+		# even when a nearby spawn lies inside the camera frustum.
+		if not bool(flashlight_visibility_manager.call("is_world_position_visible", center)):
+			return true
 	var radius := VISUAL_EXTENTS.length()
 	# The existing 30 m cull hides this whole envelope, regardless of camera yaw.
 	if center.distance_to(player.global_position) - radius > visibility_radius:

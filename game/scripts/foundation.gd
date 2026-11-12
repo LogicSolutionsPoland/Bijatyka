@@ -24,7 +24,7 @@ const GROUND_LOADING_COORDINATOR := preload("res://scripts/ground_loading_coordi
 const ZOMBIE_HORDE_SIZE := 4
 const GROUND_ZOMBIE_HORDE_SIZE := 20
 const ZOMBIE_PERFORMANCE_CAPACITY := 20
-const ZOMBIE_SPAWN_DISTANCE := 50.0
+const ZOMBIE_SPAWN_DISTANCE := 15.0
 const VISIBILITY_RADIUS := 30.0
 const COURTYARD_BATCH_CELL_SIZE := 12.0
 # Preserve the 1280x720 Android viewport and native-resolution touch HUD, but
@@ -792,6 +792,7 @@ func _spawn_enemies() -> void:
 	spawn_director.name = "ConcealedForwardSpawns"
 	spawn_director.player = player
 	spawn_director.camera = camera
+	spawn_director.flashlight_visibility_manager = flashlight_visibility_manager
 	spawn_director.population_limit = ZOMBIE_HORDE_SIZE
 	spawn_director.spawn_distance = ZOMBIE_SPAWN_DISTANCE
 	spawn_director.visibility_radius = VISIBILITY_RADIUS
@@ -852,7 +853,6 @@ func _activate_prepared_local_actor(enemy: FoundationEnemy, at: Vector3) -> void
 	enemy.process_mode = Node.PROCESS_MODE_INHERIT
 	enemy.set_physics_process(true)
 	enemy.begin_spawn_assault(player)
-	enemy._finish_spawn_assault()
 
 func _on_local_reinforcement_requested(missing: int) -> void:
 	spawn_director.request_local_reinforcement(missing, ai_director.local_living_count)
@@ -952,10 +952,10 @@ func _on_elevator_rider_arrived(floor: StringName) -> void:
 	_ground_wave_started = true
 	if not _performance_scenario.is_empty():
 		return
-	# Bring this new wave into the fight during its 4.5 s opening assault,
-	# while keeping every visual envelope outside the 30 m culling edge.
-	spawn_director.initial_spawn_min_distance = 34.0
-	spawn_director.initial_spawn_max_distance = 45.0
+	# The opening wave comes from beyond the 10 m flashlight edge. The blackout
+	# classifier keeps a spawn hidden until it enters the lit cone.
+	spawn_director.initial_spawn_min_distance = 13.0
+	spawn_director.initial_spawn_max_distance = 17.0
 	spawn_director.activate_ground_population(GROUND_ZOMBIE_HORDE_SIZE)
 	spawn_director.begin_local_pool_preparation()
 	ai_director.activate()
@@ -1041,9 +1041,9 @@ func _on_enemy_defeated(enemy: Node) -> void:
 		return
 	if is_instance_valid(spawn_director):
 		var was_registered: bool = spawn_director._live.has(enemy.get_instance_id())
-		spawn_director.replace_enemy(enemy)
+		var reserved_replacements := spawn_director.replace_enemy(enemy)
 		if was_registered and is_instance_valid(ai_director):
-			ai_director.on_ordinary_defeated()
+			ai_director.on_ordinary_defeated(reserved_replacements)
 
 func _update_boss_locator() -> void:
 	if hud == null or not is_instance_valid(_boss_enemy) or _boss_enemy.hp <= 0:
@@ -1271,8 +1271,8 @@ func _reset_ordinary_population() -> void:
 			enemy.queue_free()
 	spawn_director.store_upstairs_population(ZOMBIE_HORDE_SIZE)
 	horde_far_visuals.multimesh.visible_instance_count = 0
-	spawn_director.initial_spawn_min_distance = 34.0 if _ground_wave_started else CONCEALED_SPAWN.INITIAL_SPAWN_MIN_DISTANCE
-	spawn_director.initial_spawn_max_distance = 45.0 if _ground_wave_started else CONCEALED_SPAWN.INITIAL_SPAWN_MAX_DISTANCE
+	spawn_director.initial_spawn_min_distance = 13.0 if _ground_wave_started else CONCEALED_SPAWN.INITIAL_SPAWN_MIN_DISTANCE
+	spawn_director.initial_spawn_max_distance = 17.0 if _ground_wave_started else CONCEALED_SPAWN.INITIAL_SPAWN_MAX_DISTANCE
 	horde_far_visuals.visible = _ground_wave_started
 	horde_far_visuals.set_process(_ground_wave_started)
 	if _ground_wave_started:
