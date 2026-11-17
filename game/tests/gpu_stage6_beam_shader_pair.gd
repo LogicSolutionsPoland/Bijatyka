@@ -1,5 +1,5 @@
 extends SceneTree
-## Paired shader-only A/B for the beam sheet material on a frozen 30-slot scene.
+## Paired shader-only A/B for the beam sheet material on a frozen 20-slot scene.
 ## The Stage 5 shader remains in tests as the exact reference implementation.
 
 const SCENE := preload("res://scenes/foundation.tscn")
@@ -37,8 +37,8 @@ func _run() -> void:
 	game._set_rooftop_render_profile(false)
 	game._ground_map_ready = true
 	game._ground_wave_started = true
-	if not game.start_performance_scenario(30, "concentrated"):
-		_fail("Cannot start fixed 30-slot beam shader scene")
+	if not game.start_performance_scenario(20, "concentrated"):
+		_fail("Cannot start fixed 20-slot beam shader scene")
 		return
 	for frame in range(WARMUP_FRAMES):
 		await process_frame
@@ -55,7 +55,7 @@ func _run() -> void:
 	trial_material.shader = ZERO_ALPHA_TRIAL
 	var slots: int = game.spawn_director._live.size() + game.spawn_director._dormant_population.size() + \
 		game.spawn_director._pending.size() + game.spawn_director._initial_population_pending
-	_check(slots == 30, "fixed scene has exactly 30 reserved zombie slots")
+	_check(slots == 20, "fixed scene has exactly 20 reserved zombie slots")
 	_check(game._pencil_screen_pass.visible and manager._composite.visible,
 		"Stage 5 Pencil and visibility mask stay enabled")
 	_check(spotlight.visible and is_equal_approx(spotlight.light_energy, SPOTLIGHT_ENERGY),

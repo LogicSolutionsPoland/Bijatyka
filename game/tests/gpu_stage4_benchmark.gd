@@ -1,5 +1,5 @@
 extends SceneTree
-## Fixed 30-zombie ground scene. Headless timings are CPU/host scheduling only;
+## Fixed 20-zombie ground scene. Headless timings are CPU/host scheduling only;
 ## rendered desktop monitors, when available, are not Android GPU timings.
 
 const SCENE := preload("res://scenes/foundation.tscn")
@@ -40,8 +40,8 @@ func _run() -> void:
 			effect_mode in ["both", "mask"])
 	world._ground_map_ready = true
 	world._ground_wave_started = true
-	if not world.start_performance_scenario(30, "concentrated"):
-		push_error("Cannot start the fixed 30-zombie scenario")
+	if not world.start_performance_scenario(20, "concentrated"):
+		push_error("Cannot start the fixed 20-zombie scenario")
 		quit(1)
 		return
 	var initial_population: int = world.spawn_director.ordinary_population_count()
@@ -72,11 +72,11 @@ func _run() -> void:
 			ordinary += 1
 	# A zombie killed during the sample can spend a few frames in its death
 	# animation or the concealed replacement queue. Both retain a reserved
-	# population slot, even though the count of living scene actors is 29.
+	# population slot, even though the count of living scene actors is 19.
 	var slots: int = world.spawn_director._live.size() + world.spawn_director._dormant_population.size() + \
 		world.spawn_director._pending.size() + world.spawn_director._initial_population_pending
 	var report := {
-		"scenario": "ground_concentrated_30", "samples": SAMPLE_FRAMES,
+		"scenario": "ground_concentrated_20", "samples": SAMPLE_FRAMES,
 		"ordinary_zombies": ordinary, "initial_zombies": initial_population,
 		"reserved_population_slots": slots,
 		"headless_wall_ms_avg": _avg(wall_samples), "headless_wall_ms_p95": _p95(wall_samples),
@@ -95,12 +95,12 @@ func _run() -> void:
 		report["fps_cap"] = Engine.max_fps
 		report["floor_skip_enabled"] = world._floor_material.get_shader_parameter("floor_skip_enabled")
 		print("STAGE5_EFFECT_SAMPLE " + JSON.stringify(report))
-	if initial_population != 30 or slots != 30 or ordinary > 30 or \
+	if initial_population != 20 or slots != 20 or ordinary > 20 or \
 		world.horde_far_visuals.get_resident_rig_count() > 7:
 		push_error("Population or rig budget changed during the benchmark")
 		quit(1)
 		return
-	print("PASS: Stage 4 fixed 30-zombie benchmark")
+	print("PASS: Stage 4 fixed 20-zombie benchmark")
 	world.queue_free()
 	await process_frame
 	quit(0)

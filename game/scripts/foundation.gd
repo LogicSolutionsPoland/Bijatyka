@@ -8,23 +8,27 @@ const PLAYER_SCENE := preload("res://scenes/player.tscn")
 const PLAYER_SCRIPT := preload("res://scripts/player_controller.gd")
 const ENEMY_SCRIPT := preload("res://scripts/enemy.gd")
 const CONCEALED_SPAWN := preload("res://scripts/concealed_spawn.gd")
+const AI_DIRECTOR := preload("res://scripts/ai_director.gd")
 const HORDE_FAR_VISUALS := preload("res://scripts/horde_far_visuals.gd")
 const PERFORMANCE_DIAGNOSTICS := preload("res://scripts/performance_diagnostics.gd")
 const COMBAT_FX_POOL := preload("res://scripts/combat_fx_pool.gd")
 const HUD_SCRIPT := preload("res://scripts/mobile_hud.gd")
 const SHADOW_POLICY := preload("res://scripts/shadow_policy.gd")
 const FLASHLIGHT_VISIBILITY := preload("res://scripts/flashlight_visibility.gd")
-const PENCIL := preload("res://scripts/pencil.gd")
 const RADIAL_GROUND_SHADER := preload("res://shaders/radial_ground.gdshader")
 const RUIN_SURFACE_SHADER := preload("res://shaders/ruined_surface.gdshader")
 const ARENA_MAP_SCRIPT := preload("res://scripts/arena_map_upgrade.gd")
 const STARTING_TOWER := preload("res://scripts/starting_tower.gd")
 const GROUND_LOADING_COORDINATOR := preload("res://scripts/ground_loading_coordinator.gd")
 const ZOMBIE_HORDE_SIZE := 4
-const GROUND_ZOMBIE_HORDE_SIZE := 30
-const ZOMBIE_PERFORMANCE_CAPACITY := 200
+const GROUND_ZOMBIE_HORDE_SIZE := 20
+const ZOMBIE_PERFORMANCE_CAPACITY := 20
 const ZOMBIE_SPAWN_DISTANCE := 50.0
 const VISIBILITY_RADIUS := 30.0
+const INDEPENDENT_VISIBILITY_GROUPS := [
+	&"distant_backdrop", &"nature_scenery_batch", &"flashlight_beam",
+	&"pencil_screen_pass", &"flashlight_visibility_composite"
+]
 const COURTYARD_BATCH_CELL_SIZE := 12.0
 # Preserve the 1280x720 Android viewport and native-resolution touch HUD, but
 # render the 3D scene at 40% linear resolution to reduce mobile GPU workload.
@@ -44,17 +48,17 @@ const ROOFTOP_SKY_MIN_HEIGHT := StartingTower.HEIGHT - 1.0
 # large at screen-left with combat clear ahead. The rooftop photo gets its own
 # wider, elevated camera profile so the zombie-filled city clears the parapet.
 # Height is measured above the player's ground origin, not added to an existing camera offset.
-const CAMERA_PIVOT_HEIGHT := 1.20
-const CAMERA_FOLLOW_DISTANCE := 2.5
+const CAMERA_PIVOT_HEIGHT := 1.42
+const CAMERA_FOLLOW_DISTANCE := 3.4
+const CAMERA_FOLLOW_RESPONSE := 8.0
+const CAMERA_MOUNT_VERTICAL_OFFSET := 0.12
 const ROOFTOP_CAMERA_PIVOT_LIFT := 1.0
 const ROOFTOP_CAMERA_FOLLOW_DISTANCE := 5.0
 const ROOFTOP_CAMERA_PITCH_BIAS_DEGREES := 10.0
 const ROOFTOP_CAMERA_BLEND_SPEED := 3.0
-const CAMERA_TARGET_SCREEN_X := 0.35
+const CAMERA_TARGET_SCREEN_X := 0.41
 const CAMERA_VERTICAL_FOV := 66.0
-const CAMERA_PITCH_DEGREES := -16.0
-const CAMERA_YAW_RADIANS_PER_PIXEL := 0.006
-const CAMERA_PITCH_RADIANS_PER_PIXEL := 0.004
+const CAMERA_PITCH_DEGREES := -13.0
 const GAMEPAD_LOOK_DEADZONE := 0.12
 const CAMERA_GAMEPAD_YAW_RADIANS_PER_SECOND := 2.4
 const CAMERA_GAMEPAD_PITCH_RADIANS_PER_SECOND := 1.8
@@ -76,7 +80,7 @@ var _status_timer := 0.0
 var _pending_notice := ""
 var _visibility_timer := 0.0
 var _floor_material: ShaderMaterial
-var _floor_skip_enabled := true
+var _floor_skip_enabled := false
 var _pencil_comparison_visible := true
 var _floor_fast_detail_enabled := false
 var _local_lights_enabled := true
@@ -97,16 +101,30 @@ var _environment: Environment
 var _ground_sky: Sky
 var _rooftop_city_sky: Sky
 var _rooftop_sky_active := false
-var _pencil_screen_pass: MeshInstance3D
 var arena_map: Node3D
 var starting_tower: StartingTower
 var game_music_player: AudioStreamPlayer
 var spawn_director: Node3D
+var ai_director: BijatykaAIDirector
 var horde_far_visuals: HordeFarVisuals
 var performance_diagnostics: FoundationPerformanceDiagnostics
 var combat_fx_pool: FoundationCombatFxPool
 var _performance_scenario := ""
 var _spawn_blockers: Array[AABB] = []
+
+enum DistanceVisibility { POSITION, LOCAL_LIGHT, FLOOR, COURTYARD_BATCH, CITY_BATCH }
+var _new_distance_visuals: Dictionary[Node3D, bool] = {}
+var _distance_visuals: Dictionary[Node3D, DistanceVisibility] = {}
+
+func _enter_tree() -> void:
+	get_tree().node_added.connect(_on_distance_node_added)
+	get_tree().node_removed.connect(_on_distance_node_removed)
+
+func _exit_tree() -> void:
+	get_tree().node_added.disconnect(_on_distance_node_added)
+	get_tree().node_removed.disconnect(_on_distance_node_removed)
+	_new_distance_visuals.clear()
+	_distance_visuals.clear()
 
 func _ready() -> void:
 	# Disable the global graphite material converter before any rooftop meshes
@@ -114,6 +132,7 @@ func _ready() -> void:
 	var style_manager := get_tree().root.get_node_or_null("PencilSketchStyle")
 	if style_manager != null:
 		style_manager.set_gameplay_pencil_enabled(false)
+		style_manager.call("set_character_only", true)
 	if OS.has_feature("mobile"):
 		Engine.max_fps = MOBILE_FPS_LIMIT
 		get_viewport().scaling_3d_scale = MOBILE_3D_RENDER_SCALE
@@ -127,6 +146,11 @@ func _ready() -> void:
 	arena_map = ARENA_MAP_SCRIPT.new() as Node3D
 	arena_map.name = "AshenQuarantineMap"
 	add_child(arena_map)
+	# Reserve solid wrecks and building cores before the spawn director starts.
+	# These shapes share the road map's world transform and reject births inside cover.
+	var city_obstacle_bounds: Array[AABB] = arena_map.get("collision_bounds")
+	for local_bounds in city_obstacle_bounds:
+		_spawn_blockers.append(arena_map.global_transform * local_bounds)
 	# The map is already built in this scene. Keep its visual batches dormant
 	# on the roof and reveal the same instances over the downward ride.
 	for child in arena_map.get_children():
@@ -164,27 +188,6 @@ func _ready() -> void:
 	_spawn_enemies()
 	_setup_performance_diagnostics()
 	_update_distance_visibility()
-	# Convert lit mesh materials, then draw the graphite pass before the
-	# flashlight's priority-126 black mask.
-	# Leave rooftop materials unstyled. Pencil conversion starts during descent.
-	var pencil_screen := PENCIL.add_screen_pass(camera)
-	pencil_screen.set_shader_parameter(&"line_color", Color(0.075, 0.075, 0.10))
-	pencil_screen.set_shader_parameter(&"line_width", 1.7)
-	pencil_screen.set_shader_parameter(&"depth_threshold", 0.015)
-	pencil_screen.set_shader_parameter(&"crease_threshold", 0.25)
-	pencil_screen.set_shader_parameter(&"creases", 0.60)
-	pencil_screen.set_shader_parameter(&"wobble", 1.2)
-	pencil_screen.set_shader_parameter(&"line_roughness", 0.22)
-	pencil_screen.set_shader_parameter(&"fade_start", 19.0)
-	pencil_screen.set_shader_parameter(&"fade_end", 34.0)
-	pencil_screen.set_shader_parameter(&"saturation", 0.24)
-	pencil_screen.set_shader_parameter(&"contrast", 1.12)
-	pencil_screen.set_shader_parameter(&"paper_color", Color(0.91, 0.90, 0.86))
-	pencil_screen.set_shader_parameter(&"paper_amount", 0.36)
-	pencil_screen.set_shader_parameter(&"edge_fade", 0.0)
-	_pencil_screen_pass = camera.get_node_or_null("PencilScreenPass") as MeshInstance3D
-	if is_instance_valid(_pencil_screen_pass):
-		_pencil_screen_pass.visible = not _rooftop_sky_active and _pencil_comparison_visible
 	_floor_material.set_shader_parameter("player_position", player.global_position)
 	_floor_material.set_shader_parameter("flashlight_forward", flashlight_visibility_manager.aim_direction)
 	SHADOW_POLICY.disable_in_tree(self)
@@ -219,12 +222,13 @@ func _process(delta: float) -> void:
 		delta * ROOFTOP_CAMERA_BLEND_SPEED
 	)
 	var target_position := player.global_position + Vector3.UP * _camera_pivot_height()
-	camera_rig.global_position = camera_rig.global_position.lerp(target_position, 1.0 - exp(-delta * 7.5))
+	camera_rig.global_position = camera_rig.global_position.lerp(target_position, 1.0 - exp(-delta * CAMERA_FOLLOW_RESPONSE))
 	camera_arm.spring_length = _camera_follow_distance()
 	camera_arm.rotation.x = _effective_camera_pitch()
 	_update_camera_framing()
 	_update_gamepad_camera(delta)
-	if not _ground_loading_coordinator.is_active() and Input.is_action_just_pressed("interact_elevator"):
+	var aura_selection_open := hud != null and hud._selection_panel != null
+	if not _ground_loading_coordinator.is_active() and not aura_selection_open and Input.is_action_just_pressed("interact_elevator"):
 		_on_elevator_requested()
 	if hud != null and is_instance_valid(starting_tower) and is_instance_valid(starting_tower.elevator):
 		hud.set_elevator_prompt(starting_tower.elevator.get_prompt_for_player(player))
@@ -245,8 +249,8 @@ func _process(delta: float) -> void:
 		_floor_material.set_shader_parameter("flashlight_forward", flashlight_visibility_manager.aim_direction)
 
 # The physical parapet stops regular movement. Confinement also catches
-# unusual aerial dashes or physics tunnelling; never move a grounded player
-# upward each tick, so normal floor contact and jumping keep working.
+# aerial jumps that escape the rooftop boundary or physics tunnelling; never
+# move a grounded player upward each tick, so normal floor contact keeps working.
 func _physics_process(_delta: float) -> void:
 	_enforce_rooftop_boundary()
 
@@ -290,8 +294,8 @@ func _build_environment() -> void:
 	_rooftop_city_sky.sky_material = city_material
 	_rooftop_city_sky.process_mode = Sky.PROCESS_MODE_QUALITY
 	# The photo fills the lower field of view from the rooftop while the
-	# existing procedural sky continues overhead. The flashlight still
-	# blacks out the ground-level sky; the world sky is unobscured on the roof.
+	# existing procedural sky continues overhead. Ground and rooftop sky
+	# visibility is no longer altered by a fullscreen flashlight overlay.
 	environment.background_mode = Environment.BG_SKY
 	environment.sky = _ground_sky
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
@@ -336,18 +340,31 @@ func _set_rooftop_render_profile(on_roof: bool) -> void:
 	_rooftop_sky_active = on_roof
 	_rooftop_camera_target = 1.0 if on_roof else 0.0
 	_environment.sky = _rooftop_city_sky if on_roof else _ground_sky
-	# Keep the original four-panel Burning Horizon for ground-level play.
+	# The 10 m circular Zombie Fog Horizon is ground-only and stays independent of cached culling.
 	burning_horizon.visible = not on_roof
 	flashlight_visibility_manager.set_rooftop_sky_visible(on_roof)
-	if is_instance_valid(_pencil_screen_pass):
-		_pencil_screen_pass.visible = not on_roof and _pencil_comparison_visible
+	if flashlight_visibility_enabled:
+		# A warm side light picks out shoulders and faces against cool shadow.
+		# The existing key and ambient fill require no additional light passes.
+		_environment.ambient_light_color = Color(0.80, 0.85, 0.93) if on_roof else Color(0.62, 0.72, 0.84)
+		_environment.ambient_light_energy = 0.72 if on_roof else 0.52
+		_key_light.light_color = Color(1.0, 0.82, 0.65) if on_roof else Color(1.0, 0.89, 0.76)
+		_key_light.light_energy = 1.08 if on_roof else 1.12
+		_key_light.rotation_degrees = Vector3(-27.0, -148.0, 0.0) if on_roof else Vector3(-39.0, -34.0, 0.0)
+	_sync_pencil_style()
+
+
+func _sync_pencil_style() -> void:
+	var enabled := not _rooftop_sky_active and _pencil_comparison_visible
 	var style_manager := get_tree().root.get_node_or_null("PencilSketchStyle")
 	if style_manager != null:
-		style_manager.set_gameplay_pencil_enabled(not on_roof)
+		style_manager.set_gameplay_pencil_enabled(enabled)
 
 
 func _restore_rooftop_map() -> void:
 	# Cancels any partial descent, including a respawn while the car is moving.
+	if is_instance_valid(player):
+		player.cancel_limb_grab()
 	_ground_map_preparing = false
 	_ground_map_ready = false
 	for visual in _ground_map_visuals:
@@ -382,7 +399,7 @@ func _build_arena() -> void:
 	_floor_material.shader = RADIAL_GROUND_SHADER
 	_floor_material.set_shader_parameter("floor_color", Color(0.105, 0.118, 0.135))
 	_floor_material.set_shader_parameter("player_position", Vector3.ZERO)
-	_floor_material.set_shader_parameter("floor_skip_enabled", flashlight_visibility_enabled)
+	_floor_material.set_shader_parameter("floor_skip_enabled", false)
 	_floor_material.set_shader_parameter("floor_fast_detail", _floor_fast_detail_enabled)
 	floor.material_override = _floor_material
 	floor.add_to_group("radial_floor")
@@ -702,8 +719,9 @@ func _update_camera_framing() -> void:
 		return
 	var aspect := viewport_size.x / viewport_size.y
 	var half_horizontal_fov := atan(tan(deg_to_rad(CAMERA_VERTICAL_FOV * 0.5)) * aspect)
-	# Camera-space shoulder framing keeps the player in the lower-left reference
-	# region without shifting the player model away from the protected base.
+	# Move the spring-arm mount to shoulder height and keep the player slightly
+	# left of center so the jump direction and nearby landing area stay visible.
+	camera_arm.position.y = CAMERA_MOUNT_VERTICAL_OFFSET
 	camera_arm.position.x = (0.5 - CAMERA_TARGET_SCREEN_X) * 2.0 * _camera_follow_distance() * tan(half_horizontal_fov)
 
 func _camera_pivot_height() -> float:
@@ -721,18 +739,15 @@ func _effective_camera_pitch() -> float:
 
 func _build_hud() -> void:
 	hud = HUD_SCRIPT.new() as FoundationHUD
-	hud.name = "MobileCombatHUD"
+	hud.name = "GamepadCombatHUD"
 	hud.action_requested.connect(_on_hud_action)
-	hud.elevator_requested.connect(_on_elevator_requested)
 	hud.aura_chosen.connect(_on_aura_chosen)
-	hud.camera_dragged.connect(_on_camera_dragged)
+	player.limb_grab_windup.connect(hud.show_limb_grab_windup)
+	player.limb_grab_ended.connect(hud.hide_limb_grab)
+	player.grab_qte_started.connect(hud.begin_grab_qte)
+	player.grab_qte_progress.connect(hud.update_grab_qte)
+	player.grab_qte_finished.connect(hud.finish_grab_qte)
 	add_child(hud)
-
-func _on_camera_dragged(relative: Vector2) -> void:
-	_apply_camera_look(
-		-relative.x * CAMERA_YAW_RADIANS_PER_PIXEL,
-		-relative.y * CAMERA_PITCH_RADIANS_PER_PIXEL
-	)
 
 func _update_gamepad_camera(delta: float) -> void:
 	if get_tree().paused or (hud != null and hud._selection_panel != null):
@@ -777,16 +792,64 @@ func _spawn_enemies() -> void:
 	spawn_director.blocked_boxes = _spawn_blockers
 	spawn_director.spawn_requested.connect(_spawn_assault_zombie)
 	spawn_director.dormant_enemy_wake_requested.connect(_wake_dormant_zombie)
+	spawn_director.prepared_local_actor_requested.connect(_prepare_local_actor)
+	spawn_director.prepared_local_actor_activated.connect(_activate_prepared_local_actor)
+	if not player.parabolic_jump_started.is_connected(spawn_director.on_parabolic_jump_started):
+		player.parabolic_jump_started.connect(spawn_director.on_parabolic_jump_started)
+	if not player.parabolic_jump_landed.is_connected(spawn_director.on_parabolic_jump_landed):
+		player.parabolic_jump_landed.connect(spawn_director.on_parabolic_jump_landed)
 	add_child(spawn_director)
 	horde_far_visuals.dormant_source = spawn_director
 	# The four upstairs entries are data only; no ordinary enemy actors exist.
 	spawn_director.store_upstairs_population(ZOMBIE_HORDE_SIZE)
+	ai_director = AI_DIRECTOR.new() as BijatykaAIDirector
+	ai_director.name = "LocalAIDirector"
+	ai_director.configure(player, spawn_director)
+	ai_director.local_reinforcement_requested.connect(_on_local_reinforcement_requested)
+	spawn_director.local_group_activated.connect(ai_director._refresh_formation)
+	add_child(ai_director)
 	horde_far_visuals.visible = false
 	horde_far_visuals.set_process(false)
 	horde_far_visuals.multimesh.visible_instance_count = 0
 	# Keep one boss in the original arena; the HUD locator can point to it when
 	# the player moves beyond the 30 m render radius.
 	_spawn_enemy("boss", Vector3(0.6, 0.05, -16.2), true)
+	ai_director.boss = _boss_enemy
+
+func _prepare_local_actor() -> void:
+	# This runs once per frame during the elevator preparation. It never runs
+	# from the landing callback, and prepared actors have no physics or rig.
+	var enemy := _spawn_enemy("shambler", Vector3(0.0, -1000.0, 0.0))
+	enemy.visible = false
+	enemy.remove_from_group("enemies")
+	enemy.collision_layer = 0
+	enemy.collision_mask = 0
+	enemy.set_physics_process(false)
+	enemy.process_mode = Node.PROCESS_MODE_DISABLED
+	spawn_director.register_prepared_local_enemy(enemy)
+	horde_far_visuals.prewarm_one_rig(enemy)
+
+func _activate_prepared_local_actor(enemy: FoundationEnemy, at: Vector3) -> void:
+	if not is_instance_valid(enemy):
+		return
+	enemy.global_position = at
+	enemy.collision_layer = 2
+	enemy.collision_mask = 1 | 4
+	spawn_director.register_enemy(enemy)
+	if not spawn_director._live.has(enemy.get_instance_id()):
+		enemy.collision_layer = 0
+		enemy.collision_mask = 0
+		return
+	horde_far_visuals.register_enemy(enemy)
+	enemy.add_to_group("enemies")
+	enemy.visible = true
+	enemy.process_mode = Node.PROCESS_MODE_INHERIT
+	enemy.set_physics_process(true)
+	enemy.begin_spawn_assault(player)
+	enemy._finish_spawn_assault()
+
+func _on_local_reinforcement_requested(missing: int) -> void:
+	spawn_director.request_local_reinforcement(missing, ai_director.local_living_count)
 
 func _spawn_assault_zombie(at: Vector3) -> void:
 	var is_visual_sample := not _high_detail_zombie_sample_assigned
@@ -840,6 +903,7 @@ func _on_elevator_requested() -> void:
 func _on_elevator_called(destination_floor: StringName) -> void:
 	# CALL LIFT with an empty car is the earliest useful preparation event.
 	if destination_floor == &"roof" and player.global_position.y >= ROOFTOP_SKY_MIN_HEIGHT:
+		spawn_director.begin_local_pool_preparation()
 		_ground_loading_coordinator.start_call()
 
 
@@ -849,6 +913,8 @@ func _on_elevator_call_arrived(destination_floor: StringName) -> void:
 
 
 func _on_elevator_ride_started(destination_floor: StringName) -> void:
+	player.cancel_limb_grab()
+	player.cancel_melee_lunge()
 	# The car is closed and the rider is inside before this signal is emitted.
 	# Keep the camera inside the enclosure throughout the reveal sequence.
 	camera_rig.global_position = player.global_position + Vector3.UP * CAMERA_PIVOT_HEIGHT
@@ -860,6 +926,9 @@ func _on_elevator_ride_started(destination_floor: StringName) -> void:
 		if _ground_wave_started:
 			_deactivate_ground_population()
 		return
+	if destination_floor == &"ground":
+		# Preparation must begin even if the map was already staged on the call.
+		spawn_director.begin_local_pool_preparation()
 	if destination_floor != &"ground" or _ground_map_preparing or _ground_map_ready:
 		return
 	_ground_loading_coordinator.start_descent()
@@ -883,6 +952,8 @@ func _on_elevator_rider_arrived(floor: StringName) -> void:
 	spawn_director.initial_spawn_min_distance = 34.0
 	spawn_director.initial_spawn_max_distance = 45.0
 	spawn_director.activate_ground_population(GROUND_ZOMBIE_HORDE_SIZE)
+	spawn_director.begin_local_pool_preparation()
+	ai_director.activate()
 	horde_far_visuals.visible = true
 	horde_far_visuals.set_process(true)
 
@@ -904,6 +975,10 @@ func _on_player_respawned() -> void:
 	_deactivate_ground_population()
 
 func _deactivate_ground_population() -> void:
+	if is_instance_valid(player):
+		player.cancel_limb_grab()
+	if is_instance_valid(ai_director):
+		ai_director.deactivate()
 	_ground_wave_started = false
 	_performance_scenario = ""
 	_reset_ordinary_population()
@@ -919,10 +994,11 @@ func _on_hud_action(action: String) -> void:
 	match action:
 		"punch_left": player.request_attack("punch", "left")
 		"punch_right": player.request_attack("punch", "right")
-		"kick_left": player.request_attack("kick", "left")
-		"kick_right": player.request_attack("kick", "right")
+		"magic_left": player.cast_spell_slot(0)
+		"magic_right": player.cast_spell_slot(1 if player.rage.unlocked_spells.size() > 1 else 0)
 		"jump": player.try_jump()
-		"dash": player.try_dash()
+		"jump_forward": player.try_parabolic_jump()
+		"escape_limb_grab": player.try_escape_limb_grab()
 		"cast_spell": player.cast_spell()
 		"blast": player.cast_blast()
 		"spell_0", "spell_1", "spell_2", "spell_3": player.cast_spell_slot(int(action.get_slice("_", 1)))
@@ -959,7 +1035,10 @@ func _on_enemy_defeated(enemy: Node) -> void:
 		hud.hide_boss_marker()
 		return
 	if is_instance_valid(spawn_director):
+		var was_registered: bool = spawn_director._live.has(enemy.get_instance_id())
 		spawn_director.replace_enemy(enemy)
+		if was_registered and is_instance_valid(ai_director):
+			ai_director.on_ordinary_defeated()
 
 func _update_boss_locator() -> void:
 	if hud == null or not is_instance_valid(_boss_enemy) or _boss_enemy.hp <= 0:
@@ -969,15 +1048,86 @@ func _update_boss_locator() -> void:
 	var target := _boss_enemy.global_position + Vector3(0.0, 2.8, 0.0)
 	hud.update_boss_marker(camera.unproject_position(target), player.global_position.distance_to(_boss_enemy.global_position), camera.is_position_behind(target))
 
+func _on_distance_node_added(node: Node) -> void:
+	if node is GeometryInstance3D or node is OmniLight3D or node is SpotLight3D:
+		if is_ancestor_of(node):
+			# Wait until _ready has assigned groups to the visual and its parents.
+			_new_distance_visuals[node as Node3D] = true
+
+func _on_distance_node_removed(node: Node) -> void:
+	if node is Node3D:
+		_new_distance_visuals.erase(node)
+		_distance_visuals.erase(node)
+
+func _register_distance_visual(visual: Node3D) -> void:
+	var ancestor: Node = visual
+	while ancestor != self:
+		if ancestor is FoundationEnemy or ancestor is HordeFarVisuals:
+			return
+		for group in INDEPENDENT_VISIBILITY_GROUPS:
+			if ancestor.is_in_group(group):
+				return
+		if ancestor != visual and ancestor is MultiMeshInstance3D and ancestor.is_in_group(&"static_map_batch"):
+			return
+		ancestor = ancestor.get_parent()
+	var kind := DistanceVisibility.POSITION
+	if visual is MultiMeshInstance3D and visual.is_in_group(&"static_map_batch"):
+		kind = DistanceVisibility.CITY_BATCH
+	elif visual.is_in_group(&"radial_floor"):
+		kind = DistanceVisibility.FLOOR
+	elif visual is MultiMeshInstance3D and visual.is_in_group(&"courtyard_static_batch"):
+		kind = DistanceVisibility.COURTYARD_BATCH
+	elif visual is OmniLight3D or visual is SpotLight3D:
+		kind = DistanceVisibility.LOCAL_LIGHT
+	_distance_visuals[visual] = kind
+
 func _update_distance_visibility() -> void:
 	if player == null:
 		return
-	_apply_distance_visibility(self)
+	for visual in _new_distance_visuals:
+		_register_distance_visual(visual)
+	_new_distance_visuals.clear()
+	var at := player.global_position
+	# During roof and elevator preparation the loading coordinator owns city cells.
+	var cull_city := _ground_map_ready and not _ground_map_preparing and not _rooftop_sky_active
+	for visual in _distance_visuals:
+		var kind := _distance_visuals[visual]
+		var in_range := true
+		match kind:
+			DistanceVisibility.CITY_BATCH, DistanceVisibility.COURTYARD_BATCH:
+				if kind == DistanceVisibility.CITY_BATCH and not cull_city:
+					continue
+				var batch := visual as MultiMeshInstance3D
+				var bounds := batch.global_transform * batch.custom_aabb
+				var nearest := at.clamp(bounds.position, bounds.end)
+				var radius := VISIBILITY_RADIUS + 3.0 if kind == DistanceVisibility.CITY_BATCH else VISIBILITY_RADIUS
+				in_range = at.distance_squared_to(nearest) <= radius * radius
+			DistanceVisibility.POSITION, DistanceVisibility.LOCAL_LIGHT:
+				in_range = (kind != DistanceVisibility.LOCAL_LIGHT or _local_lights_enabled) \
+					and at.distance_squared_to(visual.global_position) <= VISIBILITY_RADIUS * VISIBILITY_RADIUS
+		if visual.visible != in_range:
+			visual.visible = in_range
 
+# Compatibility helper for legacy test fixtures only. Production uses the cached registry.
 func _apply_distance_visibility(node: Node) -> void:
 	# Enemy rigs own their 18/30 m bands; walking every bone and mesh every
-	# 120 ms scales with the full 200-zombie population.
-	if node is FoundationEnemy or node == horde_far_visuals or node.is_in_group("distant_backdrop") or node.is_in_group("static_map_batch") or node.is_in_group("nature_scenery_batch") or node.is_in_group("flashlight_beam") or node.is_in_group("pencil_screen_pass") or node.is_in_group("flashlight_visibility_composite"):
+	# Keep the existing visibility cadence for the full ground population.
+	if node is FoundationEnemy or node == horde_far_visuals or node.is_in_group("distant_backdrop") or node.is_in_group("nature_scenery_batch") or node.is_in_group("flashlight_beam") or node.is_in_group("pencil_screen_pass") or node.is_in_group("flashlight_visibility_composite"):
+		return
+	if node is MultiMeshInstance3D and node.is_in_group("static_map_batch"):
+		# The loading coordinator owns visibility during elevator preparation.
+		# Once downstairs, skip distant cells before local scene rendering.
+		if _ground_map_ready and not _ground_map_preparing and not _rooftop_sky_active:
+			var city_cell := node as MultiMeshInstance3D
+			var bounds := city_cell.global_transform * city_cell.custom_aabb
+			var nearest := Vector3(
+				clampf(player.global_position.x, bounds.position.x, bounds.end.x),
+				clampf(player.global_position.y, bounds.position.y, bounds.end.y),
+				clampf(player.global_position.z, bounds.position.z, bounds.end.z)
+			)
+			var within_view := nearest.distance_squared_to(player.global_position) <= (VISIBILITY_RADIUS + 3.0) * (VISIBILITY_RADIUS + 3.0)
+			if city_cell.visible != within_view:
+				city_cell.visible = within_view
 		return
 	# Do not resend an unchanged visibility state to the RenderingServer every
 	# 120 ms. This applies to no-shadow local lights and ordinary map meshes;
@@ -1065,14 +1215,13 @@ func _set_debug_render_scale(scale: float) -> void:
 
 func _set_debug_mask_visible(is_visible: bool) -> void:
 	if OS.is_debug_build() and flashlight_visibility_manager != null:
-		# Leave the floor shader fixed for a one-pass A/B measurement.
+		# Compare the restored fullscreen mask without changing AI or geometry.
 		flashlight_visibility_manager.set_composite_visible_for_comparison(is_visible)
 
 func _set_debug_pencil_visible(is_visible: bool) -> void:
 	if OS.is_debug_build():
 		_pencil_comparison_visible = is_visible
-		if is_instance_valid(_pencil_screen_pass):
-			_pencil_screen_pass.visible = is_visible and not _rooftop_sky_active
+		_sync_pencil_style()
 
 func _set_debug_floor_skip_enabled(is_enabled: bool) -> void:
 	if OS.is_debug_build():
@@ -1104,20 +1253,20 @@ func _set_character_shadow_state(is_enabled: bool) -> void:
 
 func _update_floor_skip_enabled() -> void:
 	if _floor_material != null:
-		# Debug mask comparisons change only the fullscreen pass. The separate
-		# Floor skip button still profiles this ground shader independently.
-		_floor_material.set_shader_parameter("floor_skip_enabled",
-			flashlight_visibility_enabled and _floor_skip_enabled)
+		# Keep Stage 5's whole-floor policy; blackout is applied after 3D geometry.
+		_floor_material.set_shader_parameter("floor_skip_enabled", false)
 
 func _set_debug_map_visible(is_visible: bool) -> void:
 	if OS.is_debug_build() and is_instance_valid(arena_map):
 		arena_map.visible = is_visible
 
 func start_performance_scenario(population: int, mode: String) -> bool:
-	if not [15, 20, 30, 69, 100, 200].has(population) or not ["concentrated", "approach"].has(mode):
+	if not [15, 20].has(population) or not ["concentrated", "approach"].has(mode):
 		return false
 	if not is_instance_valid(spawn_director) or not is_instance_valid(player):
 		return false
+	if is_instance_valid(ai_director):
+		ai_director.deactivate()
 
 	# Scenario changes are transient and isolated to debug profiling. Clear only
 	# ordinary zombies; keep the boss, arena, camera, HUD, and gameplay systems.

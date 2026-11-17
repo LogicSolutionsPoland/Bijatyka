@@ -8,8 +8,26 @@ signal health_changed(current: int, maximum: int)
 signal magic_changed(current: float, maximum: float, school: String)
 signal interrupted(duration: float)
 signal jump_impact(target: Node)
+signal parabolic_jump_started(takeoff_position: Vector3, travel_direction: Vector3)
+signal parabolic_jump_landed(landing_position: Vector3, travel_direction: Vector3)
 signal respawned
+signal limb_grab_windup(limb: String)
+signal limb_grab_started(limb: String)
+signal limb_grab_ended
+signal grab_state_changed(state: int, enemy: FoundationEnemy, limb: String)
+signal grab_windup_started(enemy: FoundationEnemy, limb: String)
+signal grab_established(enemy: FoundationEnemy, limb: String)
+signal grab_interrupted(reason: String, enemy: FoundationEnemy, limb: String)
+signal grab_escaped(enemy: FoundationEnemy, limb: String)
+signal grab_failed(enemy: FoundationEnemy, limb: String)
+signal grab_fully_ended(reason: String)
+# Stable Stage 3 contract: session ID, attacker and limb are bound at GRABBED.
+signal grab_qte_started(session_id: int, enemy: FoundationEnemy, limb: String, required_presses: int, duration_seconds: float)
+signal grab_qte_progress(session_id: int, accepted_presses: int, required_presses: int, remaining_seconds: float)
+signal grab_qte_finished(session_id: int, outcome: String)
 
+const GRAB_QTE_SCRIPT := preload("res://scripts/brutal_grab_qte.gd")
+const GRAB_CONTACT_SCRIPT := preload("res://scripts/brutal_grab_limb_contact.gd")
 const RAGE_SCRIPT := preload("res://scripts/rage_progression.gd")
 const FIGHT_ANIMATION_BUILDER := preload("res://scripts/universal_base_combat.gd")
 const CHARACTER_MOTION := preload("res://scripts/universal_base_motion.gd")
@@ -22,10 +40,12 @@ const EXO_MIXAMO_OVERLAY_SCRIPT := preload("res://scripts/player_exo_mixamo_over
 const GRAVITY := 24.0
 const MAX_HEALTH := 100
 const MAX_MAGIC := 100.0
-const DASH_DISTANCE := 15.0
-const DASH_DURATION := 0.30
+enum JumpState { READY, ORDINARY, FORWARD }
+enum GrabState { READY, WINDUP, GRABBED, ESCAPED, FAILED, RECOVERY }
 const TARGET_MELEE_HITS_PER_SECOND := 5.0
 const TARGET_MELEE_CYCLE_SECONDS := 1.0 / TARGET_MELEE_HITS_PER_SECOND
+const MELEE_LUNGE_SPEED_MPS := 1.5
+const MELEE_LUNGE_DURATION_SECONDS := TARGET_MELEE_CYCLE_SECONDS
 const MELEE_TIMER_EPSILON := 0.0001
 const ATTACK_ANIMATION_BLEND_SECONDS := 0.06
 const CHAIN_TARGET_RADIUS := 5.0
@@ -46,6 +66,13 @@ const SPELLS := {
 	"shadow": {"cost": 20.0, "range": 18.0, "color": Color(0.68, 0.30, 1.0)}
 }
 
+@export_range(1.0, 8.0, 0.1) var forward_jump_distance_m := 5.0
+@export_range(0.8, 4.0, 0.1) var forward_jump_arc_height_m := 2.4
+@export_range(0.5, 3.0, 0.1) var limb_grab_hold_seconds := 2.2
+@export_range(1.0, 6.0, 0.1) var limb_grab_regrab_seconds := 3.0
+@export_range(0.5, 4.0, 0.1) var grab_qte_duration_seconds := 1.5
+@export_range(1, 8, 1) var grab_qte_required_presses := 3
+
 var rage: RageProgression = RAGE_SCRIPT.new()
 var health := MAX_HEALTH
 var magic_energy := MAX_MAGIC
@@ -58,10 +85,13 @@ var attack_count := 0
 var _queued_attack_kind := ""
 var _queued_attack_side := ""
 var _attack_recovery_locked := false
+var _melee_lunge_time := 0.0
+var _melee_lunge_direction := Vector3.ZERO
 var movement_slow_time := 0.0
 var movement_slow_factor := 1.0
-var dash_time := 0.0
-var dash_direction := Vector3.ZERO
+var _jump_state: JumpState = JumpState.READY
+var _parabolic_jump_active := false
+var _parabolic_jump_direction := Vector3.ZERO
 var jump_impact_armed := false
 var _was_airborne := false
 var _animation_player: AnimationPlayer
@@ -81,7 +111,19 @@ var _active_attack_clip: StringName = &""
 var _ring_attack_counts: Dictionary = {}
 var _engagement_target: FoundationEnemy
 var _previous_engagement_target: FoundationEnemy
-var _grabbed_target: FoundationEnemy
+var _grabbed_target: FoundationEnemy # Player-to-zombie melee grapple.
+# The player is the only grab-session authority; enemy.state is a tactical phase.
+var grab_state: GrabState = GrabState.READY
+var _limb_grab_candidate: FoundationEnemy
+var _limb_grab_owner: FoundationEnemy
+var _limb_grab_limb := ""
+var _limb_grab_time := 0.0
+var _limb_grab_cooldown := 0.0
+# Monotonic IDs reject inputs/callbacks from earlier holds, even on the same enemy.
+var _grab_session_serial := 0
+var _grab_session_id := 0
+var _grab_qte := GRAB_QTE_SCRIPT.new()
+var _grab_contact: BrutalGrabLimbContact
 var flashlight_visibility_manager: Node
 var _character_motion_ready := false
 var _character_action_time := 0.0
@@ -113,6 +155,10 @@ func _ready() -> void:
 		visual_root.name = "VisualRoot"
 		add_child(visual_root)
 	_load_player_visual()
+	# Stage 3 visual contact listens to the established Stage 2 session only.
+	_grab_contact = GRAB_CONTACT_SCRIPT.new() as BrutalGrabLimbContact
+	add_child(_grab_contact)
+	_grab_contact.configure(self)
 	SHADOW_POLICY.disable_in_tree(visual_root)
 	rage.condemned.connect(_on_condemned)
 	rage.selection_resolved.connect(_on_selection_resolved)
@@ -214,7 +260,9 @@ func _add_debug_visual() -> void:
 	visual_root.add_child(body)
 
 func _physics_process(delta: float) -> void:
+	_update_limb_grab(delta)
 	if rage.current_soul_condemned:
+		cancel_melee_lunge()
 		return
 	_character_action_time = maxf(0.0, _character_action_time - delta)
 	_read_desktop_input(delta)
@@ -225,15 +273,7 @@ func _physics_process(delta: float) -> void:
 		movement_slow_time = maxf(0.0, movement_slow_time - delta)
 		if movement_slow_time == 0.0:
 			movement_slow_factor = 1.0
-	if dash_time > 0.0:
-		dash_time = maxf(0.0, dash_time - delta)
-		# Explicit directed dashes may rise; the default camera dash stays level.
-		var vertical_velocity := velocity.y
-		velocity = dash_direction * (DASH_DISTANCE / DASH_DURATION)
-		if is_zero_approx(dash_direction.y) and (not is_on_floor() or vertical_velocity > 0.1):
-			# A level air dash must not cancel an upward jump or force a fall.
-			velocity.y = vertical_velocity
-	else:
+	if not _parabolic_jump_active:
 		_update_movement(delta)
 	if not is_on_floor():
 		velocity.y -= GRAVITY * delta
@@ -241,14 +281,30 @@ func _physics_process(delta: float) -> void:
 		velocity.y = 0.0
 	var started_airborne := not is_on_floor() or velocity.y > 0.1
 	move_and_slide()
+	if _melee_lunge_time > 0.0:
+		_melee_lunge_time = maxf(0.0, _melee_lunge_time - delta)
+		if _melee_lunge_time == 0.0:
+			_melee_lunge_direction = Vector3.ZERO
+	if _parabolic_jump_active and is_on_wall():
+		# Keep vertical motion and landing intact while a wall stops forward travel.
+		velocity.x = 0.0
+		velocity.z = 0.0
 	if started_airborne:
 		_was_airborne = true
 	if _was_airborne and is_on_floor():
 		_was_airborne = false
 		_play_character_action("Landing", float(CHARACTER_MOTION.ACTIONS.get("Landing", 0.38)))
-		if jump_impact_armed:
+		if _jump_state == JumpState.FORWARD:
+			var landed_direction := _parabolic_jump_direction
+			_parabolic_jump_active = false
+			jump_impact_armed = false
+			parabolic_jump_landed.emit(global_position, landed_direction)
+			_parabolic_jump_direction = Vector3.ZERO
+		elif _jump_state == JumpState.ORDINARY and jump_impact_armed:
 			jump_impact_armed = false
 			_resolve_jump_impact()
+		_jump_state = JumpState.READY
+		jump_impact_armed = false
 	_update_locomotion_animation()
 	_update_attack_pose()
 	rage.advance(delta, true)
@@ -258,43 +314,46 @@ func _physics_process(delta: float) -> void:
 		magic_changed.emit(magic_energy, MAX_MAGIC, current_spell)
 
 func _read_desktop_input(delta: float) -> void:
-	for input_action in [&"attack_punch", &"attack_kick"]:
-		var kind := "punch" if input_action == &"attack_punch" else "kick"
-		if Input.is_action_just_pressed(input_action):
-			request_attack(kind)
-			_desktop_attack_repeat_timers[input_action] = TARGET_MELEE_CYCLE_SECONDS
-		elif Input.is_action_pressed(input_action):
-			var repeat_time := float(_desktop_attack_repeat_timers.get(input_action, TARGET_MELEE_CYCLE_SECONDS)) - minf(delta, TARGET_MELEE_CYCLE_SECONDS)
-			if repeat_time <= MELEE_TIMER_EPSILON:
-				request_attack(kind)
-				repeat_time = TARGET_MELEE_CYCLE_SECONDS
-			_desktop_attack_repeat_timers[input_action] = repeat_time
-		else:
-			_desktop_attack_repeat_timers.erase(input_action)
+	if Input.is_action_just_pressed("attack_punch"):
+		request_attack("punch")
+		_desktop_attack_repeat_timers[&"attack_punch"] = TARGET_MELEE_CYCLE_SECONDS
+	elif Input.is_action_pressed("attack_punch"):
+		var repeat_time := float(_desktop_attack_repeat_timers.get(&"attack_punch", TARGET_MELEE_CYCLE_SECONDS)) - minf(delta, TARGET_MELEE_CYCLE_SECONDS)
+		if repeat_time <= MELEE_TIMER_EPSILON:
+			request_attack("punch")
+			repeat_time = TARGET_MELEE_CYCLE_SECONDS
+		_desktop_attack_repeat_timers[&"attack_punch"] = repeat_time
+	else:
+		_desktop_attack_repeat_timers.erase(&"attack_punch")
+	# The first accepted request owns this jump cycle. When both desktop actions
+	# arrive together, this stable sampling order gives ordinary Jump priority.
 	if Input.is_action_just_pressed("jump"):
 		try_jump()
-	if Input.is_action_just_pressed("dash"):
-		try_dash()
+	if Input.is_action_just_pressed("jump_forward"):
+		try_parabolic_jump()
+	if Input.is_action_just_pressed("quick_cast_spell"):
+		cast_spell_slot(1 if rage.unlocked_spells.size() > 1 else 0)
 	if Input.is_action_just_pressed("cast_spell"):
 		cast_spell()
 	if Input.is_action_just_pressed("cycle_spell"):
 		cycle_spell()
+	if Input.is_action_just_pressed("escape_limb_grab"):
+		try_escape_limb_grab()
 
 func set_camera_yaw(yaw: float) -> void:
 	_camera_yaw = yaw
 
 func move_input() -> Vector2:
-	var keyboard := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
-	var touch := Vector2.ZERO
-	var controls := get_tree().get_first_node_in_group("mobile_controls")
-	if controls != null and controls.has_method("get_move_vector"):
-		touch = controls.get_move_vector()
-	if touch.length() > keyboard.length():
-		return touch
-	return keyboard
+	return Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 
 func _update_movement(delta: float) -> void:
+	if _limb_grab_owner != null:
+		cancel_melee_lunge()
+		velocity.x = 0.0
+		velocity.z = 0.0
+		return
 	if attack_phase == "approach" and is_instance_valid(_engagement_target) and _engagement_target.hp > 0:
+		cancel_melee_lunge()
 		var offset := _engagement_target.global_position - global_position
 		offset.y = 0.0
 		var distance := offset.length()
@@ -308,6 +367,7 @@ func _update_movement(delta: float) -> void:
 			velocity.z = 0.0
 		return
 	if attack_phase == "grapple":
+		cancel_melee_lunge()
 		velocity.x = 0.0
 		velocity.z = 0.0
 		return
@@ -323,11 +383,34 @@ func _update_movement(delta: float) -> void:
 			_play_character_action(turn_action, float(CHARACTER_MOTION.ACTIONS.get(turn_action, 0.28)))
 		rotation.y = lerp_angle(rotation.y, target_yaw, minf(1.0, delta * 16.0))
 	var speed := 4.8 * movement_slow_factor
-	velocity.x = direction.x * speed
-	velocity.z = direction.z * speed
+	var horizontal_velocity := direction * speed
+	if _melee_lunge_time > 0.0:
+		horizontal_velocity += _melee_lunge_direction * MELEE_LUNGE_SPEED_MPS * movement_slow_factor
+	velocity.x = horizontal_velocity.x
+	velocity.z = horizontal_velocity.z
+
+func cancel_melee_lunge() -> void:
+	_melee_lunge_time = 0.0
+	_melee_lunge_direction = Vector3.ZERO
+
+func _start_melee_lunge() -> void:
+	# CharacterBody3D move_and_slide handles collision; never change position directly.
+	# Ordinary/forward jumps and enemy limb grabs have exclusive movement ownership.
+	if attack_phase != "active" or _parabolic_jump_active or _jump_state != JumpState.READY:
+		return
+	if not is_on_floor() or grab_state != GrabState.READY or _limb_grab_owner != null:
+		return
+	if rage.current_soul_condemned or get_tree().paused:
+		return
+	var forward := -global_transform.basis.z
+	forward.y = 0.0
+	if forward.length_squared() < 0.01:
+		return
+	_melee_lunge_direction = forward.normalized()
+	_melee_lunge_time = MELEE_LUNGE_DURATION_SECONDS
 
 func request_attack(kind: String, side: String = "right") -> bool:
-	if not ATTACKS.has(kind) or side not in ["left", "right"] or rage.current_soul_condemned:
+	if not ATTACKS.has(kind) or side not in ["left", "right"] or rage.current_soul_condemned or _limb_grab_owner != null:
 		return false
 	if attack_phase in ["approach", "grapple", "windup", "active"]:
 		_queue_attack(kind, side)
@@ -527,8 +610,12 @@ func _update_attack(delta: float) -> void:
 		var flat := _engagement_target.global_position - global_position
 		flat.y = 0.0
 		if flat.length() <= CHAIN_GRAB_DISTANCE:
-			_begin_grapple()
-			return
+			# Previously locked targets can move behind a wall during approach.
+			var sight := PhysicsRayQueryParameters3D.create(global_position + Vector3.UP, _engagement_target.global_position + Vector3.UP, 1)
+			sight.exclude = [get_rid(), _engagement_target.get_rid()]
+			if get_world_3d().direct_space_state.intersect_ray(sight).is_empty():
+				_begin_grapple()
+				return
 		attack_phase_time -= elapsed_time
 		if attack_phase_time <= 0.0:
 			# A blocked hop must not hit or warp through an obstacle.
@@ -546,6 +633,7 @@ func _update_attack(delta: float) -> void:
 			_begin_strike()
 		"windup":
 			attack_phase = "active"
+			_start_melee_lunge()
 			_resolve_attack()
 			attack_phase_time = EXO_KICK_ACTIVE_SECONDS if _exo_kick_active else float(ATTACKS[attack_kind].active)
 		"active":
@@ -595,10 +683,14 @@ func _resolve_attack() -> void:
 		_spawn_attack_impact(target.global_position + Vector3(0.0, 1.0, 0.0), attack_kind)
 
 func try_jump() -> bool:
-	if not is_on_floor() or rage.current_soul_condemned:
+	if _jump_state != JumpState.READY or not is_on_floor() or rage.current_soul_condemned or grab_state == GrabState.GRABBED:
 		return false
+	cancel_melee_lunge()
+	if grab_state == GrabState.WINDUP:
+		cancel_limb_grab("jump_evaded")
 	if attack_phase in ["approach", "grapple"]:
 		_finish_attack()
+	_jump_state = JumpState.ORDINARY
 	velocity.y = 8.2
 	jump_impact_armed = true
 	_was_airborne = true
@@ -617,32 +709,259 @@ func _resolve_jump_impact() -> void:
 		rage.record_effective_hit(float(dealt))
 		jump_impact.emit(target)
 
-func _camera_aim_direction() -> Vector3:
-	var aim_camera := get_tree().get_first_node_in_group("foundation_camera") as Camera3D
-	if aim_camera != null and is_instance_valid(aim_camera):
-		return -aim_camera.global_transform.basis.z.normalized()
-	return -global_transform.basis.z.normalized()
-
-func try_dash(direction: Vector3 = Vector3.ZERO) -> bool:
-	if dash_time > 0.0 or rage.current_soul_condemned:
+func try_parabolic_jump() -> bool:
+	if _jump_state != JumpState.READY or not is_on_floor() or _parabolic_jump_active or rage.current_soul_condemned or grab_state == GrabState.GRABBED:
 		return false
+	cancel_melee_lunge()
+	if grab_state == GrabState.WINDUP:
+		cancel_limb_grab("jump_evaded")
 	if attack_phase in ["approach", "grapple"]:
 		_finish_attack()
+	var direction := -global_transform.basis.z
+	direction.y = 0.0
 	if direction.length_squared() < 0.01:
-		direction = _camera_aim_direction()
-		# The camera looks down at the arena; do not drive the 15 m dash
-		# into the floor or shorten its horizontal reach.
-		direction.y = 0.0
-	if direction.length_squared() < 0.01:
-		direction = -global_transform.basis.z
-	dash_direction = direction.normalized()
-	if dash_direction.length_squared() < 0.01:
-		dash_direction = Vector3.FORWARD
-	dash_time = DASH_DURATION
-	_play_character_action("Dash", DASH_DURATION)
+		return false
+	direction = direction.normalized()
+	var arc_height := maxf(0.8, forward_jump_arc_height_m)
+	var duration := sqrt(8.0 * arc_height / GRAVITY)
+	if duration <= 0.0:
+		return false
+	var horizontal_speed := maxf(0.0, forward_jump_distance_m) / duration
+	velocity.x = direction.x * horizontal_speed
+	velocity.z = direction.z * horizontal_speed
+	velocity.y = GRAVITY * duration * 0.5
+	_parabolic_jump_direction = direction
+	_jump_state = JumpState.FORWARD
+	_parabolic_jump_active = true
+	parabolic_jump_started.emit(global_position, direction)
+	jump_impact_armed = false
+	_was_airborne = true
 	return true
 
+# Enemy-to-player limb hold; independent from the player's melee grapple.
+# FoundationPlayer is the sole grab authority. QTE stores only per-session progress.
+func get_grab_state() -> int:
+	return grab_state
+
+func get_active_grab_enemy() -> FoundationEnemy:
+	if grab_state == GrabState.WINDUP:
+		return _limb_grab_candidate if is_instance_valid(_limb_grab_candidate) else null
+	if grab_state == GrabState.GRABBED:
+		return _limb_grab_owner if is_instance_valid(_limb_grab_owner) else null
+	return null
+
+func get_grab_limb() -> String:
+	return _limb_grab_limb if grab_state in [GrabState.WINDUP, GrabState.GRABBED] else ""
+
+func get_active_grab_session_id() -> int:
+	return _grab_session_id if grab_state == GrabState.GRABBED else 0
+
+func get_grab_qte_progress() -> int:
+	return _grab_qte.get_press_count() if grab_state == GrabState.GRABBED else 0
+
+func get_grab_qte_remaining_seconds() -> float:
+	return _grab_qte.get_remaining_seconds() if grab_state == GrabState.GRABBED else 0.0
+
+func get_grab_qte_required_presses() -> int:
+	return _grab_qte.get_required_presses() if grab_state == GrabState.GRABBED else 0
+
+func _set_grab_state(next_state: GrabState) -> void:
+	if grab_state == next_state:
+		return
+	grab_state = next_state
+	if next_state != GrabState.READY:
+		cancel_melee_lunge()
+	grab_state_changed.emit(grab_state, get_active_grab_enemy(), get_grab_limb())
+
+func _grab_player_eligible() -> bool:
+	return health > 0 and not rage.current_soul_condemned and _jump_state == JumpState.READY and not _parabolic_jump_active and is_on_floor() and not get_tree().paused
+
+func _grab_enemy_eligible(enemy: FoundationEnemy) -> bool:
+	# Read-only admission: the spawn manager owns all attacker-slot locks.
+	return is_instance_valid(enemy) and not enemy.is_queued_for_deletion() and enemy.hp > 0 and not enemy.is_boss and is_instance_valid(enemy.attack_director) and enemy.attack_director.has_method("can_maintain_limb_grab") and bool(enemy.attack_director.call("can_maintain_limb_grab", enemy))
+
+func try_reserve_limb_grab(enemy: FoundationEnemy, limb: String) -> bool:
+	if grab_state != GrabState.READY or _limb_grab_cooldown > 0.0 or not _grab_player_eligible() or not _grab_enemy_eligible(enemy):
+		return false
+	if limb not in ["LEFT ARM", "RIGHT ARM"] or attack_phase in ["approach", "grapple"]:
+		return false
+	_limb_grab_candidate = enemy
+	_limb_grab_limb = limb
+	_set_grab_state(GrabState.WINDUP)
+	limb_grab_windup.emit(limb)
+	grab_windup_started.emit(enemy, limb)
+	return true
+
+func is_limb_grab_candidate(enemy: FoundationEnemy) -> bool:
+	return grab_state == GrabState.WINDUP and _limb_grab_candidate == enemy
+
+func cancel_pending_limb_grab(enemy: FoundationEnemy, reason: String = "windup_cancelled") -> void:
+	if grab_state == GrabState.WINDUP and _limb_grab_candidate == enemy:
+		_finish_limb_grab(reason)
+
+func begin_limb_grab(enemy: FoundationEnemy, limb: String) -> bool:
+	if grab_state != GrabState.WINDUP or _limb_grab_candidate != enemy:
+		return false
+	if limb != _limb_grab_limb or not _grab_player_eligible() or not _grab_enemy_eligible(enemy):
+		_finish_limb_grab("contact_ineligible")
+		return false
+	_limb_grab_candidate = null
+	_queued_attack_kind = ""
+	_queued_attack_side = ""
+	_desktop_attack_repeat_timers.clear()
+	_finish_attack()
+	_limb_grab_owner = enemy
+	_limb_grab_time = 0.0
+	velocity.x = 0.0
+	velocity.z = 0.0
+	_play_character_action("Hit", float(CHARACTER_MOTION.ACTIONS.get("Hit", 0.34)))
+	if _character_motion_ready and _animation_player != null and _animation_player.current_animation == CHARACTER_MOTION.clip_path("Hit"):
+		_animation_player.seek(0.12, true)
+		_animation_player.pause()
+	_set_grab_state(GrabState.GRABBED)
+	# Stage 3: a detailed real rig cannot start an invisible/unreachable QTE.
+	# Host Stage 1/2 dummy enemies without a visual skeleton keep their existing
+	# gameplay-only lifecycle; no secondary grab state machine is introduced.
+	if is_instance_valid(_grab_contact) and is_instance_valid(enemy._skeleton):
+		if is_instance_valid(_exo_retarget):
+			_exo_retarget.synchronize_pose()
+		if not _grab_contact.can_reach_contact(enemy, self, limb, enemy._limb_grab_hand):
+			_finish_limb_grab("visual_contact_unreachable")
+			return false
+	# Start only after GRABBED, never during WINDUP. No independent QTE timer.
+	if grab_state != GrabState.GRABBED or _limb_grab_owner != enemy:
+		return false
+	_grab_session_serial += 1
+	_grab_session_id = _grab_session_serial
+	if not _grab_qte.begin(_grab_session_id, enemy, limb, grab_qte_duration_seconds, grab_qte_required_presses):
+		_finish_limb_grab("qte_setup_failed")
+		return false
+	_limb_grab_time = _grab_qte.get_remaining_seconds()
+	var started_session_id := _grab_session_id
+	limb_grab_started.emit(limb)
+	# Signals are synchronous: a listener may kill the attacker or cancel the
+	# grab. Do not publish a ghost QTE for a session already cleaned up.
+	if grab_state != GrabState.GRABBED or not _grab_qte.matches(started_session_id, enemy, limb):
+		return false
+	grab_established.emit(enemy, limb)
+	if grab_state != GrabState.GRABBED or not _grab_qte.matches(started_session_id, enemy, limb):
+		return false
+	grab_qte_started.emit(started_session_id, enemy, limb, _grab_qte.get_required_presses(), _limb_grab_time)
+	if grab_state != GrabState.GRABBED or not _grab_qte.matches(started_session_id, enemy, limb):
+		return false
+	grab_qte_progress.emit(started_session_id, 0, _grab_qte.get_required_presses(), _limb_grab_time)
+	return grab_state == GrabState.GRABBED and _grab_qte.matches(started_session_id, enemy, limb)
+
+# The caller must send a fresh input edge. Optional session token rejects stale events.
+# True means the press was accepted, not necessarily that the player has escaped.
+func try_escape_limb_grab(session_id: int = -1) -> bool:
+	if grab_state != GrabState.GRABBED or get_tree().paused:
+		return false
+	if session_id >= 0 and session_id != _grab_session_id:
+		return false
+	if not _grab_qte.accept_press(_grab_session_id, _limb_grab_owner, _limb_grab_limb):
+		return false
+	grab_qte_progress.emit(_grab_session_id, _grab_qte.get_press_count(), _grab_qte.get_required_presses(), _grab_qte.get_remaining_seconds())
+	if _grab_qte.is_complete():
+		_finish_limb_grab("escaped")
+	return true
+
+func end_limb_grab(enemy: FoundationEnemy, reason: String = "enemy_released") -> void:
+	if grab_state == GrabState.GRABBED and _limb_grab_owner == enemy:
+		_finish_limb_grab(reason)
+
+func _finish_limb_grab(reason: String) -> void:
+	if grab_state not in [GrabState.WINDUP, GrabState.GRABBED]:
+		return
+	var held := grab_state == GrabState.GRABBED
+	var zombie: FoundationEnemy = _limb_grab_owner if held else _limb_grab_candidate
+	if not is_instance_valid(zombie):
+		zombie = null
+	var limb := _limb_grab_limb
+	var finished_session_id := _grab_session_id
+	# Invalidate before enemy release or any terminal signals can re-enter us.
+	_grab_session_id = 0
+	_grab_qte.cancel()
+	if held and reason == "escaped":
+		_set_grab_state(GrabState.ESCAPED)
+	elif held and reason == "timeout":
+		_set_grab_state(GrabState.FAILED)
+	else:
+		_set_grab_state(GrabState.RECOVERY)
+	# Clear before calling enemy release; it calls back into this player.
+	_limb_grab_candidate = null
+	_limb_grab_owner = null
+	_limb_grab_limb = ""
+	_limb_grab_time = 0.0
+	if held:
+		_limb_grab_cooldown = maxf(_limb_grab_cooldown, limb_grab_regrab_seconds)
+		_character_action_time = 0.0
+	if is_instance_valid(zombie):
+		if held:
+			zombie.release_limb_grab(self, reason)
+		else:
+			zombie.cancel_limb_grab_windup(self, reason)
+	if held and reason == "escaped":
+		grab_escaped.emit(zombie, limb)
+	elif held and reason == "timeout":
+		grab_failed.emit(zombie, limb)
+	else:
+		grab_interrupted.emit(reason, zombie, limb)
+	if grab_state != GrabState.RECOVERY:
+		_set_grab_state(GrabState.RECOVERY)
+	if held:
+		if health > 0 and not rage.current_soul_condemned:
+			if reason == "escaped":
+				var action := "Turn_Right" if limb == "LEFT ARM" else "Turn_Left"
+				_play_character_action(action, float(CHARACTER_MOTION.ACTIONS.get(action, 0.28)))
+			else:
+				_set_locomotion_animation("Idle")
+		if _animation_player != null and not _animation_player.is_playing() and health > 0:
+			_set_locomotion_animation("Idle")
+		limb_grab_ended.emit()
+	_set_grab_state(GrabState.READY)
+	grab_fully_ended.emit(reason)
+	if held and finished_session_id > 0:
+		grab_qte_finished.emit(finished_session_id, reason)
+
+func cancel_limb_grab(reason: String = "cancelled") -> void:
+	_finish_limb_grab(reason)
+
+func _update_limb_grab(delta: float) -> void:
+	if get_tree().paused:
+		return
+	_limb_grab_cooldown = maxf(0.0, _limb_grab_cooldown - delta)
+	if grab_state == GrabState.WINDUP:
+		if not _grab_enemy_eligible(_limb_grab_candidate) or not _grab_player_eligible():
+			_finish_limb_grab("windup_ineligible")
+		return
+	if grab_state != GrabState.GRABBED:
+		return
+	if not is_instance_valid(_limb_grab_owner) or _limb_grab_owner.is_queued_for_deletion():
+		_finish_limb_grab("enemy_invalid")
+	elif _limb_grab_owner.hp <= 0:
+		_finish_limb_grab("enemy_died")
+	elif health <= 0 or rage.current_soul_condemned:
+		_finish_limb_grab("player_dead")
+	elif _jump_state != JumpState.READY or _parabolic_jump_active or not _grab_enemy_eligible(_limb_grab_owner):
+		_finish_limb_grab("reservation_lost")
+	elif not _grab_qte.matches(_grab_session_id, _limb_grab_owner, _limb_grab_limb):
+		_finish_limb_grab("qte_session_lost")
+	else:
+		var expired := _grab_qte.advance(_grab_session_id, delta)
+		_limb_grab_time = _grab_qte.get_remaining_seconds()
+		if expired:
+			_finish_limb_grab("timeout")
+		else:
+			grab_qte_progress.emit(_grab_session_id, _grab_qte.get_press_count(), _grab_qte.get_required_presses(), _limb_grab_time)
+
+func _exit_tree() -> void:
+	cancel_limb_grab("scene_exit")
+
 func interrupt_by_zombie(slow_seconds: float = 0.7, recovery_penalty: float = 0.45) -> void:
+	cancel_melee_lunge()
+	if _limb_grab_owner != null:
+		return
 	if attack_phase in ["approach", "grapple"]:
 		_finish_attack()
 	elif is_instance_valid(_grabbed_target):
@@ -664,12 +983,15 @@ func take_boss_damage(amount: int) -> void:
 	health = maxi(0, health - amount)
 	health_changed.emit(health, MAX_HEALTH)
 	if was_alive:
+		cancel_limb_grab("player_dead" if health == 0 else "player_damaged")
 		if health == 0:
 			_play_character_action("Defeat", float(CHARACTER_MOTION.ACTIONS.get("Defeat", 1.25)))
 		else:
 			_play_character_action("Hit", float(CHARACTER_MOTION.ACTIONS.get("Hit", 0.34)))
 
 func cycle_spell() -> bool:
+	if grab_state == GrabState.GRABBED:
+		return false
 	var available: Array[String] = rage.unlocked_spells
 	if available.is_empty():
 		return false
@@ -679,19 +1001,19 @@ func cycle_spell() -> bool:
 	return true
 
 func cast_spell() -> bool:
-	if rage.current_soul_condemned or rage.unlocked_spells.is_empty():
+	if rage.current_soul_condemned or _limb_grab_owner != null or rage.unlocked_spells.is_empty():
 		return false
 	if not rage.unlocked_spells.has(current_spell):
 		current_spell = rage.unlocked_spells[0]
 	return _cast_spell(current_spell)
 
 func cast_blast() -> bool:
-	if rage.current_soul_condemned or not rage.unlocked_spells.has("fire"):
+	if rage.current_soul_condemned or _limb_grab_owner != null or not rage.unlocked_spells.has("fire"):
 		return false
 	return _cast_spell("fire")
 
 func _cast_spell(school: String) -> bool:
-	if rage.current_soul_condemned or not rage.unlocked_spells.has(school):
+	if rage.current_soul_condemned or _limb_grab_owner != null or not rage.unlocked_spells.has(school):
 		return false
 	var spec: Dictionary = SPELLS[school]
 	if magic_energy < float(spec.cost):
@@ -729,6 +1051,8 @@ func _cast_spell(school: String) -> bool:
 	return true
 
 func cast_spell_slot(slot: int) -> bool:
+	if grab_state == GrabState.GRABBED:
+		return false
 	if slot < 0 or slot >= rage.unlocked_spells.size() or rage.current_soul_condemned:
 		return false
 	current_spell = rage.unlocked_spells[slot]
@@ -940,7 +1264,7 @@ func _set_locomotion_animation(animation_name: String) -> void:
 		_animation_player.play(selected_animation, LOCOMOTION_ANIMATION_BLEND_SECONDS)
 
 func _update_locomotion_animation() -> void:
-	if _animation_player == null or attack_phase != "ready" or _character_action_time > 0.0:
+	if _animation_player == null or attack_phase != "ready" or _character_action_time > 0.0 or _limb_grab_owner != null:
 		return
 	if not is_on_floor():
 		_set_locomotion_animation("Jump")
@@ -966,22 +1290,26 @@ func _play_character_action(action_name: String, duration: float) -> void:
 		return
 	_character_action_time = maxf(0.0, duration)
 	_animation_player.play(clip, ATTACK_ANIMATION_BLEND_SECONDS)
-	if _exo_overlay != null:
-		# The Exo skin rolls over the same collision-safe 15m dash path.
-		# Airborne dash keeps the existing source animation.
-		if action_name == "Dash":
-			if not _exo_overlay.play_ground_roll():
-				_exo_overlay.stop_clip()
-		elif action_name in ["Landing", "Hit", "Defeat"]:
-			_exo_overlay.stop_clip()
+	if _exo_overlay != null and action_name in ["Landing", "Hit", "Defeat"]:
+		_exo_overlay.stop_clip()
 
 func _on_selection_resolved(_milestone: int, aura_id: String) -> void:
 	current_spell = aura_id
 
 func _on_condemned(_threshold: float, _maximum: float) -> void:
+	cancel_melee_lunge()
+	cancel_limb_grab("player_condemned")
 	call_deferred("_reset_at_safe_base")
 
 func _reset_at_safe_base() -> void:
+	cancel_melee_lunge()
+	cancel_limb_grab("respawn")
+	_jump_state = JumpState.READY
+	_parabolic_jump_active = false
+	_parabolic_jump_direction = Vector3.ZERO
+	jump_impact_armed = false
+	_was_airborne = false
+	_limb_grab_cooldown = limb_grab_regrab_seconds
 	if _exo_overlay != null:
 		_exo_overlay.stop_clip()
 	_finish_attack()

@@ -5,11 +5,14 @@ signal telegraph_started(enemy: Node, is_boss: bool)
 signal attack_resolved(enemy: Node, hit: bool)
 signal defeated(enemy: Node)
 
+const INFECTED_ALBEDO := preload("res://assets/characters/infected/Ashen_Worker.jpg")
 const ENEMY_MODEL_PATH := "res://assets/characters/universal_base/Universal_Base_Characters_Male.glb"
 const BOSS_MODEL_PATH := "res://assets/characters/universal_base/Universal_Base_Characters_Female.glb"
+const HEALTH_BAR := preload("res://scenes/enemy_health_bar.tscn")
 const UNIVERSAL_BASE_MOTION := preload("res://scripts/universal_base_motion.gd")
 const ENEMY_MODEL_YAW_OFFSET := PI
 const FIGHT_ANIMATION_BUILDER := preload("res://scripts/universal_base_enemy_combat.gd")
+const RIG_ANIMATION_CACHE := preload("res://scripts/enemy_rig_animation_cache.gd")
 const ENEMY_FIGHT_LIBRARY := &"enemy_combat"
 const SHADOW_POLICY := preload("res://scripts/shadow_policy.gd")
 const FLASHLIGHT_REVEAL := preload("res://scripts/flashlight_enemy_reveal.gd")
@@ -23,10 +26,17 @@ const FULL_ANIMATION_BUDGET := 7
 const SPAWN_ASSAULT_DURATION := 4.5
 const SPAWN_ASSAULT_SPEED_MULTIPLIER := 3.2
 const SPAWN_ASSAULT_HANDOFF_DISTANCE := 6.0
+const PURSUIT_PROBE_DISTANCE := 2.4
+const PURSUIT_AVOID_SECONDS := 0.45
+const CROWD_SEPARATION_RADIUS := 1.55
+const CROWD_SEPARATION_STRENGTH := 1.25
+const CROWD_WAIT_SPEED := 0.70
+const PURSUIT_DETOUR_ANGLES := [35.0, -35.0, 60.0, -60.0, 90.0, -90.0, 125.0, -125.0]
 
 @export_enum("shambler", "brute", "stalker", "boss") var enemy_variant := "shambler"
 @export var is_boss := false
 @export var starting_health := 90
+@export_range(0.45, 1.25, 0.05) var limb_grab_windup_seconds := 0.75
 
 var hp := 90
 var move_speed := 2.5
@@ -76,12 +86,18 @@ var _quality_shadows_enabled := false
 # Rebuilt once per decision frame, shared by the whole population.
 static var _grid_frame := -1
 static var _grid: Dictionary = {}
+static var _infected_body_material: StandardMaterial3D
 static var _enemy_model_scene: PackedScene
 static var _boss_model_scene: PackedScene
 var _rig_budget_owner: Node
 var _low_poly_death_scale := 1.0
 var _player_grapple_owner: FoundationPlayer
 var _player_grapple_time := 0.0
+var _limb_grab_limb := ""
+var _limb_grab_hand := ""
+var _pursuit_avoid_direction := Vector3.ZERO
+var _pursuit_avoid_remaining := 0.0
+var _player_alert_shared := false
 
 # Sharing this ten-Hz broad-phase cache across all enemies prevents a full
 # scene-group scan for every physics frame. The 10 m cells and 3x3 query remain
@@ -115,6 +131,111 @@ func _clear_sight(target: Node3D) -> bool:
 	query.exclude = [get_rid(), target.get_rid()] if target is CollisionObject3D else [get_rid()]
 	return get_world_3d().direct_space_state.intersect_ray(query).is_empty()
 
+func _pursuit_ray_clear(direction: Vector3, ray_distance: float) -> bool:
+	var flat := Vector3(direction.x, 0.0, direction.z)
+	if flat.length_squared() < 0.001:
+		return false
+	var origin := global_position + Vector3.UP * 0.85
+	var query := PhysicsRayQueryParameters3D.create(
+		origin,
+		origin + flat.normalized() * ray_distance,
+		collision_mask
+	)
+	query.exclude = [get_rid()]
+	if is_instance_valid(_player):
+		query.exclude.append(_player.get_rid())
+	return get_world_3d().direct_space_state.intersect_ray(query).is_empty()
+
+func _pursuit_direction(desired: Vector3, delta: float, target_distance: float) -> Vector3:
+	desired.y = 0.0
+	if desired.length_squared() < 0.001:
+		return Vector3.ZERO
+	desired = desired.normalized()
+	var probe_distance := minf(PURSUIT_PROBE_DISTANCE, maxf(1.0, target_distance))
+	_pursuit_avoid_remaining = maxf(0.0, _pursuit_avoid_remaining - delta)
+	if _pursuit_ray_clear(desired, probe_distance):
+		_pursuit_avoid_direction = Vector3.ZERO
+		_pursuit_avoid_remaining = 0.0
+		return desired
+	if _pursuit_avoid_remaining > 0.0 and _pursuit_avoid_direction.length_squared() > 0.001:
+		if _pursuit_ray_clear(_pursuit_avoid_direction, probe_distance * 0.8):
+			return _pursuit_avoid_direction
+	var preferred_side := -1.0 if get_instance_id() % 2 == 0 else 1.0
+	var lateral_axis := Vector3.UP.cross(desired)
+	var best_direction := Vector3.ZERO
+	var best_score := -INF
+	for angle_degrees in PURSUIT_DETOUR_ANGLES:
+		var candidate := desired.rotated(Vector3.UP, deg_to_rad(angle_degrees)).normalized()
+		if not _pursuit_ray_clear(candidate, probe_distance):
+			continue
+		var score := candidate.dot(desired) + preferred_side * candidate.dot(lateral_axis) * 0.025
+		if score > best_score:
+			best_score = score
+			best_direction = candidate
+	if best_direction.length_squared() < 0.001:
+		best_direction = desired.rotated(Vector3.UP, PI * 0.5 * preferred_side).normalized()
+	_pursuit_avoid_direction = best_direction
+	_pursuit_avoid_remaining = PURSUIT_AVOID_SECONDS
+	return _pursuit_avoid_direction
+
+func _crowd_separation_direction() -> Vector3:
+	# Zombie bodies intentionally do not collide with one another. Use the
+	# shared 10 Hz neighbor grid to stop live actors and their low-detail
+	# silhouettes from occupying the same spot in the horde.
+	var total := Vector3.ZERO
+	var neighbor_count := 0
+	var strongest_weight := 0.0
+	var radius_squared := CROWD_SEPARATION_RADIUS * CROWD_SEPARATION_RADIUS
+	for ally in _nearby():
+		if ally.is_boss or ally.hp <= 0:
+			continue
+		var offset := global_position - ally.global_position
+		offset.y = 0.0
+		var distance_squared := offset.length_squared()
+		if distance_squared >= radius_squared:
+			continue
+		neighbor_count += 1
+		var distance := sqrt(distance_squared)
+		var away := Vector3.ZERO
+		if distance_squared <= 0.0001:
+			# Give exact overlaps a stable, opposite escape direction per pair.
+			var self_id: int = get_instance_id()
+			var ally_id: int = ally.get_instance_id()
+			var low_id: int = mini(self_id, ally_id)
+			var high_id: int = maxi(self_id, ally_id)
+			var overlap_angle := deg_to_rad(float(((low_id % 360) * 31 + (high_id % 360) * 17) % 360))
+			away = Vector3(cos(overlap_angle), 0.0, sin(overlap_angle))
+			if self_id > ally_id:
+				away = -away
+		else:
+			away = offset / distance
+		var weight := 1.0 - distance / CROWD_SEPARATION_RADIUS
+		strongest_weight = maxf(strongest_weight, weight)
+		total += away * weight
+	if neighbor_count == 0:
+		return Vector3.ZERO
+	if total.length_squared() <= 0.001:
+		# A perfectly symmetric pile must still have a repeatable way to spread.
+		var fallback_angle := deg_to_rad(float(get_instance_id() % 360))
+		total = Vector3(cos(fallback_angle), 0.0, sin(fallback_angle)) * strongest_weight
+	return total.limit_length(1.0)
+
+func _crowd_wait_direction(toward_target: Vector3) -> Vector3:
+	var away := _crowd_separation_direction()
+	if away.length_squared() < 0.04:
+		return Vector3.ZERO
+	var toward := toward_target
+	toward.y = 0.0
+	if toward.length_squared() <= 0.001:
+		return away
+	toward = toward.normalized()
+	var tangent := away - toward * away.dot(toward)
+	if tangent.length_squared() <= 0.001:
+		tangent = Vector3.UP.cross(toward)
+		if get_instance_id() % 2 == 0:
+			tangent = -tangent
+	return tangent.normalized()
+
 func _valid_target() -> bool:
 	return is_instance_valid(combat_target) and not combat_target.is_queued_for_deletion() and (not combat_target is FoundationEnemy or combat_target.hp > 0)
 
@@ -122,25 +243,28 @@ func _choose_target() -> void:
 	if is_boss:
 		combat_target = _player
 		return
-	if is_instance_valid(_player) and global_position.distance_to(_player.global_position) <= 14.0 and _clear_sight(_player):
-		var newly_alerted := combat_target != _player
+	if not is_instance_valid(_player) or _player.is_queued_for_deletion():
+		combat_target = null
+		_player_alert_shared = false
+		return
+	# Spawn-rushing and alerted zombies stay committed through distance and cover.
+	# They pursue the player instead of switching to other zombies.
+	if combat_target == _player or _spawn_assault_time > 0.0 or global_position.distance_to(_player.global_position) <= 14.0:
 		combat_target = _player
-		if newly_alerted:
-			for ally in _nearby():
-				if ally.global_position.distance_squared_to(global_position) <= 100.0 and ally.state != "windup":
-					ally.combat_target = _player
+		if not _player_alert_shared:
+			_alert_nearby_allies()
+			_player_alert_shared = true
 		return
-	if _valid_target() and global_position.distance_to(combat_target.global_position) < 24.0:
-		return
+	# Unalerted zombies remain still and concealed until the player enters their
+	# awareness radius. The spawn manager can then store them as data records.
 	combat_target = null
-	var best := 36.0
-	for rival in _nearby():
-		if rival.is_boss:
+
+func _alert_nearby_allies() -> void:
+	for ally in _nearby():
+		if ally.is_boss or ally.state == "windup":
 			continue
-		var distance := global_position.distance_squared_to(rival.global_position)
-		if distance < best and _clear_sight(rival):
-			best = distance
-			combat_target = rival
+		if ally.global_position.distance_squared_to(global_position) <= 100.0:
+			ally.combat_target = _player
 
 func _wander(delta: float) -> void:
 	_wander_time -= delta
@@ -173,6 +297,7 @@ func begin_spawn_assault(target: FoundationPlayer) -> bool:
 		return false
 	_player = target
 	combat_target = target
+	_player_alert_shared = false
 	state = "assault"
 	_spawn_assault_time = SPAWN_ASSAULT_DURATION
 	var direction := target.global_position - global_position
@@ -205,6 +330,9 @@ func _update_spawn_assault(delta: float) -> bool:
 		_finish_spawn_assault()
 		return false
 	var direction := offset.normalized()
+	var crowd_separation := _crowd_separation_direction()
+	if crowd_separation.length_squared() > 0.001:
+		direction = (direction + crowd_separation * CROWD_SEPARATION_STRENGTH).normalized()
 	rotation.y = atan2(-direction.x, -direction.z)
 	velocity.x = direction.x * move_speed * SPAWN_ASSAULT_SPEED_MULTIPLIER * slow_factor
 	velocity.z = direction.z * move_speed * SPAWN_ASSAULT_SPEED_MULTIPLIER * slow_factor
@@ -308,7 +436,23 @@ func _instantiate_detailed_model() -> Node3D:
 		return _boss_model_scene.instantiate() as Node3D if _boss_model_scene != null else null
 	if _enemy_model_scene == null and ResourceLoader.exists(ENEMY_MODEL_PATH):
 		_enemy_model_scene = load(ENEMY_MODEL_PATH) as PackedScene
-	return _enemy_model_scene.instantiate() as Node3D if _enemy_model_scene != null else null
+	if _enemy_model_scene == null:
+		return null
+	var rig := _enemy_model_scene.instantiate() as Node3D
+	# Style the body once at rig creation, before Pencil and flashlight
+	# variants are made. Eyes, eyebrows and the player's source rig stay independent.
+	for node in rig.find_children("*", "MeshInstance3D", true, false):
+		var mesh := node as MeshInstance3D
+		for surface in range(mesh.mesh.get_surface_count()):
+			var source := mesh.mesh.surface_get_material(surface) as StandardMaterial3D
+			if source == null or source.resource_name != "MI_Superhero_Male":
+				continue
+			if _infected_body_material == null:
+				_infected_body_material = source.duplicate() as StandardMaterial3D
+				_infected_body_material.albedo_texture = INFECTED_ALBEDO
+				_infected_body_material.vertex_color_use_as_albedo = false
+			mesh.set_surface_override_material(surface, _infected_body_material)
+	return rig
 
 func _adopt_detailed_model(model: Node3D) -> void:
 	if model == null or _model != null:
@@ -335,8 +479,7 @@ func _adopt_detailed_model(model: Node3D) -> void:
 	for mesh_node in model.find_children("*", "MeshInstance3D", true, false):
 		_base_visual_meshes.append(mesh_node as MeshInstance3D)
 	if _animation_player != null and _skeleton != null:
-		UNIVERSAL_BASE_MOTION.install(_animation_player, _skeleton)
-		_fight_animations_ready = FIGHT_ANIMATION_BUILDER.install(_animation_player, _skeleton, _fight_attack_profiles())
+		_fight_animations_ready = RIG_ANIMATION_CACHE.install(model, _animation_player, _skeleton, _fight_attack_profiles())
 		_animation_player.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_PHYSICS
 	if _animation_player != null:
 		for loop_name in ["Idle", "Walk", "Sprint"]:
@@ -359,6 +502,10 @@ func _adopt_detailed_model(model: Node3D) -> void:
 	set_quality_shadow_enabled(_quality_shadows_enabled)
 
 func _release_detailed_model() -> void:
+	if state == "limb_hold":
+		release_limb_grab(_player, "model_released")
+	elif state == "limb_grab_windup":
+		cancel_limb_grab_windup(_player, "model_released")
 	if _model == null:
 		return
 	var model := _model
@@ -391,34 +538,12 @@ func attach_status_label(label: Label3D) -> void:
 	_update_health_display()
 
 func _build_health_display() -> void:
-	_health_bar_root = Node3D.new()
-	_health_bar_root.name = "EnemyHealthBar"
+	_health_bar_root = HEALTH_BAR.instantiate() as Node3D
+	_health_bar_fill = _health_bar_root.get_node("Fill") as MeshInstance3D
 	_health_bar_root.position.y = 3.05 if is_boss else 2.58
 	_health_bar_root.visible = is_boss
 	_visual_root.add_child(_health_bar_root)
-	var back := MeshInstance3D.new()
-	var back_mesh := QuadMesh.new()
-	back_mesh.size = Vector2(0.90, 0.085)
-	back.mesh = back_mesh
-	back.material_override = _health_bar_material(Color(0.035, 0.025, 0.03))
-	_health_bar_root.add_child(back)
-	_health_bar_fill = MeshInstance3D.new()
-	var fill_mesh := QuadMesh.new()
-	fill_mesh.size = Vector2(0.82, 0.044)
-	_health_bar_fill.mesh = fill_mesh
-	_health_bar_fill.position = Vector3(-0.41, 0.0, 0.006)
-	_health_bar_fill.material_override = _health_bar_material(Color(0.86, 0.12, 0.09))
-	_health_bar_root.add_child(_health_bar_fill)
 	_update_health_display()
-
-func _health_bar_material(tint: Color) -> StandardMaterial3D:
-	var material := StandardMaterial3D.new()
-	material.albedo_color = tint
-	material.emission_enabled = true
-	material.emission = tint * 0.45
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-	return material
 
 func _update_health_display() -> void:
 	var ratio := clampf(float(hp) / maxf(1.0, float(starting_health)), 0.0, 1.0)
@@ -600,6 +725,11 @@ func _physics_process(delta: float) -> void:
 	else:
 		_ai_interval = 0.10
 	if _ai_accumulator < _ai_interval:
+		# A stale chase velocity must not carry an unadmitted zombie into the
+		# local ring between staggered decisions.
+		if not is_boss and is_instance_valid(attack_director) and attack_director.has_method("is_local_formation_active") and bool(attack_director.call("is_local_formation_active")) and combat_target == _player and distance <= 4.2 and String(attack_director.call("formation_role_for", self)).is_empty() and state not in ["windup", "limb_grab_windup", "limb_hold", "hit", "recovery"]:
+			velocity.x = 0.0
+			velocity.z = 0.0
 		_move_and_check_assault(delta)
 		return
 	var step := _ai_accumulator
@@ -695,6 +825,14 @@ func _resume_animation_for_state() -> void:
 				_begin_attack_animation(target, global_position.distance_to(target.global_position), maxf(state_time, 0.01))
 			else:
 				_play_animation("Idle")
+		"limb_grab_windup", "limb_hold":
+			if not _limb_grab_hand.is_empty():
+				var clip := String(FIGHT_ANIMATION_BUILDER.clip_path("punch", _limb_grab_hand, ENEMY_FIGHT_LIBRARY))
+				if _animation_player.has_animation(clip):
+					_play_animation(clip, 1.0, 0.04, true)
+					if state == "limb_hold":
+						_animation_player.seek(_attack_contact_time, true)
+						_animation_player.pause()
 		"hit": _play_animation("Hit_React", 1.0, 0.04, true)
 		"assault": _play_animation("Sprint")
 		"wander": _play_animation("Walk")
@@ -702,6 +840,15 @@ func _resume_animation_for_state() -> void:
 		_: _play_animation("Idle")
 
 func _update_ai(delta: float, distance: float) -> void:
+	if state == "limb_hold":
+		velocity.x = 0.0
+		velocity.z = 0.0
+		# The player's session timer is authoritative, not this AI clock.
+		if not _can_keep_limb_grab():
+			release_limb_grab(_player, "reservation_lost")
+		elif _player.get_active_grab_enemy() != self:
+			release_limb_grab(_player, "session_lost")
+		return
 	if stun_time > 0.0:
 		stun_time = maxf(0.0, stun_time - delta)
 		velocity.x = move_toward(velocity.x, 0.0, delta * 9.0)
@@ -719,11 +866,13 @@ func _update_ai(delta: float, distance: float) -> void:
 	if _spawn_assault_time > 0.0 and _update_spawn_assault(delta):
 		return
 	_decision_time -= delta
-	if _decision_time <= 0.0 and state != "windup":
+	if _decision_time <= 0.0 and state not in ["windup", "limb_grab_windup"]:
 		_decision_time = randf_range(0.35, 0.55)
 		_choose_target()
 	if not _valid_target():
 		combat_target = null
+		if state == "limb_grab_windup":
+			cancel_limb_grab_windup(_player)
 		if state == "windup":
 			_release_player_attack_slot()
 			state = "recovery"
@@ -736,7 +885,17 @@ func _update_ai(delta: float, distance: float) -> void:
 			velocity.z = 0.0
 			if state_time > 0.0:
 				return
-		_wander(delta)
+		if not is_boss:
+			# Ordinary ground zombies wait for the player and never pick another
+			# zombie as prey or wander away from the encounter.
+			state = "idle"
+			_wander_time = 0.0
+			_wander_direction = Vector3.ZERO
+			velocity.x = move_toward(velocity.x, 0.0, delta * 9.0)
+			velocity.z = move_toward(velocity.z, 0.0, delta * 9.0)
+			_play_animation("Idle")
+		else:
+			_wander(delta)
 		return
 	distance = global_position.distance_to(combat_target.global_position)
 	var to_player := combat_target.global_position - global_position
@@ -751,6 +910,13 @@ func _update_ai(delta: float, distance: float) -> void:
 		_play_animation("Hit_React")
 		if state_time <= 0.0:
 			state = "approach"
+	elif state == "limb_grab_windup":
+		velocity.x = 0.0
+		velocity.z = 0.0
+		if not _can_keep_limb_grab() or not _player.is_limb_grab_candidate(self):
+			cancel_limb_grab_windup(_player)
+		elif state_time <= 0.0:
+			_resolve_limb_grab(distance)
 	elif state == "windup":
 		velocity.x = 0.0
 		velocity.z = 0.0
@@ -764,27 +930,207 @@ func _update_ai(delta: float, distance: float) -> void:
 		if state_time <= 0.0:
 			state = "approach"
 	else:
-		if distance > attack_range:
-			velocity.x = direction.x * move_speed * slow_factor * (1.0 if is_boss else 1.45)
-			velocity.z = direction.z * move_speed * slow_factor * (1.0 if is_boss else 1.45)
-			_play_animation("Sprint" if _is_high_speed_chase() else "Walk")
-		elif distance <= attack_range and _clear_sight(combat_target):
+		if _follow_local_formation(delta, distance):
+			return
+		if distance <= attack_range and _clear_sight(combat_target):
 			if combat_target == _player and not is_boss and is_instance_valid(attack_director) and not attack_director.call("try_acquire_attacker", self):
-				# Continue waiting in range until a current attacker finishes.
-				velocity.x = 0.0
-				velocity.z = 0.0
+				# Waiters make room around the player instead of stacking inside
+				# the same capsule while one of the four attack slots is occupied.
+				var queue_direction := _crowd_wait_direction(direction)
+				velocity.x = queue_direction.x * CROWD_WAIT_SPEED
+				velocity.z = queue_direction.z * CROWD_WAIT_SPEED
+				return
+			_attack_sequence += 1
+			if _attack_sequence % 3 == 1 and _try_begin_limb_grab():
 				return
 			state = "windup"
 			state_time = telegraph_duration if is_boss else telegraph_duration * 0.55
-			_attack_sequence += 1
 			_attack_latched = true
 			velocity.x = 0.0
 			velocity.z = 0.0
 			_begin_attack_animation(combat_target, distance, state_time)
 			telegraph_started.emit(self, is_boss)
 		else:
+			# Ray probes steer around the next solid obstacle without changing
+			# CharacterBody collision handling or teleporting the zombie.
+			var crowd_separation := _crowd_separation_direction()
+			var desired_direction := direction
+			if not is_boss and is_instance_valid(attack_director) and attack_director.has_method("is_local_formation_active") and bool(attack_director.call("is_local_formation_active")) and combat_target == _player and String(attack_director.call("formation_role_for", self)) == "attacker":
+				var goal: Vector3 = attack_director.call("formation_target_for", self)
+				if goal.is_finite():
+					desired_direction = goal - global_position
+					desired_direction.y = 0.0
+					if desired_direction.length_squared() > 0.04:
+						desired_direction = desired_direction.normalized()
+					else:
+						desired_direction = direction
+			if crowd_separation.length_squared() > 0.001:
+				desired_direction = (desired_direction + crowd_separation * CROWD_SEPARATION_STRENGTH).normalized()
+			var chase_direction := _pursuit_direction(desired_direction, delta, distance)
+			velocity.x = chase_direction.x * move_speed * slow_factor * (1.0 if is_boss else 1.45)
+			velocity.z = chase_direction.z * move_speed * slow_factor * (1.0 if is_boss else 1.45)
+			_play_animation("Sprint" if _is_high_speed_chase() else "Walk")
+
+func _follow_local_formation(delta: float, distance: float) -> bool:
+	if is_boss or combat_target != _player or not is_instance_valid(attack_director) or not attack_director.has_method("is_local_formation_active") or not bool(attack_director.call("is_local_formation_active")):
+		return false
+	var role: String = String(attack_director.call("formation_role_for", self))
+	if role == "attacker":
+		return false
+	if role.is_empty() and distance > 4.9:
+		return false
+	var goal := Vector3.INF
+	if role.is_empty():
+		# Unadmitted actors hold outside the ring; if the player crosses them,
+		# they walk back out through ordinary CharacterBody collision.
+		var away := global_position - _player.global_position
+		away.y = 0.0
+		if away.length_squared() < 0.01:
+			away = -_player.global_basis.z
+			away.y = 0.0
+		goal = _player.global_position + away.normalized() * 4.55
+	else:
+		goal = attack_director.call("formation_target_for", self)
+	state = "approach"
+	var to_goal := goal - global_position if goal.is_finite() else Vector3.ZERO
+	to_goal.y = 0.0
+	if to_goal.length_squared() < 0.12:
+		var separation := _crowd_separation_direction()
+		if separation.length_squared() > 0.04:
+			velocity.x = separation.x * CROWD_WAIT_SPEED
+			velocity.z = separation.z * CROWD_WAIT_SPEED
+		else:
 			velocity.x = 0.0
 			velocity.z = 0.0
+		_play_animation("Walk" if separation.length_squared() > 0.04 else "Idle")
+		return true
+	var desired := to_goal.normalized()
+	var crowd := _crowd_separation_direction()
+	if crowd.length_squared() > 0.001:
+		desired = (desired + crowd * CROWD_SEPARATION_STRENGTH).normalized()
+	var steering := _pursuit_direction(desired, delta, to_goal.length())
+	velocity.x = steering.x * move_speed * slow_factor
+	velocity.z = steering.z * move_speed * slow_factor
+	rotation.y = lerp_angle(rotation.y, atan2(-steering.x, -steering.z), minf(1.0, delta * 8.0))
+	_play_animation("Walk")
+	return true
+
+# Only detailed local attackers can start a visible, side-specific reach.
+# Both rigs expose hand_l/hand_r; use live bone positions instead of assuming
+# that model yaw or imported rest axes correspond to world left/right.
+func _try_begin_limb_grab() -> bool:
+	if is_boss or combat_target != _player or not is_instance_valid(_player):
+		return false
+	if not _full_animation_selected or not _visual_root.visible or _animation_player == null or _skeleton == null or _player._skeleton == null:
+		return false
+	if not _can_keep_limb_grab():
+		return false
+	var nearest := _nearest_arm_and_hand()
+	if nearest.is_empty():
+		return false
+	var hand: String = nearest["hand"]
+	var clip := String(FIGHT_ANIMATION_BUILDER.clip_path("punch", hand, ENEMY_FIGHT_LIBRARY))
+	if not _animation_player.has_animation(clip):
+		# No compatible side-specific reach: continue with the ordinary strike.
+		return false
+	var limb: String = nearest["limb"]
+	if not _player.try_reserve_limb_grab(self, limb):
+		return false
+	_limb_grab_hand = hand
+	_limb_grab_limb = limb
+	_attack_animation = clip
+	_attack_contact_time = _attack_clip_contact_time(clip)
+	state = "limb_grab_windup"
+	state_time = clampf(limb_grab_windup_seconds, 0.45, 1.25)
+	_attack_latched = true
+	velocity.x = 0.0
+	velocity.z = 0.0
+	var speed := _attack_contact_time / state_time if _attack_contact_time > 0.0 else 1.0
+	if not _play_animation(clip, speed, 0.08, true):
+		cancel_limb_grab_windup(_player)
+		return false
+	return true
+
+func _nearest_arm_and_hand() -> Dictionary:
+	var nearest := {}
+	var best := INF
+	for arm in ["left", "right"]:
+		var player_bone := _player._skeleton.find_bone("hand_l" if arm == "left" else "hand_r")
+		if player_bone < 0:
+			continue
+		var arm_at := _player._skeleton.to_global(_player._skeleton.get_bone_global_pose(player_bone).origin)
+		for hand in ["left", "right"]:
+			var enemy_bone := _skeleton.find_bone("hand_l" if hand == "left" else "hand_r")
+			if enemy_bone < 0:
+				continue
+			var hand_at := _skeleton.to_global(_skeleton.get_bone_global_pose(enemy_bone).origin)
+			var distance_squared := arm_at.distance_squared_to(hand_at)
+			if distance_squared < best:
+				best = distance_squared
+				nearest = {"limb": "LEFT ARM" if arm == "left" else "RIGHT ARM", "hand": hand}
+	return nearest
+
+func _can_keep_limb_grab() -> bool:
+	return is_instance_valid(_player) and _player.health > 0 and is_instance_valid(attack_director) and attack_director.has_method("can_maintain_limb_grab") and bool(attack_director.call("can_maintain_limb_grab", self))
+
+func _resolve_limb_grab(distance: float) -> void:
+	var hit := false
+	if _can_keep_limb_grab() and is_instance_valid(_player):
+		distance = global_position.distance_to(_player.global_position)
+		if distance <= minf(attack_range + 0.18, 1.65) and _clear_sight(_player):
+			# A synchronous escape callback can now release the tactical hold.
+			state = "limb_hold"
+			state_time = clampf(_player.limb_grab_hold_seconds, 0.5, 3.0)
+			hit = _player.begin_limb_grab(self, _limb_grab_limb)
+			if not hit and state == "limb_hold":
+				state = "limb_grab_windup"
+	if hit:
+		if state == "limb_hold" and _animation_player != null and _animation_player.current_animation == _attack_animation:
+			_animation_player.seek(_attack_contact_time, true)
+			_animation_player.pause()
+		_attack_latched = false
+		attack_resolved.emit(self, true)
+		return
+	attack_resolved.emit(self, false)
+	cancel_limb_grab_windup(_player, "contact_failed")
+
+func cancel_limb_grab_windup(owner: FoundationPlayer, reason: String = "windup_cancelled") -> void:
+	if state != "limb_grab_windup" or owner != _player:
+		return
+	state = "recovery"
+	state_time = recovery_duration * 0.65
+	_limb_grab_limb = ""
+	_limb_grab_hand = ""
+	_attack_animation = ""
+	_attack_latched = false
+	velocity.x = 0.0
+	velocity.z = 0.0
+	if is_instance_valid(_player):
+		_player.cancel_pending_limb_grab(self, reason)
+	_play_animation("Idle", 1.0, 0.08, true)
+	_release_player_attack_slot()
+
+func release_limb_grab(owner: FoundationPlayer, reason: String = "enemy_released") -> void:
+	if state != "limb_hold" or owner != _player:
+		return
+	state = "recovery"
+	state_time = recovery_duration * 0.65
+	_limb_grab_limb = ""
+	_limb_grab_hand = ""
+	_attack_animation = ""
+	_attack_latched = false
+	velocity.x = 0.0
+	velocity.z = 0.0
+	if is_instance_valid(_player):
+		_player.end_limb_grab(self, reason)
+	_play_animation("Idle", 1.0, 0.08, true)
+	_release_player_attack_slot()
+
+func _exit_tree() -> void:
+	if state == "limb_hold":
+		release_limb_grab(_player, "enemy_despawned")
+	elif state == "limb_grab_windup":
+		cancel_limb_grab_windup(_player, "enemy_despawned")
 
 func _resolve_enemy_attack(distance: float) -> void:
 	var hit := false
@@ -792,7 +1138,8 @@ func _resolve_enemy_attack(distance: float) -> void:
 	var target: Node3D = combat_target if _valid_target() else _player
 	if is_instance_valid(target):
 		distance = global_position.distance_to(target.global_position)
-		if distance <= attack_range + 0.18 and _clear_sight(target):
+		var local_attack_allowed := is_boss or target != _player or not is_instance_valid(attack_director) or not attack_director.has_method("can_resolve_player_attack") or bool(attack_director.call("can_resolve_player_attack", self))
+		if local_attack_allowed and distance <= attack_range + 0.18 and _clear_sight(target):
 			if target is FoundationEnemy:
 				target.receive_hit(12, (target.global_position - global_position).normalized())
 				if target.hp > 0 and target.combat_target != _player:
@@ -830,6 +1177,10 @@ func begin_player_grapple(owner: FoundationPlayer, duration: float) -> bool:
 	if hp <= 0 or is_boss or not is_instance_valid(owner) or duration <= 0.0:
 		return false
 	_finish_spawn_assault()
+	if state == "limb_hold":
+		release_limb_grab(_player)
+	elif state == "limb_grab_windup":
+		cancel_limb_grab_windup(_player)
 	_release_player_attack_slot()
 	_player_grapple_owner = owner
 	_player_grapple_time = duration
@@ -851,6 +1202,11 @@ func end_player_grapple(owner: FoundationPlayer) -> void:
 func receive_hit(damage: int, hit_direction: Vector3 = Vector3.ZERO, is_jump_hit: bool = false) -> int:
 	if hp <= 0 or damage <= 0 or _death_started:
 		return 0
+	var interrupt_reason := "enemy_died" if damage >= hp else "enemy_hit"
+	if state == "limb_hold":
+		release_limb_grab(_player, interrupt_reason)
+	elif state == "limb_grab_windup":
+		cancel_limb_grab_windup(_player, interrupt_reason)
 	_finish_spawn_assault()
 	_release_player_attack_slot()
 	var dealt := mini(hp, damage)
@@ -886,6 +1242,10 @@ func receive_hit(damage: int, hit_direction: Vector3 = Vector3.ZERO, is_jump_hit
 	return dealt
 
 func apply_stun(duration: float) -> void:
+	if state == "limb_hold":
+		release_limb_grab(_player)
+	elif state == "limb_grab_windup":
+		cancel_limb_grab_windup(_player)
 	_finish_spawn_assault()
 	if state == "windup":
 		state = "approach"

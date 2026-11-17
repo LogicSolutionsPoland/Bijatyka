@@ -16,7 +16,8 @@ static func material_for(source: Material) -> Material:
 	var revealed := source.duplicate() as Material
 	if source is StandardMaterial3D:
 		var standard := revealed as StandardMaterial3D
-		standard.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_DEPTH_PRE_PASS
+		standard.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		standard.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_ALWAYS
 	elif source is ShaderMaterial:
 		var shader := (source as ShaderMaterial).shader
 		if shader == null:
@@ -55,7 +56,8 @@ static func set_mesh_revealed(mesh: MeshInstance3D, is_revealed: bool) -> void:
 	if mesh.material_overlay != null:
 		mesh.material_overlay = _select(mesh.material_overlay, is_revealed)
 
+static func source_for(material: Material) -> Material:
+	return material.get_meta(SOURCE_META, material) as Material if material != null else null
+
 static func _select(material: Material, is_revealed: bool) -> Material:
-	if material == null:
-		return null
-	return material_for(material) if is_revealed else material.get_meta(SOURCE_META, material) as Material
+	return material_for(material) if is_revealed else source_for(material)

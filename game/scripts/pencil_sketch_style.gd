@@ -1,6 +1,7 @@
 extends Node
 
 const PENCIL := preload("res://scripts/pencil.gd")
+const REVEAL := preload("res://scripts/flashlight_enemy_reveal.gd")
 const STYLE_META := &"_pencil_sketch_materials_processed"
 const OPAQUE_META := &"_pencil_sketch_opaque_material"
 
@@ -9,6 +10,7 @@ var _pending_mesh_ids: Dictionary = {}
 var _pending_mesh_queue: Array[int] = []
 var _original_mesh_materials: Dictionary = {}
 var _gameplay_pencil_enabled := true
+var _character_only := false
 const MAX_MESHES_PER_FRAME := 6
 var _styled_surface_count := 0
 var _styled_mesh_count := 0
@@ -32,6 +34,17 @@ func set_gameplay_pencil_enabled(is_enabled: bool) -> void:
 		_pending_mesh_queue.clear()
 		set_process(false)
 		_restore_original_materials()
+
+func set_character_only(is_enabled: bool) -> void:
+	if _character_only == is_enabled:
+		return
+	_character_only = is_enabled
+	_pending_mesh_ids.clear()
+	_pending_mesh_queue.clear()
+	set_process(false)
+	_restore_original_materials()
+	if _gameplay_pencil_enabled:
+		_scan_tree(get_tree().root)
 
 
 func is_gameplay_style_ready() -> bool:
@@ -60,15 +73,24 @@ func _restore_original_materials() -> void:
 		if mesh.mesh == null:
 			continue
 		var original: Dictionary = _original_mesh_materials[instance_id]
-		mesh.material_override = original["material_override"] as Material
+		mesh.material_override = _restore_material(mesh.material_override, original["material_override"])
 		var overrides: Array = original["surface_overrides"]
 		for surface_index in range(mini(mesh.mesh.get_surface_count(), overrides.size())):
-			mesh.set_surface_override_material(surface_index, overrides[surface_index] as Material)
+			var current := mesh.get_surface_override_material(surface_index)
+			mesh.set_surface_override_material(surface_index, _restore_material(
+				current, overrides[surface_index], mesh.mesh.surface_get_material(surface_index)))
 		if mesh.has_meta(STYLE_META):
 			mesh.remove_meta(STYLE_META)
 	_original_mesh_materials.clear()
 	_styled_mesh_count = 0
 	_styled_surface_count = 0
+
+# A lit enemy draws after the blackout. Change its source and keep the
+# current reveal state, even when the flashlight moved since styling began.
+func _restore_material(current: Material, original: Material, inherited: Material = null) -> Material:
+	if current != null and current.has_meta(REVEAL.SOURCE_META):
+		return REVEAL.material_for(original if original != null else inherited)
+	return original
 
 func _on_node_added(node: Node) -> void:
 	if node is MeshInstance3D:
@@ -80,8 +102,23 @@ func _scan_tree(node: Node) -> void:
 	for child in node.get_children():
 		_scan_tree(child)
 
+func _is_character_mesh(mesh: MeshInstance3D) -> bool:
+	# Only meshes below the player's or an enemy's visual model receive graphite.
+	var inside_visual_root := false
+	var ancestor: Node = mesh
+	while ancestor != null:
+		if ancestor.name == "VisualRoot":
+			inside_visual_root = true
+		if ancestor.is_in_group("player") or ancestor.is_in_group("enemies"):
+			return inside_visual_root
+		ancestor = ancestor.get_parent()
+	return false
+
+
 func _queue_mesh(mesh: MeshInstance3D) -> void:
 	if not _gameplay_pencil_enabled or mesh.mesh == null or mesh.has_meta(STYLE_META):
+		return
+	if _character_only and not _is_character_mesh(mesh):
 		return
 	var instance_id := mesh.get_instance_id()
 	if _pending_mesh_ids.has(instance_id):
@@ -100,12 +137,14 @@ func _apply_to_mesh(instance_id: int) -> void:
 func apply_mesh(mesh: MeshInstance3D) -> void:
 	if not _gameplay_pencil_enabled or mesh.mesh == null or mesh.has_meta(STYLE_META):
 		return
+	if _character_only and not _is_character_mesh(mesh):
+		return
 
 	# Remember exact source overrides for a lossless rooftop restoration.
 	var original_surface_overrides: Array[Material] = []
 	for surface_index in range(mesh.mesh.get_surface_count()):
-		original_surface_overrides.append(mesh.get_surface_override_material(surface_index))
-	var original_override := mesh.material_override
+		original_surface_overrides.append(REVEAL.source_for(mesh.get_surface_override_material(surface_index)))
+	var original_override := REVEAL.source_for(mesh.material_override)
 	var changed := false
 	if mesh.material_override != null:
 		var override_replacement := _styled_material(mesh.material_override)
@@ -131,7 +170,13 @@ func apply_mesh(mesh: MeshInstance3D) -> void:
 		mesh.set_meta(STYLE_META, true)
 		_styled_mesh_count += 1
 
-func _styled_material(source: Material) -> ShaderMaterial:
+func _styled_material(source: Material) -> Material:
+	if source != null and source.has_meta(REVEAL.SOURCE_META):
+		var styled := _styled_base(REVEAL.source_for(source))
+		return REVEAL.material_for(styled) if styled != null else null
+	return _styled_base(source)
+
+func _styled_base(source: Material) -> ShaderMaterial:
 	if not source is StandardMaterial3D:
 		return null
 
@@ -152,20 +197,20 @@ func _styled_material(source: Material) -> ShaderMaterial:
 	styled.set_meta(OPAQUE_META, true)
 	# The supplied material draws its lines from the directional key light.
 	# A small wash preserves the detailed source textures as the graphite reads.
-	styled.set_shader_parameter(&"wash", 0.16)
-	styled.set_shader_parameter(&"blotch", 0.08)
-	styled.set_shader_parameter(&"shadow_color", Color(0.72, 0.72, 0.75))
+	styled.set_shader_parameter(&"wash", 0.06)
+	styled.set_shader_parameter(&"blotch", 0.06)
+	styled.set_shader_parameter(&"shadow_color", Color(0.49, 0.53, 0.59))
 	styled.set_shader_parameter(&"graphite_color", Color(0.10, 0.10, 0.13))
-	styled.set_shader_parameter(&"graphite_strength", 0.96)
+	styled.set_shader_parameter(&"graphite_strength", 0.70)
 	styled.set_shader_parameter(&"hatch_space", 0)
-	styled.set_shader_parameter(&"hatch_spacing", 6.5)
-	styled.set_shader_parameter(&"crosshatch", 0.68)
-	styled.set_shader_parameter(&"waver", 0.50)
+	styled.set_shader_parameter(&"hatch_spacing", 9.0)
+	styled.set_shader_parameter(&"crosshatch", 0.44)
+	styled.set_shader_parameter(&"waver", 0.31)
 	styled.set_shader_parameter(&"roughness", 0.34)
 	var outline := styled.next_pass as ShaderMaterial
-	outline.set_shader_parameter(&"outline_width", 4.0)
-	outline.set_shader_parameter(&"outline_color", Color(0.09, 0.09, 0.12))
-	outline.set_shader_parameter(&"outline_variation", 0.45)
+	outline.set_shader_parameter(&"outline_width", 1.8)
+	outline.set_shader_parameter(&"outline_color", Color(0.10, 0.12, 0.15))
+	outline.set_shader_parameter(&"outline_variation", 0.32)
 	outline.set_shader_parameter(&"outline_fade_start", 16.0)
 	outline.set_shader_parameter(&"outline_fade_end", 34.0)
 	_material_cache[cache_key] = styled
@@ -177,6 +222,7 @@ func is_enabled() -> bool:
 func get_style_stats() -> Dictionary:
 	return {
 		"enabled": _gameplay_pencil_enabled,
+		"character_only": _character_only,
 		"styled_meshes": _styled_mesh_count,
 		"styled_surfaces": _styled_surface_count,
 		"shared_materials": _material_cache.size()

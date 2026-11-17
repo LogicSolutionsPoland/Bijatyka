@@ -64,7 +64,7 @@ The camera uses a close right-shoulder viewpoint. The follow pivot sits **1.20 m
 ## Carried-forward rules and current scope
 
 - The Thornbound mobile GLB player and rigged LOD1 zombie were copied from user-supplied Retribution assets; no music is used.
-- The endless invasion keeps up to 15 ordinary zombies active in normal play. Defeated shamblers are replaced through the concealed 50 m spawn flow, while the existing 30 m visibility radius and distant-animation throttling keep the crowd lightweight. The 200-zombie capacity remains available only in the development stress tests.
+- The ground invasion keeps at most 20 living ordinary zombies, including dormant records; the boss is separate. A local offline Director varies reinforcement timing and attack pressure through the existing concealed 50 m spawn system. The 30 m visibility radius, seven full-rig budget, and distant-animation throttling remain in place. The roof retains four data-only ordinary-zombie entries until the elevator's actual ground-arrival event.
 - The yard's enemies have telegraphed windups. Ordinary zombies can interrupt, slow, or lengthen recovery but never reduce HP. The boss can damage the player.
 - Shadows are disabled on every scene light, imported player/enemy model, and procedural mesh. Distance-based enemy detail never switches them back on, and the HUD notice has no text shadow.
 - Jump landing impacts can hit and damage enemies. Dash uses the previously selected 15 m mobility distance.

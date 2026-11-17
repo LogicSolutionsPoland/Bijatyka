@@ -37,8 +37,15 @@ func _run() -> void:
 	world.add_child(manager)
 	manager.configure(player, camera, true)
 	manager.set_rooftop_sky_visible(false)
-	# Measure the cross-sections themselves, independent of the screen overlay.
-	manager._composite.visible = false
+	# Keep the shaft-only probe from reactivating the foreground fog artwork.
+	manager.set_process(false)
+	manager.set_physics_process(false)
+	# Check the shaft with the restored fullscreen blackout active on the ground.
+	_check(is_instance_valid(manager._composite) and manager._composite.visible, "ground floor instantiates and displays the fullscreen blackout")
+	# The tip artwork has its own screen-space render probe. Keep it hidden here
+	# so the wall cutoff measurement contains only the 3D flashlight shaft.
+	if is_instance_valid(manager._tip_silhouettes):
+		manager._tip_silhouettes.call("set_effect_visible", false)
 	for node in manager.spotlight.find_children("PlayerFlashlightBeamSheet*", "MeshInstance3D", true, false):
 		(node as MeshInstance3D).visible = false
 
@@ -71,7 +78,7 @@ func _run() -> void:
 	wall.material_override = wall_material
 	wall.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	world.add_child(wall)
-	wall.global_position = manager.beam_origin + manager.beam_direction * 8.5
+	wall.global_position = manager.beam_origin + manager.beam_direction * 5.0
 	wall.global_basis = Basis.looking_at(manager.beam_direction, Vector3.UP)
 	for frame in range(4):
 		await process_frame

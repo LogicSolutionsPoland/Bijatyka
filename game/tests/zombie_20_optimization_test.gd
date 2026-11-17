@@ -38,7 +38,8 @@ func run() -> void:
 	player.set_physics_process(false)
 	director = Director.new()
 	director.player = player
-	director.population_limit = 30
+	director.population_limit = 30 # A legacy/debug request must be clamped.
+	check(director.population_limit == 20 and Director.MAX_ORDINARY_POPULATION == 20, "all spawn paths cap ordinary zombies at 20")
 	fixture.add_child(director)
 	director.set_physics_process(false)
 	director.dormant_enemy_wake_requested.connect(_on_wake)
@@ -76,24 +77,28 @@ func run() -> void:
 		check(director.ordinary_population_count() == 1, "wake never doubles count")
 		check(restored[0].global_position.distance_to(player.global_position) <= 5.0, "actor wakes at requested five meter radius")
 
-	for index in range(29):
+	for index in range(19):
 		director._dormant_population.append({"position": Vector3(80.0 + float(index), 0.05, 0.0), "hp": 90, "kind": "shambler"})
-	check(director.ordinary_population_count() == 30, "30 limit includes 29 data-only zombies")
+	check(director.ordinary_population_count() == 20, "20 limit includes 19 data-only zombies")
 	director.request_population()
-	check(director._pending.is_empty(), "no spawn allowed over the 30 cap")
+	check(director._pending.is_empty(), "no spawn allowed over the 20 cap")
 	if restored.size() == 1:
 		director.replace_enemy(restored[0])
 		check(director._pending.size() == 1, "death at cap queues just one free slot")
 	director.store_upstairs_population(4)
 	check(director.ordinary_population_count() == 4 and director.dormant_population_count() == 0, "rooftop reset retains four records only")
 	check(not director.is_physics_processing(), "director is inactive on rooftop")
+	director.activate_profiling_population(30)
+	check(director.population_limit == 20, "profiling requests above 20 are clamped too")
+	director.store_upstairs_population(30)
+	check(director.ordinary_population_count() == 20, "even data-only rooftop storage cannot exceed the global cap")
 
 	fixture.queue_free()
 	await process_frame
 	if failures.is_empty():
-		print("PASS: zombie 30 dormant population (%d checks)" % checks)
+		print("PASS: zombie 20 dormant population (%d checks)" % checks)
 	else:
 		for failure in failures:
 			push_error(failure)
-		print("FAIL: zombie 30 dormant population (%d/%d)" % [failures.size(), checks])
+		print("FAIL: zombie 20 dormant population (%d/%d)" % [failures.size(), checks])
 	quit(0 if failures.is_empty() else 1)
