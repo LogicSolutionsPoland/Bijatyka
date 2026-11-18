@@ -1,0 +1,220 @@
+name: Bijatyka Stage 5/5B safe feature integration verification (NO APK)
+
+on:
+  push:
+    branches:
+      - integration/bijatyka-stage5-complete-20261109
+      - integration/bijatyka-stage5b-blackout-fog-20261109
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Godot 4.7.2 integration tests (NO APK)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - name: Checkout exact integration commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install Godot 4.7.2
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+      - name: Import resources and parse scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/stage5
+          echo "TESTED_SHA=$(git rev-parse HEAD)"
+          timeout 300s godot --headless --editor --path game --import --quit 2>&1 | tee build/stage5/import.log
+          if grep -Eq 'SCRIPT ERROR:|Parse Error:|ERROR: Failed to load' build/stage5/import.log; then exit 1; fi
+      - name: Gameplay, visuals, controls, zombie systems and CPU regressions
+        shell: bash
+        run: |
+          set +e
+          set -uo pipefail
+          failures=0
+          for suite in \
+            stage4_character_only_test stage4_melee_lunge_test \
+            cinematic_chain_physics_test jump_state_regression_test \
+            brutal_grab_state_machine_test brutal_grab_qte_test \
+            brutal_grab_limb_contact_test brutal_grab_real_rig_test \
+            test_runner player_animation_test \
+            concealed_spawn_test ai_director_test \
+            elevator_loading_test stage6_integrated_headless_test \
+            flashlight_visibility_test flashlight_enemy_reveal_test \
+            general_cpu_optimization_test rig_budget_lifecycle_test \
+            environment_render_test stage5_visibility_regression_test; do
+            log="build/stage5/${suite}.log"
+            timeout 180s godot --headless --path game --script "res://tests/${suite}.gd" > "${log}" 2>&1
+            code=$?
+            cat "${log}"
+            if [ "${code}" -ne 0 ] || grep -Eq '^SCRIPT ERROR:|^ERROR:|^FAIL:' "${log}" || ! grep -q 'PASS:' "${log}"; then
+              echo "STAGE5_FAIL ${suite} exit=${code}"
+              failures=$((failures+1))
+            else
+              echo "STAGE5_PASS ${suite}"
+            fi
+          done
+          echo "STAGE5_FAILED_SUITES=${failures}"
+          test "${failures}" -eq 0
+      - name: Smoke-run playable scene for 600 frames
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 180s godot --headless --fixed-fps 60 --path game --quit-after 600 2>&1 | tee build/stage5/scene-smoke.log
+          if grep -Eq 'SCRIPT ERROR:|^ERROR:' build/stage5/scene-smoke.log; then exit 1; fi
+      - name: Render actual flashlight geometry under Mesa software OpenGL
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 180s xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/flashlight_beam_volume_test.gd 2>&1 | tee build/stage5/flashlight-gl.log
+          grep -q 'PASS:' build/stage5/flashlight-gl.log
+          if grep -Eq '^SCRIPT ERROR:|^ERROR:|^FAIL:' build/stage5/flashlight-gl.log; then exit 1; fi
+      - name: Capture and verify real ground blackout and rooftop pixels (Mesa OpenGL, NO APK)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/stage5/captures
+          BIJATYKA_CAPTURE_DIR="$PWD/build/stage5/captures" timeout 180s xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/flashlight_render_probe.gd 2>&1 | tee build/stage5/blackout-gl.log
+          grep -q 'PASS: flashlight Compatibility render mask' build/stage5/blackout-gl.log
+          if grep -Eq '^SCRIPT ERROR:|^ERROR:|^FAIL:' build/stage5/blackout-gl.log; then exit 1; fi
+          test -s build/stage5/captures/rooftop-no-blackout.png
+          test -s build/stage5/captures/ground-blackout-0.40.png
+      - name: Verify circular Zombie Fog Horizon and original flashlight-tip regressions (NO APK)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for suite in burning_horizon_test flashlight_tip_silhouettes_test; do
+            timeout 180s godot --headless --path game --script "res://tests/${suite}.gd" 2>&1 | tee "build/stage5/${suite}.log"
+            grep -q 'PASS:' "build/stage5/${suite}.log"
+            if grep -Eq '^SCRIPT ERROR:|^ERROR:|^FAIL:' "build/stage5/${suite}.log"; then exit 1; fi
+          done
+      - name: Real Mesa OpenGL circular fog sectors, animation, mask ordering and render scales (NO APK)
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIJATYKA_CAPTURE_DIR="$PWD/build/stage5/captures" timeout 240s xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/zombie_fog_render_probe.gd 2>&1 | tee build/stage5/zombie-fog-gl.log
+          grep -q 'PASS: zombie fog Compatibility pixels and motion' build/stage5/zombie-fog-gl.log
+          if grep -Eq '^SCRIPT ERROR:|^ERROR:|^FAIL:' build/stage5/zombie-fog-gl.log; then exit 1; fi
+          for scale in 1.00 0.67 0.40; do
+            test -s "build/stage5/captures/zombie-sector-1-${scale}.png"
+            test -s "build/stage5/captures/zombie-sector-6-${scale}.png"
+            test -s "build/stage5/captures/zombie-mask-${scale}.png"
+          done
+          test -s build/stage5/captures/zombie-fog-motion-before.png
+          test -s build/stage5/captures/zombie-fog-motion-after.png
+      - name: PR 70 flashlight-tip real framebuffer, alpha, motion and glitch probe (NO APK)
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIJATYKA_CAPTURE_DIR="$PWD/build/stage5/captures" timeout 240s xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/flashlight_tip_silhouette_render_probe.gd 2>&1 | tee build/stage5/flashlight-tip-gl.log
+          grep -q 'PASS: flashlight tip silhouette Compatibility render' build/stage5/flashlight-tip-gl.log
+          if grep -Eq '^SCRIPT ERROR:|^ERROR:|^FAIL:' build/stage5/flashlight-tip-gl.log; then exit 1; fi
+          for scale in 1.00 0.67 0.40; do
+            test -s "build/stage5/captures/tip-hidden-${scale}.png"
+            test -s "build/stage5/captures/tip-visible-${scale}.png"
+            test -s "build/stage5/captures/tip-artwork-40pct-${scale}.png"
+          done
+          test -s build/stage5/captures/tip-animation-start.png
+          test -s build/stage5/captures/tip-animation-after-120ms.png
+          test -s build/stage5/captures/tip-animation-after-920ms.png
+
+      - name: Stage 5B Step 4 combined scene, wall depth, camera, HUD and roof real framebuffer matrix (NO APK)
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIJATYKA_CAPTURE_DIR="$PWD/build/stage5/captures" timeout 240s xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/stage5b_combined_render_probe.gd 2>&1 | tee build/stage5/step4-combined-gl.log
+          grep -q 'PASS: Stage5B Step4 combined real-render matrix' build/stage5/step4-combined-gl.log
+          if grep -Eq '^SCRIPT ERROR:|^ERROR:|^FAIL:' build/stage5/step4-combined-gl.log; then exit 1; fi
+          for image in step4-roof-before step4-ground-s1.00-angle0 step4-ground-s0.67-angle1 step4-ground-s0.40-angle2 step4-hud-on step4-hud-off step4-wall-tip-off step4-wall-tip-on step4-floor-intersection step4-player-moved step4-roof-after step4-ground-return; do
+            test -s "build/stage5/captures/${image}.png"
+          done
+
+      - name: Paired pre/post visibility CPU samples (host only)
+        if: always()
+        shell: bash
+        run: |
+          set -uo pipefail
+          baseline="$RUNNER_TEMP/bijatyka-stage5-before"
+          git worktree add --detach "$baseline" 86ddc8cdb8e883a83f0b8978e7f94f69df27f3b0
+          cp game/tests/scene_visibility_benchmark.gd "$baseline/game/tests/scene_visibility_benchmark.gd"
+          (cd "$baseline" && timeout 300s godot --headless --editor --path game --import --quit && timeout 180s godot --headless --fixed-fps 60 --path game --script res://tests/scene_visibility_benchmark.gd) > build/stage5/visibility-before.log 2>&1
+          before_status=$?
+          timeout 180s godot --headless --fixed-fps 60 --path game --script res://tests/scene_visibility_benchmark.gd > build/stage5/visibility-after.log 2>&1
+          after_status=$?
+          cat build/stage5/visibility-before.log build/stage5/visibility-after.log
+          echo "VISIBILITY_BENCH_BASELINE_RC=${before_status} STAGE5_RC=${after_status}"
+          test "${before_status}" -eq 0 && test "${after_status}" -eq 0
+          grep -q 'VISIBILITY_CPU_SAMPLE' build/stage5/visibility-before.log
+          grep -q 'VISIBILITY_CPU_SAMPLE' build/stage5/visibility-after.log
+      - name: Step 5 actual elevator, combat-grab, respawn and Mesa render transitions (NO APK)
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIJATYKA_CAPTURE_DIR="$PWD/build/stage5/captures" timeout 360s xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/stage5b_step5_transition_probe.gd 2>&1 | tee build/stage5/step5-transitions-gl.log
+          grep -q 'PASS: Stage5B Step5 real gameplay-transition render checks' build/stage5/step5-transitions-gl.log
+          if grep -Eq '^SCRIPT ERROR:|^ERROR:|^FAIL:' build/stage5/step5-transitions-gl.log; then exit 1; fi
+          for picture in step5-roof-initial step5-call-loading step5-ground-1.00 step5-ground-0.67 step5-ground-0.40 step5-ground-aim step5-grab-active step5-roof-respawn step5-ground-forced-profile; do
+            test -s "build/stage5/captures/$picture.png"
+          done
+
+      - name: Step 5 paired Step4 versus Step5 host and software OpenGL at all scales (NO APK)
+        shell: bash
+        run: |
+          set -euo pipefail
+          baseline="$RUNNER_TEMP/bijatyka-step4-tested"
+          git worktree add --detach "$baseline" 64893ab496ec6cc28f0ad4287cf0697c1ce30a34
+          cp game/tests/stage5b_step5_host_benchmark.gd "$baseline/game/tests/stage5b_step5_host_benchmark.gd"
+          (cd "$baseline" && timeout 300s godot --headless --editor --path game --import --quit) > build/stage5/step5-baseline-import.log 2>&1
+          for scale in 1.00 0.67 0.40; do
+            for version in baseline candidate; do
+              if [ "$version" = baseline ]; then location="$baseline"; else location="$PWD"; fi
+              label="step5-$version-mesa-$scale"
+              (cd "$location" && BIJATYKA_BENCH_SHA="$(git rev-parse HEAD)" BIJATYKA_BENCH_RENDERER=mesa-software-opengl3 \
+                timeout 600s xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/stage5b_step5_host_benchmark.gd -- "--scale=$scale") > "build/stage5/$label.log" 2>&1
+              grep -q 'PASS: Step5 host CPU and software OpenGL benchmark' "build/stage5/$label.log"
+              grep -q 'STEP5_HOST_PERF_SAMPLE' "build/stage5/$label.log"
+            done
+          done
+          for version in baseline candidate; do
+            if [ "$version" = baseline ]; then location="$baseline"; else location="$PWD"; fi
+            (cd "$location" && BIJATYKA_BENCH_SHA="$(git rev-parse HEAD)" BIJATYKA_BENCH_RENDERER=headless-cpu \
+              timeout 360s godot --headless --fixed-fps 60 --path game --script res://tests/stage5b_step5_host_benchmark.gd -- --scale=0.40) > "build/stage5/step5-$version-headless-0.40.log" 2>&1
+            grep -q 'PASS: Step5 host CPU and software OpenGL benchmark' "build/stage5/step5-$version-headless-0.40.log"
+          done
+          python3 - <<'PY'
+          import json, pathlib
+          p=pathlib.Path("build/stage5")
+          logs=sorted(p.glob("step5-*-mesa-*.log"))+sorted(p.glob("step5-*-headless-*.log"))
+          records=[]
+          for log in logs:
+              for line in log.read_text(errors="replace").splitlines():
+                  if line.startswith("STEP5_HOST_PERF_SAMPLE "):
+                      records.append(json.loads(line.split(" ",1)[1]))
+          if len(records) != 8*11*2:
+              raise SystemExit(f"Incomplete comparable samples: {len(records)}")
+          (p/"step5-performance-samples.json").write_text(json.dumps({"step4_sha":"64893ab496ec6cc28f0ad4287cf0697c1ce30a34","candidate_sha":__import__("os").environ.get("GITHUB_SHA"),"note":"Linux Mesa software rendering, not Android GPU","records":records},indent=2))
+          with (p/"step5-performance-comparison.csv").open("w") as f:
+              f.write("driver,scale,scenario,repeat,sha,median_process_us,p95_process_us,median_physics_us,p95_wall_us,median_draw_calls,median_objects\n")
+              for r in records:
+                  f.write(f"{r['driver']},{r['scale']},{r['scenario']},{r['repeat']},{r['sha']},{r['process_us']['median']},{r['process_us']['p95']},{r['physics_us']['median']},{r['wall_us']['p95']},{r['draw_calls'].get('median','N/A')},{r['rendered_objects'].get('median','N/A')}\n")
+          print("STEP5_PROFILE_WINDOWS",len(records))
+          PY
+      - name: Keep QA logs only; never export or publish APK
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bijatyka-stage5-no-apk-qa-logs
+          path: |
+            build/stage5/*.log
+            build/stage5/captures/*.png
+            build/stage5/step5-performance-samples.json
+            build/stage5/step5-performance-comparison.csv
+          if-no-files-found: warn

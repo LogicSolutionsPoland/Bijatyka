@@ -7,7 +7,9 @@ included; the rest of the pack is not copied into the game.
 
 The dead-tree bark is reduced to 1024 px, and its normal map and rock texture
 to 512 px for the Android build. The glTF mesh geometry and material references
-are unchanged. `arena_map_upgrade.gd` places six dead trees, eight rocks, and
-six shrubs as four non-colliding `MultiMeshInstance3D` batches along the outer
-fence. These do not affect the protected base, four-zombie opening population, boss,
-enemy spawning, or combat lanes.
+are unchanged. `arena_map_upgrade.gd` uses nine models from this CC0 pack:
+five dead-tree variants, three medium-rock variants, and the common shrub.
+They are instanced as nine non-colliding `MultiMeshInstance3D` batches across
+the outer city blocks. Together the batches contain 62 instances and cast no
+shadows. They do not affect the protected base, four-zombie opening population,
+boss, enemy spawning, or combat lanes.

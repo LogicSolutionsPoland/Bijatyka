@@ -24,7 +24,7 @@ func run() -> void:
 	fixture.add_child(player)
 	check(player._animation_player != null, "player retains its independent full-quality animation player")
 	var batch := FarVisuals.new() as HordeFarVisuals
-	batch.configure(200)
+	batch.configure(20)
 	batch.player = player
 	batch.set_process(false)
 	fixture.add_child(batch)
@@ -104,19 +104,19 @@ func run() -> void:
 	check(batch.get_full_rig_count() <= batch.FULL_RIG_BUDGET, "player and boss do not consume the ordinary zombie rig budget")
 
 	var crowd: Array[FoundationEnemy] = []
-	for index in range(200):
+	for index in range(19):
 		var member := Enemy.new() as FoundationEnemy
 		member.position = Vector3(float(index % 20) * 0.7 - 6.65, 0.05, -8.0 - (float(index) / 20.0) * 0.45)
 		member.set_physics_process(false)
 		fixture.add_child(member)
 		batch.register_enemy(member)
 		crowd.append(member)
-	var active_attacker := crowd[199]
+	var active_attacker := crowd[18]
 	active_attacker.state = "windup"
 	active_attacker.combat_target = player
 	batch._update_full_rig_selection()
-	check(batch.get_full_rig_count() == batch.FULL_RIG_BUDGET, "200 close zombies stay independent from the seven-rig animation cap")
-	check(batch.get_resident_rig_count() == batch.FULL_RIG_BUDGET, "200 close zombies never allocate more than seven resident detailed rigs")
+	check(batch.get_full_rig_count() == batch.FULL_RIG_BUDGET, "20 close zombies stay independent from the seven-rig animation cap")
+	check(batch.get_resident_rig_count() == batch.FULL_RIG_BUDGET, "20 close zombies never allocate more than seven resident detailed rigs")
 	check(active_attacker._full_animation_selected, "active attacker receives full-quality priority")
 	check(player.get_parent() == fixture and player.is_in_group("player"), "player remains outside zombie visual-tier scheduling")
 	fixture.queue_free()

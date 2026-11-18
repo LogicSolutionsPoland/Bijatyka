@@ -14,7 +14,7 @@ signal local_lights_comparison_requested(is_enabled: bool)
 signal character_shadows_comparison_requested(is_enabled: bool)
 
 const SAMPLE_INTERVAL := 0.5
-const POPULATIONS := [15, 20, 30, 69, 100, 200]
+const POPULATIONS := [15, 20]
 const MODES := ["concentrated", "approach"]
 
 var _panel: PanelContainer

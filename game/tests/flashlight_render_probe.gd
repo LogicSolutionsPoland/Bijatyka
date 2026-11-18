@@ -19,7 +19,10 @@ func _run() -> void:
 	var city_view_point := root.get_visible_rect().size * Vector2(0.50, 0.56)
 	game.hud._root.visible = false
 	await RenderingServer.frame_post_draw
-	var rooftop_city_pixel := _sample(root.get_texture().get_image(), city_view_point)
+	var rooftop_frame := root.get_texture().get_image()
+	_save_capture(rooftop_frame, "rooftop-no-blackout.png")
+	_check(not game.flashlight_visibility_manager._composite.visible, "roof keeps blackout mesh disabled")
+	var rooftop_city_pixel := _sample(rooftop_frame, city_view_point)
 	print("ROOFTOP_ZOMBIE_CITY_SAMPLE " + JSON.stringify({"pixel": rooftop_city_pixel, "sky_active": game._rooftop_sky_active}))
 	_check(maxf(rooftop_city_pixel.r, maxf(rooftop_city_pixel.g, rooftop_city_pixel.b)) > 0.04, "the zombie-filled city panorama reaches the view above the rooftop guard")
 	game.player.set_physics_process(false)
@@ -60,8 +63,8 @@ func _run() -> void:
 	var dark_world := game.camera.project_position(viewport_size * Vector2(0.96, 0.58), 5.0)
 	var lit_probe := _add_probe(game, lit_world, Color(1.0, 0.05, 0.03))
 	var dark_probe := _add_probe(game, dark_world, Color(0.02, 1.0, 0.04))
-	_check(game.flashlight_visibility_manager.is_point_in_sector(lit_world) and lit_world.distance_to(game.player.global_position) < 22.0, "lit probe is within the original range and sector")
-	_check(game.flashlight_visibility_manager.is_point_in_sector(dark_world) and dark_world.distance_to(game.player.global_position) < 22.0, "dark probe differs only by its position outside the oval")
+	_check(game.flashlight_visibility_manager.is_point_in_sector(lit_world) and lit_world.distance_to(game.player.global_position) < 10.0, "lit probe is within the original range and sector")
+	_check(game.flashlight_visibility_manager.is_point_in_sector(dark_world) and dark_world.distance_to(game.player.global_position) < 10.0, "dark probe differs only by its position outside the oval")
 	for scale in [1.0, Foundation.MOBILE_BALANCED_RENDER_SCALE, Foundation.MOBILE_3D_RENDER_SCALE]:
 		root.scaling_3d_scale = scale
 		for frame in range(6):
@@ -69,6 +72,8 @@ func _run() -> void:
 		await RenderingServer.frame_post_draw
 		var image := root.get_texture().get_image()
 		_check(image != null and not image.is_empty(), "Compatibility frame readback is available at %.2fx" % scale)
+		if image != null and not image.is_empty():
+			_save_capture(image, "ground-blackout-%.2f.png" % scale)
 		if image != null and not image.is_empty():
 			var lit_point := game.camera.unproject_position(lit_probe.global_position)
 			var dark_point := game.camera.unproject_position(dark_probe.global_position)
@@ -78,6 +83,16 @@ func _run() -> void:
 			var lit_pixel := _sample(image, lit_point)
 			var dark_pixel := _sample(image, dark_point)
 			var player_pixel := _sample(image, player_point)
+			# Assert fullscreen darkness over nearby tower posts, not just a
+			# deliberately green probe. The legacy height-only player exemption
+			# used to leak tall scenery at these off-axis screen coordinates.
+			for sample_uv in [
+				Vector2(0.063, 0.37), Vector2(0.625, 0.21),
+				Vector2(0.095, 0.86), Vector2(0.305, 0.33)
+			]:
+				var outside_pixel := _sample(image, Vector2(image.get_size()) * sample_uv)
+				_check(maxf(outside_pixel.r, maxf(outside_pixel.g, outside_pixel.b)) < 0.04,
+					"tower posts outside the effective flashlight remain black at %.2fx screen %s" % [scale, sample_uv])
 			print("FLASHLIGHT_RENDER_SAMPLE " + JSON.stringify({"renderer": "GL Compatibility software desktop", "render_scale": scale, "lit_pixel": lit_pixel, "dark_pixel": dark_pixel, "player_pixel": player_pixel, "lit_uv": lit_point / Vector2(image.get_width(), image.get_height()), "dark_uv": dark_point / Vector2(image.get_width(), image.get_height()), "player_uv": player_point / Vector2(image.get_width(), image.get_height())}))
 			_check(lit_pixel.r > 0.45 and lit_pixel.g < 0.35, "red object is visible inside the oval at %.2fx" % scale)
 			_check(dark_pixel.g < 0.12, "green object is black outside the oval at %.2fx" % scale)
@@ -113,6 +128,18 @@ func _sample(image: Image, screen_point: Vector2) -> Color:
 	var x := clampi(int(screen_point.x), 0, image.get_width() - 1)
 	var y := clampi(int(screen_point.y), 0, image.get_height() - 1)
 	return image.get_pixel(x, y)
+
+func _save_capture(image: Image, file_name: String) -> void:
+	var folder := OS.get_environment("BIJATYKA_CAPTURE_DIR")
+	if folder.is_empty() or image == null or image.is_empty():
+		return
+	var created := DirAccess.make_dir_recursive_absolute(folder)
+	_check(created == OK, "screenshot directory is writable")
+	if created != OK:
+		return
+	_check(image.save_png(folder.path_join(file_name)) == OK,
+		"actual Compatibility frame is saved: " + file_name)
+
 
 func _check(ok: bool, message: String) -> void:
 	checks += 1

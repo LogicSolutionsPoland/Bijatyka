@@ -1,0 +1,32 @@
+[gd_scene format=3]
+
+[sub_resource type="QuadMesh" id="BackingMesh"]
+size = Vector2(0.90, 0.085)
+
+[sub_resource type="StandardMaterial3D" id="BackingMaterial"]
+shading_mode = 0
+albedo_color = Color(0.035, 0.025, 0.03, 1)
+emission_enabled = true
+emission = Color(0.01575, 0.0112499995, 0.0134999994, 0.45)
+billboard_mode = 1
+
+[sub_resource type="QuadMesh" id="FillMesh"]
+size = Vector2(0.82, 0.044)
+
+[sub_resource type="StandardMaterial3D" id="FillMaterial"]
+shading_mode = 0
+albedo_color = Color(0.86, 0.12, 0.09, 1)
+emission_enabled = true
+emission = Color(0.387, 0.053999998, 0.0405, 0.45)
+billboard_mode = 1
+
+[node name="EnemyHealthBar" type="Node3D"]
+
+[node name="Backing" type="MeshInstance3D" parent="."]
+mesh = SubResource("BackingMesh")
+material_override = SubResource("BackingMaterial")
+
+[node name="Fill" type="MeshInstance3D" parent="."]
+position = Vector3(-0.41, 0, 0.006)
+mesh = SubResource("FillMesh")
+material_override = SubResource("FillMaterial")

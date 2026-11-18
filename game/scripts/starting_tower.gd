@@ -47,7 +47,7 @@ func _ready() -> void:
 		_trim_material = fallback
 	if _cage_material == null:
 		var fallback := StandardMaterial3D.new()
-		fallback.albedo_color = Color(0.40, 0.43, 0.45)
+		fallback.albedo_color = Color(0.29, 0.31, 0.32)
 		fallback.metallic = 0.35
 		fallback.roughness = 0.68
 		_cage_material = fallback
@@ -79,16 +79,23 @@ func _build_shell() -> void:
 		Vector3(DOOR_WIDTH, WALL_HEIGHT - DOOR_HEIGHT, WALL_THICKNESS))
 	# Leave a square shaft through the roof for the player elevator. The
 	# lift platform or its safety hatch closes the opening at every other time.
+	# One UV layout spans all four slabs. Its worn paint traces the lift
+	# opening and gives the player a landmark on approaching the car.
+	var deck := ShaderMaterial.new()
+	deck.shader = preload("res://shaders/rooftop_deck.gdshader")
+	deck.set_shader_parameter("deck_albedo", preload("res://assets/environment/rooftop_deck.jpg"))
+	deck.set_shader_parameter("tower_center", Vector2(global_position.x, global_position.z))
+	deck.set_shader_parameter("tower_width", WIDTH)
 	var roof_side_width := (WIDTH - ELEVATOR_SHAFT_SIZE) * 0.5
 	var roof_side_center := (WIDTH + ELEVATOR_SHAFT_SIZE) * 0.25
 	_add_solid_box("Roof", Vector3(-roof_side_center, HEIGHT - ROOF_THICKNESS * 0.5, 0.0),
-		Vector3(roof_side_width, ROOF_THICKNESS, WIDTH))
+		Vector3(roof_side_width, ROOF_THICKNESS, WIDTH), deck)
 	_add_solid_box("RoofEast", Vector3(roof_side_center, HEIGHT - ROOF_THICKNESS * 0.5, 0.0),
-		Vector3(roof_side_width, ROOF_THICKNESS, WIDTH))
+		Vector3(roof_side_width, ROOF_THICKNESS, WIDTH), deck)
 	_add_solid_box("RoofNorth", Vector3(0.0, HEIGHT - ROOF_THICKNESS * 0.5, roof_side_center),
-		Vector3(ELEVATOR_SHAFT_SIZE, ROOF_THICKNESS, roof_side_width))
+		Vector3(ELEVATOR_SHAFT_SIZE, ROOF_THICKNESS, roof_side_width), deck)
 	_add_solid_box("RoofSouth", Vector3(0.0, HEIGHT - ROOF_THICKNESS * 0.5, -roof_side_center),
-		Vector3(ELEVATOR_SHAFT_SIZE, ROOF_THICKNESS, roof_side_width))
+		Vector3(ELEVATOR_SHAFT_SIZE, ROOF_THICKNESS, roof_side_width), deck)
 	# The rooftop perimeter is added separately as a collidable 30 cm square
 	# grid so the player stays safe while retaining a clear view of the city.
 
@@ -215,7 +222,7 @@ func _build_elevator() -> void:
 	add_child(elevator)
 
 
-func _add_solid_box(label: String, at: Vector3, dimensions: Vector3) -> void:
+func _add_solid_box(label: String, at: Vector3, dimensions: Vector3, surface: Material = null) -> void:
 	var body := StaticBody3D.new()
 	body.name = label
 	body.collision_layer = 1
@@ -230,7 +237,7 @@ func _add_solid_box(label: String, at: Vector3, dimensions: Vector3) -> void:
 	var mesh := MeshInstance3D.new()
 	mesh.mesh = _unit_box
 	mesh.scale = dimensions
-	mesh.material_override = _wall_material
+	mesh.material_override = surface if surface != null else _wall_material
 	mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	body.add_child(mesh)
 	add_child(body)

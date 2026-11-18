@@ -1,6 +1,6 @@
 extends SceneTree
 ## Alternate the committed Stage 4 and optimized mask on the same frozen
-## 30-zombie ground scene. Both keep Pencil, the beam, and floor skipping on.
+## 20-zombie ground scene. Both keep Pencil, the beam, and floor skipping on.
 ## The result is desktop software OpenGL time, not Android GPU time.
 
 const SCENE := preload("res://scenes/foundation.tscn")
@@ -23,8 +23,8 @@ func _run() -> void:
 	game._set_rooftop_render_profile(false)
 	game._ground_map_ready = true
 	game._ground_wave_started = true
-	if not game.start_performance_scenario(30, "concentrated"):
-		push_error("Cannot start 30-zombie mask comparison")
+	if not game.start_performance_scenario(20, "concentrated"):
+		push_error("Cannot start 20-zombie mask comparison")
 		quit(1)
 		return
 	for frame in range(90):
@@ -52,8 +52,8 @@ func _run() -> void:
 			quit(1)
 			return
 	if not mask.visible or not game._pencil_screen_pass.visible or not game.flashlight_visibility_manager.spotlight.visible or \
-		game.spawn_director.ordinary_population_count() != 30:
-		push_error("Mask A/B lost the screen passes, 3D beam, or 30 zombies")
+		game.spawn_director.ordinary_population_count() != 20:
+		push_error("Mask A/B lost the screen passes, 3D beam, or 20 zombies")
 		quit(1)
 		return
 	# Compile both shaders before collecting timings.

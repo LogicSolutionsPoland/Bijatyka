@@ -13,7 +13,7 @@ func _initialize() -> void:
 	call_deferred("_run_all")
 
 func _run_all() -> void:
-	_check(Foundation != null and Hud != null, "scene and swipe-control scripts compile")
+	_check(Foundation != null and Hud != null, "scene and gamepad HUD scripts compile")
 	_test_gamepad_input_map()
 	_test_rage_rules()
 	_test_multiple_milestones_and_reset()
@@ -25,7 +25,7 @@ func _run_all() -> void:
 	await _test_magic_unlock_and_damage()
 	await _test_jump_and_enemy_interrupt_rules()
 	await _test_boss_damage_rule()
-	await _test_ten_button_controls()
+	await _test_no_touch_controls()
 	await _test_gamepad_controls()
 	if failures.is_empty():
 		print("PASS: %d foundation checks" % checks)
@@ -64,22 +64,28 @@ func _test_gamepad_input_map() -> void:
 					break
 		_check(found, "%s maps to the expected gamepad stick axis" % String(action))
 	var expected_buttons := {
-		&"pad_jump": [JOY_BUTTON_A], &"pad_dash": [JOY_BUTTON_X], &"pad_cast_spell": [JOY_BUTTON_B],
+		&"pad_jump": [JOY_BUTTON_A], &"pad_jump_forward": [JOY_BUTTON_X],
+		&"pad_escape_limb_grab": [JOY_BUTTON_RIGHT_STICK], &"pad_cast_spell": [JOY_BUTTON_B],
 		&"pad_punch_left": [JOY_BUTTON_LEFT_SHOULDER], &"pad_punch_right": [JOY_BUTTON_RIGHT_SHOULDER],
 		&"pad_blast": [JOY_BUTTON_Y],
 		&"pad_spell_0": [JOY_BUTTON_DPAD_UP], &"pad_spell_1": [JOY_BUTTON_DPAD_RIGHT],
 		&"pad_spell_2": [JOY_BUTTON_DPAD_DOWN], &"pad_spell_3": [JOY_BUTTON_DPAD_LEFT]
 	}
 	var routed_actions: Array[String] = []
-	for row in Hud.ACTION_ROWS:
-		for action: String in row:
-			routed_actions.append(action)
-	_check(expected_buttons.size() == routed_actions.size() and Hud.GAMEPAD_ACTIONS.size() == routed_actions.size() + 2, "gamepad includes every touch action plus selected-spell cast and Blast")
-	var left_trigger_events := InputMap.action_get_events(&"pad_kick_left")
+	for action: String in Hud.GAMEPAD_ACTIONS.values():
+		routed_actions.append(action)
+	_check(Hud.GAMEPAD_ACTIONS.size() == expected_buttons.size() + 2,
+		"gamepad routes eleven buttons and two analog magic triggers")
+	var left_trigger_events := InputMap.action_get_events(&"pad_magic_left")
 	_check(left_trigger_events.size() == 1 and left_trigger_events[0] is InputEventJoypadMotion and (left_trigger_events[0] as InputEventJoypadMotion).axis == JOY_AXIS_TRIGGER_LEFT and is_equal_approx((left_trigger_events[0] as InputEventJoypadMotion).axis_value, 1.0), "L2 / LT maps to the left trigger axis")
-	var right_trigger_events := InputMap.action_get_events(&"pad_kick_right")
+	var right_trigger_events := InputMap.action_get_events(&"pad_magic_right")
 	_check(right_trigger_events.size() == 1 and right_trigger_events[0] is InputEventJoypadMotion and (right_trigger_events[0] as InputEventJoypadMotion).axis == JOY_AXIS_TRIGGER_RIGHT and is_equal_approx((right_trigger_events[0] as InputEventJoypadMotion).axis_value, 1.0), "R2 / RT maps to the right trigger axis")
-	_check(Hud.GAMEPAD_ACTIONS.get(&"pad_kick_left", "") == "kick_left" and Hud.GAMEPAD_ACTIONS.get(&"pad_kick_right", "") == "kick_right", "L2 and R2 route to their matching touch kicks")
+	_check(Hud.GAMEPAD_ACTIONS.get(&"pad_magic_left", "") == "magic_left" and Hud.GAMEPAD_ACTIONS.get(&"pad_magic_right", "") == "magic_right", "L2 and R2 route to their quick-cast spell slots")
+	_check(not InputMap.has_action("attack_kick") and not InputMap.has_action("pad_kick_left") and not InputMap.has_action("pad_kick_right"), "no keyboard or gamepad kick input action is registered")
+	var quick_cast_events := InputMap.action_get_events(&"quick_cast_spell")
+	_check(quick_cast_events.size() == 1 and quick_cast_events[0] is InputEventKey and (quick_cast_events[0] as InputEventKey).physical_keycode == KEY_K, "the former keyboard kick key now quick-casts the second spell")
+	_check(not routed_actions.has("kick_left") and not routed_actions.has("kick_right"), "no user-facing HUD route can request a kick")
+	_check(Hud.CONTROL_HINT_TEXT.contains("L2 / LT: FIRST SPELL") and Hud.CONTROL_HINT_TEXT.contains("R2 / RT / K: SECOND SPELL") and Hud.CONTROL_HINT_TEXT.contains("until a second is unlocked"), "visible controls explain trigger and keyboard spell slots with the fallback")
 	for action: StringName in expected_buttons:
 		var events := InputMap.action_get_events(action)
 		var actual: Array[int] = []
@@ -95,12 +101,12 @@ func _test_gamepad_input_map() -> void:
 		elif action == &"pad_blast":
 			_check(Hud.GAMEPAD_ACTIONS[action] == "blast", "Y triggers Blast")
 		else:
-			_check(routed_actions.has(Hud.GAMEPAD_ACTIONS.get(action, "")), "%s routes to an existing touch HUD action" % action)
+			_check(routed_actions.has(Hud.GAMEPAD_ACTIONS.get(action, "")), "%s routes to a gamepad action" % action)
 	var assigned_buttons := {}
 	for buttons: Array in expected_buttons.values():
 		for button: int in buttons:
 			assigned_buttons[button] = true
-	_check(assigned_buttons.size() == 10 and not assigned_buttons.has(JOY_BUTTON_START) and not assigned_buttons.has(JOY_BUTTON_GUIDE), "ten physical gameplay buttons leave system buttons unassigned")
+	_check(assigned_buttons.size() == 11 and not assigned_buttons.has(JOY_BUTTON_START) and not assigned_buttons.has(JOY_BUTTON_GUIDE), "eleven gameplay buttons leave system buttons unassigned")
 
 func _test_rage_rules() -> void:
 	var rage := Rage.new(10.0, 1.0, 100.0) as RageProgression
@@ -147,15 +153,15 @@ func _test_hud_aura_choices() -> void:
 	root.add_child(hud)
 	await process_frame
 	hud.show_aura_selection(10)
-	var panel := hud._selection_panel as PanelContainer
-	var column := panel.get_child(0) as VBoxContainer
+	_check(hud._selection_cards.size() == 4, "gamepad aura menu shows four selectable cards")
 	var selected: Array[String] = []
 	hud.aura_chosen.connect(func(aura_id: String) -> void: selected.append(aura_id))
 	var expected := ["light", "judgment", "fire", "shadow"]
 	for index in range(expected.size()):
-		var button := column.get_child(index + 2) as Button
-		button.pressed.emit()
-		_check(not selected.is_empty() and selected.back() == expected[index], "aura menu button emits its distinct selection")
+		if index > 0:
+			hud._move_aura_selection(1)
+		hud._confirm_aura_selection()
+		_check(not selected.is_empty() and selected.back() == expected[index], "gamepad aura selection emits its distinct choice")
 	hud.update_status(50, 100, 15.0, 20.0, 5.0, 60.0, "fire")
 	_check(is_equal_approx(hud._health_bar.value, 50.0), "HUD health meter reflects current HP")
 	_check(is_equal_approx(hud._rage_bar.value, 15.0), "HUD RAGE meter reflects current RAGE")
@@ -178,7 +184,7 @@ func _test_manual_attack_and_hit_window() -> void:
 	_check(player.attack_phase == "grapple" and target._player_grapple_owner == player, "first enemy is grabbed before striking")
 	player._update_attack(Player.CHAIN_GRAB_SECONDS)
 	_check(player.attack_count == 1 and player.attack_phase == "windup", "grapple reaches into the first punch")
-	_check(player.request_attack("kick") and player._queued_attack_kind == "kick", "next input buffers during the current attack")
+	_check(player.request_attack("kick") and player._queued_attack_kind == "kick", "next internal attack request buffers during the current attack")
 	player._update_attack(float(Player.ATTACKS["punch"].windup))
 	_check(target.hp < target.starting_health, "punch hit window detects an in-range enemy")
 	_check(player.rage.rage == 3.0, "only a confirmed positive hit increases RAGE")
@@ -192,7 +198,7 @@ func _test_manual_attack_and_hit_window() -> void:
 	target.hp = target.starting_health
 	player._finish_attack()
 	target.position = Vector3(4.0, 0.0, 0.0)
-	_check(player.request_attack("kick"), "kick input starts its distinct action")
+	_check(player.request_attack("kick"), "internal kick attack request still exercises its animation path")
 	player._update_attack(0.24)
 	_check(target.hp == target.starting_health, "missed kick does not damage or build RAGE")
 	_check(player.rage.rage == rage_before_miss, "missed kick does not increase RAGE")
@@ -316,26 +322,6 @@ func _test_boss_damage_rule() -> void:
 	boss.queue_free()
 	await process_frame
 
-func _send_touch(at: Vector2, finger: int, down: bool, canceled: bool = false) -> void:
-	var event := InputEventScreenTouch.new()
-	event.position = at
-	event.index = finger
-	event.pressed = down
-	event.canceled = canceled
-	root.push_input(event, true)
-
-func _send_drag(to: Vector2, finger: int, relative: Vector2) -> void:
-	var event := InputEventScreenDrag.new()
-	event.position = to
-	event.relative = relative
-	event.index = finger
-	root.push_input(event, true)
-
-func _tap(button: Button, finger: int = 5) -> void:
-	var at := button.get_global_rect().get_center()
-	_send_touch(at, finger, true)
-	_send_touch(at, finger, false)
-
 func _send_pad(button: int, down: bool) -> void:
 	var event := InputEventJoypadButton.new()
 	event.device = 0
@@ -350,242 +336,27 @@ func _send_trigger(amount: float, device: int = 0, axis: int = JOY_AXIS_TRIGGER_
 	event.axis_value = amount
 	root.push_input(event, true)
 
-func _test_ten_button_controls() -> void:
-	var original_size := root.size
-	root.size = Vector2i(1280, 720)
-	var arena := Foundation.new()
-	root.add_child(arena)
-	var player: FoundationPlayer = arena.player
-	var hud: FoundationHUD = arena.hud
-	_check(player.rage.rage_changed.is_connected(arena._refresh_hud), "game startup completes and connects the combat HUD after model initialization")
-	_check(Foundation.ZOMBIE_HORDE_SIZE == 4 and arena.spawn_director.ordinary_population_count() == 4 and arena.spawn_director._live.is_empty(), "normal rooftop gameplay stores four ordinary zombies without actors")
-	var tower := arena.starting_tower
-	_check(tower != null and tower.get_parent() == arena, "game spawns the starting tower in the arena")
-	if tower != null:
-		var local_start := tower.to_local(player.global_position)
-		var half_interior := StartingTower.WIDTH * 0.5 - StartingTower.WALL_THICKNESS
-		_check(is_equal_approx(StartingTower.HEIGHT, 20.0), "tower height is exactly 20 metres")
-		_check(absf(local_start.x) < half_interior - 0.5 and absf(local_start.z) < half_interior - 0.5,
-			"player starts clear of the tower walls")
-		_check(is_equal_approx(local_start.y, StartingTower.HEIGHT + 0.05),
-			"player starts at the tower rooftop, twenty metres above ground")
-		_check(player.safe_base_position == player.position,
-			"respawn returns player to the rooftop starting point")
-		var roof := tower.get_node_or_null("Roof") as StaticBody3D
-		_check(roof != null and is_equal_approx(roof.position.y + StartingTower.ROOF_THICKNESS * 0.5, StartingTower.HEIGHT),
-			"solid roof top reaches twenty metres")
-		_check(tower.get_node_or_null("DoorLeft") is StaticBody3D and tower.get_node_or_null("DoorRight") is StaticBody3D and tower.get_node_or_null("DoorHeader") is StaticBody3D,
-			"tower has separate doorway jambs and header instead of a solid wall")
-		for guard_name in ["RooftopCageWest", "RooftopCageEast", "RooftopCageNorth", "RooftopCageSouth"]:
-			_check(tower.get_node_or_null(guard_name) is StaticBody3D,
-				"roof has a collidable cage panel: %s" % guard_name)
-		var cage_grid := tower.get_node_or_null("RooftopSpawnCageGrid") as MultiMeshInstance3D
-		_check(cage_grid != null and cage_grid.multimesh.instance_count > 100,
-			"roof cage has a visible grid")
-		await physics_frame
-		var space := arena.get_world_3d().direct_space_state
-		var exit_ray := PhysicsRayQueryParameters3D.create(tower.to_global(Vector3(0.0, 1.25, -1.0)),
-			tower.to_global(Vector3(0.0, 1.25, -7.0)), 1)
-		_check(space.intersect_ray(exit_ray).is_empty(), "north doorway allows an unobstructed ground-level exit")
-		var wall_ray := PhysicsRayQueryParameters3D.create(tower.to_global(Vector3(0.0, 1.25, 0.0)),
-			tower.to_global(Vector3(7.0, 1.25, 0.0)), 1)
-		_check(not space.intersect_ray(wall_ray).is_empty(), "tower exterior wall blocks movement")
-		var guard_ray := PhysicsRayQueryParameters3D.create(
-			tower.to_global(Vector3(0.0, StartingTower.HEIGHT + 1.0, 0.0)),
-			tower.to_global(Vector3(StartingTower.WIDTH, StartingTower.HEIGHT + 1.0, 0.0)), 1)
-		guard_ray.exclude = [player.get_rid()]
-		var guard_hit := space.intersect_ray(guard_ray)
-		_check(not guard_hit.is_empty() and guard_hit.collider.name == "RooftopCageEast",
-			"roof cage bar physically blocks the edge at player height")
-	var shoulder_arm := arena.camera.get_parent() as SpringArm3D
-	_check(shoulder_arm != null, "close third-person camera uses a collision-aware shoulder spring arm")
-	if shoulder_arm != null:
-		_check(
-			shoulder_arm.position.x > 0.0
-			and is_equal_approx(
-				shoulder_arm.rotation_degrees.x,
-				Foundation.CAMERA_PITCH_DEGREES + Foundation.ROOFTOP_CAMERA_PITCH_BIAS_DEGREES
-			)
-			and shoulder_arm.rotation_degrees.x < 0.0
-			and -arena.camera.global_transform.basis.z.y < 0.0,
-			"rooftop camera sits above and to the right and looks across the panorama"
-		)
-		_check(is_equal_approx(arena.camera_rig.position.y - player.global_position.y, Foundation.CAMERA_PIVOT_HEIGHT + Foundation.ROOFTOP_CAMERA_PIVOT_LIFT), "roof camera rises above the parapet")
-		_check(is_equal_approx(shoulder_arm.spring_length, Foundation.ROOFTOP_CAMERA_FOLLOW_DISTANCE) and shoulder_arm.collision_mask == 1, "roof camera widens its view while retaining collision retraction")
-		var horizontal_half_span := shoulder_arm.spring_length * tan(deg_to_rad(arena.camera.fov * 0.5)) * (float(root.size.x) / float(root.size.y))
-		var estimated_actor_x := 0.5 - shoulder_arm.position.x / (2.0 * horizontal_half_span)
-		_check(estimated_actor_x > 0.28 and estimated_actor_x < 0.43, "over-shoulder composition places the character left of screen center")
-		_check(arena.camera.current, "third-person camera is active")
-	player.set_physics_process(false)
-	arena.set_process(false)
-	if tower != null:
-		# Simulate leaving the rooftop and falling below the roof collision.
-		player.global_position = tower.to_global(Vector3(StartingTower.WIDTH, StartingTower.HEIGHT - 2.0, 0.0))
-		player.velocity = Vector3(10.0, -8.0, 0.0)
-		arena._enforce_rooftop_boundary()
-		var recovered := tower.to_local(player.global_position)
-		var recovered_x_inside := absf(recovered.x) <= StartingTower.ROOF_SAFE_HALF_EXTENT or is_equal_approx(absf(recovered.x), StartingTower.ROOF_SAFE_HALF_EXTENT)
-		_check(is_equal_approx(recovered.y, StartingTower.HEIGHT + 0.05)
-			and recovered_x_inside
-			and player.velocity.is_equal_approx(Vector3.ZERO),
-			"falling outside the elevator shaft restores the player to the rooftop safe area")
-		player._reset_at_safe_base()
-		_check(player.global_position.is_equal_approx(Foundation.PLAYER_BASE_POSITION),
-			"respawn re-centres player on the rooftop")
-	for enemy: Node in get_nodes_in_group("enemies"):
-		enemy.set_physics_process(false)
+func _test_no_touch_controls() -> void:
+	var hud := Hud.new() as FoundationHUD
+	root.add_child(hud)
 	await process_frame
-	var expected_rows := [
-		["punch_left", "punch_right"], ["kick_left", "kick_right"],
-		["spell_0", "spell_1"], ["spell_2", "spell_3"], ["dash", "jump"]
-	]
-	_check(hud._action_buttons.size() == 10, "HUD has exactly the ten requested action buttons")
-	_check(hud.find_child("MovementStick", true, false) == null, "HUD removes the lower-left analog stick")
-	for viewport_size in [Vector2(1280, 720), Vector2(1600, 720), Vector2(960, 540)]:
-		hud._root.size = viewport_size
-		hud._layout()
-		var occupied: Array[Rect2] = []
-		var previous_y := -1.0
-		for row in expected_rows:
-			var left := hud._button_for_action(row[0])
-			var right := hud._button_for_action(row[1])
-			_check(left != null and right != null, "both requested row actions exist")
-			if left == null or right == null:
-				continue
-			_check(is_equal_approx(left.position.y, right.position.y) and left.position.y > previous_y, "left and right actions align in the requested top-to-bottom order")
-			_check(left.position.x < viewport_size.x * 0.2 and right.position.x > viewport_size.x * 0.8, "action columns stay at opposite screen edges")
-			previous_y = left.position.y
-			for button: Button in [left, right]:
-				var rect := button.get_global_rect()
-				_check(Rect2(Vector2.ZERO, viewport_size).encloses(rect), "action stays inside the landscape viewport")
-				for other in occupied:
-					_check(not rect.intersects(other), "action buttons do not overlap each other")
-				occupied.append(rect)
-	hud._root.size = Vector2(1280, 720)
-	hud._layout()
+	var escape_buttons := hud.find_children("*", "BaseButton", true, false)
+	_check(escape_buttons.size() == 1 and escape_buttons[0].name == "EscapeLimbGrab"
+		and not escape_buttons[0].visible,
+		"gameplay HUD keeps only the hidden limb-grab escape button until a grab")
+	_check(hud.find_child("MovementStick", true, false) == null,
+		"gameplay HUD has no touch movement stick")
 	var emitted: Array[String] = []
 	hud.action_requested.connect(func(action: String) -> void: emitted.append(action))
-	for slot in range(4):
-		var locked := hud._button_for_action("spell_%d" % slot)
-		_check(locked.disabled and locked.text == "MAGIC", "locked MAGIC slot remains visible")
-		_tap(locked)
-	_check(emitted.is_empty() and player.magic_energy == 100.0, "locked magic taps cannot cast or spend energy")
-
-	var movement_at := Vector2(420, 500)
-	_send_touch(movement_at, 0, true)
-	_send_drag(movement_at + Vector2(0, -96), 0, Vector2(0, -96))
-	_check(player.move_input().y < -0.5, "left-side drag moves the player forward without a visible joystick")
-	var yaw_before_swipe := arena._camera_yaw
-	var camera_at := Vector2(900, 500)
-	_send_touch(camera_at, 3, true)
-	_send_drag(camera_at + Vector2(100, -50), 3, Vector2(100, -50))
-	_check(arena._camera_yaw < yaw_before_swipe, "right-side swipe rotates the over-shoulder camera")
-	_check(arena._camera_pitch > deg_to_rad(Foundation.CAMERA_PITCH_DEGREES), "vertical swipe tilts the camera upward")
-	_check(player.move_input().y < -0.5, "camera swipe does not steal the movement finger")
-	var yaw_before_pad := arena._camera_yaw
-	Input.action_press(&"camera_right")
-	arena._update_gamepad_camera(0.25)
-	Input.action_release(&"camera_right")
-	_check(arena._camera_yaw < yaw_before_pad, "right gamepad stick rotates the over-shoulder camera")
-	# Start the vertical gamepad check away from the swipe's upper clamp.
-	arena._camera_pitch = deg_to_rad(Foundation.CAMERA_PITCH_DEGREES)
-	arena.camera_arm.rotation.x = arena._camera_pitch
-	var pitch_before_pad := arena._camera_pitch
-	Input.action_press(&"camera_up")
-	arena._update_gamepad_camera(0.25)
-	Input.action_release(&"camera_up")
-	_check(arena._camera_pitch > pitch_before_pad, "right gamepad stick tilts the camera upward")
-	var yaw_after_swipe := arena._camera_yaw
-	player.rotation.y = 1.1
-	arena._process(0.016)
-	_check(is_equal_approx(arena.camera_rig.rotation.y, yaw_after_swipe), "camera swipe yaw stays independent from player facing")
-	_send_touch(camera_at + Vector2(100, -50), 3, false)
-	var left_punch := hud._button_for_action("punch_left")
-	var punch_at := left_punch.get_global_rect().get_center()
-	_send_touch(punch_at, 1, true)
-	_check(player.attack_count == 1 and player.attack_kind == "punch" and player.attack_side == "left", "second finger starts one left-arm punch while moving")
-	_check(player.move_input().y < -0.5, "attacking does not steal the movement finger")
-	_send_touch(punch_at, 1, true)
-	_check(player.attack_count == 1 and emitted.size() == 1, "holding one pointer does not repeat an action")
-	_tap(hud._button_for_action("punch_right"), 2)
-	_check(player.attack_count == 1 and player.attack_side == "left" and player._queued_attack_kind == "punch" and player._queued_attack_side == "right", "opposite punch buffers without interrupting the active hit")
-	for step in range(4):
-		player._update_attack(1.0)
-	_check(player.attack_phase == "recovery" and player.attack_count == 2 and player.attack_kind == "punch" and player.attack_side == "right", "buffered opposite punch starts as soon as the first hit window ends")
-	_send_touch(Vector2(640, 360), 1, false, true)
-	_check(not left_punch.button_pressed, "canceled touch releases its button even outside its rectangle")
-	_send_touch(movement_at + Vector2(0, -96), 0, false)
-	_check(player.move_input() == Vector2.ZERO, "releasing the movement gesture stops movement")
-
-	for action: String in ["punch_right", "kick_left", "kick_right"]:
-		var count_before := player.attack_count
-		_tap(hud._button_for_action(action))
-		_check(player.attack_count == count_before + 1 and player.attack_kind == action.get_slice("_", 0) and player.attack_side == action.get_slice("_", 1), "touch routes %s to the correct limb" % action)
-		player._update_attack_pose()
-		for step in range(4):
-			player._update_attack(1.0)
-	var count_before_mouse := player.attack_count
-	var mouse := InputEventMouseButton.new()
-	mouse.button_index = MOUSE_BUTTON_LEFT
-	mouse.position = punch_at
-	mouse.pressed = true
-	mouse.device = InputEvent.DEVICE_ID_EMULATION
-	root.push_input(mouse, true)
-	_check(player.attack_count == count_before_mouse, "emulated mouse events do not duplicate touch attacks")
-
-	player.rage.unlocked_spells.assign(["light"])
-	arena._refresh_hud()
-	_check(not hud._button_for_action("spell_0").disabled and hud._button_for_action("spell_1").disabled, "first unlocked spell only enables its own slot")
-	player.rage.unlocked_spells.assign(["light", "fire", "judgment", "shadow"])
-	player.rage.gain_per_effective_hit = 0.0
-	arena._refresh_hud()
-	var target := get_first_node_in_group("enemies") as FoundationEnemy
-	target.global_position = player.global_position + Vector3(0, 0, -3)
-	var energy_after := [80.0, 85.0, 80.0, 80.0]
-	var damage := [0, 20, 35, 25]
-	for slot in range(4):
-		player.health = 50
-		player.magic_energy = 100.0
-		target.hp = 100
-		var button := hud._button_for_action("spell_%d" % slot)
-		_check(not button.disabled and button.text.begins_with("MAGIC\n"), "unlocked slot retains MAGIC label and names its spell")
-		_tap(button)
-		_check(player.current_spell == player.rage.unlocked_spells[slot] and player.magic_energy == energy_after[slot], "direct magic slot casts the matching spell with its existing cost")
-		_check(target.hp == 100 - damage[slot], "direct magic slot preserves its spell effect")
-	player.rage.advance(0.1)
-	arena._refresh_hud()
-	_check(not hud._button_for_action("spell_3").disabled, "ordinary RAGE decay keeps unlocked magic slots")
-	hud._root.size = Vector2(960, 540)
-	hud._layout()
-	for slot in range(4):
-		_check(Rect2(Vector2.ZERO, hud._root.size).encloses(hud._button_for_action("spell_%d" % slot).get_global_rect()), "unlocked spell labels stay inside the smaller viewport")
-	hud._root.size = Vector2(1280, 720)
-	hud._layout()
-
-	var actions_before_pause := emitted.size()
-	paused = true
-	hud.show_aura_selection(10)
-	_tap(hud._button_for_action("dash"))
-	_check(emitted.size() == actions_before_pause and player.dash_time == 0.0, "aura menu blocks gameplay buttons")
-	hud.close_aura_selection()
-	paused = false
+	var touch := InputEventScreenTouch.new()
+	touch.position = Vector2(640, 360)
+	touch.pressed = true
+	root.push_input(touch, true)
+	touch.pressed = false
+	root.push_input(touch, true)
+	_check(emitted.is_empty(), "screen touches never trigger combat")
+	hud.queue_free()
 	await process_frame
-	_tap(hud._button_for_action("dash"))
-	_check(player.dash_time > 0.0 and player.DASH_DISTANCE == 15.0, "bottom-left button starts the existing 15 m dash")
-	await physics_frame
-	player.velocity = Vector3(0, -10, 0)
-	player.move_and_slide()
-	_check(player.is_on_floor(), "jump fixture is grounded on the tower rooftop")
-	_tap(hud._button_for_action("jump"))
-	_check(player.velocity.y > 0.0 and player.jump_impact_armed, "bottom-right button jumps and arms landing impact")
-	player._reset_at_safe_base()
-	arena._refresh_hud()
-	for slot in range(4):
-		_check(hud._button_for_action("spell_%d" % slot).disabled and not player.cast_spell_slot(slot), "soul reset clears and locks every magic slot")
-	_check(not player.cast_spell_slot(-1) and not player.cast_spell_slot(4), "out-of-range magic slots cannot cast")
-	arena.queue_free()
-	await process_frame
-	root.size = original_size
 
 func _test_gamepad_controls() -> void:
 	var original_size := root.size
@@ -603,7 +374,8 @@ func _test_gamepad_controls() -> void:
 	hud.action_requested.connect(func(action: String) -> void: routed.append(action))
 	var buttons := {
 		JOY_BUTTON_A: "jump", JOY_BUTTON_B: "cast_spell",
-		JOY_BUTTON_X: "dash", JOY_BUTTON_Y: "blast",
+		JOY_BUTTON_X: "jump_forward", JOY_BUTTON_RIGHT_STICK: "escape_limb_grab",
+		JOY_BUTTON_Y: "blast",
 		JOY_BUTTON_LEFT_SHOULDER: "punch_left", JOY_BUTTON_RIGHT_SHOULDER: "punch_right",
 		JOY_BUTTON_DPAD_UP: "spell_0", JOY_BUTTON_DPAD_RIGHT: "spell_1",
 		JOY_BUTTON_DPAD_DOWN: "spell_2", JOY_BUTTON_DPAD_LEFT: "spell_3"
@@ -612,33 +384,32 @@ func _test_gamepad_controls() -> void:
 		var before := routed.size()
 		var energy_before := player.magic_energy
 		_send_pad(button, true)
-		_check(routed.size() == before + 1 and routed.size() > 0 and routed.back() == buttons[button], "%s press reaches the touch HUD action path" % buttons[button])
+		_check(routed.size() == before + 1 and routed.size() > 0 and routed.back() == buttons[button], "%s press reaches the gamepad HUD action path" % buttons[button])
 		_send_pad(button, false)
 		hud._process(0.4)
 		_check(routed.size() == before + 1, "%s release stops held input" % buttons[button])
 		if str(buttons[button]).begins_with("spell_") or buttons[button] == "cast_spell" or buttons[button] == "blast":
 			_check(player.magic_energy == energy_before, "locked %s spends no energy" % buttons[button])
-		if str(buttons[button]).begins_with("punch_") or str(buttons[button]).begins_with("kick_"):
+		if str(buttons[button]).begins_with("punch_"):
 			_check(player.attack_kind == str(buttons[button]).get_slice("_", 0) or player._queued_attack_kind == str(buttons[button]).get_slice("_", 0), "%s uses the existing melee path" % buttons[button])
 			for step in range(4):
 				player._update_attack(1.0)
 
-	player.dash_time = 0.0
 	var energy_before_locked_b := player.magic_energy
 	_send_pad(JOY_BUTTON_B, true)
-	_check(player.dash_time == 0.0 and player.magic_energy == energy_before_locked_b, "B cannot dash or spend energy while magic is locked")
+	_check(not player._parabolic_jump_active and player.magic_energy == energy_before_locked_b, "B cannot start the forward jump or spend energy while magic is locked")
 	_send_pad(JOY_BUTTON_B, false)
 
 	var attacks_before_l1 := player.attack_count
 	_send_pad(JOY_BUTTON_LEFT_SHOULDER, true)
-	_check(player.attack_count == attacks_before_l1 + 1 and player.attack_kind == "punch" and player.attack_side == "left", "L1 triggers left punch and not left kick")
+	_check(player.attack_count == attacks_before_l1 + 1 and player.attack_kind == "punch" and player.attack_side == "left", "L1 triggers the left punch")
 	_send_pad(JOY_BUTTON_LEFT_SHOULDER, false)
 	for step in range(4):
 		player._update_attack(1.0)
 
 	var attacks_before_r1 := player.attack_count
 	_send_pad(JOY_BUTTON_RIGHT_SHOULDER, true)
-	_check(player.attack_count == attacks_before_r1 + 1 and player.attack_kind == "punch" and player.attack_side == "right", "R1 triggers right punch and not right kick")
+	_check(player.attack_count == attacks_before_r1 + 1 and player.attack_kind == "punch" and player.attack_side == "right", "R1 triggers the right punch")
 	_send_pad(JOY_BUTTON_RIGHT_SHOULDER, false)
 	for step in range(4):
 		player._update_attack(1.0)
@@ -670,68 +441,37 @@ func _test_gamepad_controls() -> void:
 		for step in range(4):
 			player._update_attack(1.0)
 
+	var attacks_before_triggers := player.attack_count
+	var locked_magic_before := player.magic_energy
+	var locked_spell_before := player.current_spell
 	var before_left_trigger := routed.size()
 	_send_trigger(0.4, 0, JOY_AXIS_TRIGGER_LEFT)
-	_check(routed.size() == before_left_trigger, "partial L2 pull below threshold does not kick")
+	_check(routed.size() == before_left_trigger, "partial L2 pull below threshold does not activate magic")
 	_send_trigger(0.7, 0, JOY_AXIS_TRIGGER_LEFT)
-	_check(routed.size() == before_left_trigger + 1 and routed.back() == "kick_left" and player.attack_kind == "kick" and player.attack_side == "left", "L2 starts one left kick")
+	_check(routed.size() == before_left_trigger + 1 and routed.back() == "magic_left"
+		and player.magic_energy == locked_magic_before and player.current_spell == locked_spell_before
+		and player.attack_count == attacks_before_triggers,
+		"L2 routes to locked spell slot 0 without casting or invoking a kick")
+	_send_trigger(0.8, 0, JOY_AXIS_TRIGGER_LEFT)
+	hud._process(0.5)
+	_check(routed.size() == before_left_trigger + 1, "holding L2 cannot repeat or spend magic")
 	_send_trigger(0.0, 0, JOY_AXIS_TRIGGER_LEFT)
-	hud._process(0.4)
-	_check(routed.size() == before_left_trigger + 1, "releasing L2 stops repeats")
-	for step in range(4):
-		player._update_attack(1.0)
 
-	var before_trigger := routed.size()
-	var attacks_before_trigger := player.attack_count
+	var before_right_trigger := routed.size()
 	_send_trigger(0.4)
-	_check(routed.size() == before_trigger, "partial R2 pull below threshold does not kick")
+	_check(routed.size() == before_right_trigger, "partial R2 pull below threshold does not activate magic")
 	_send_trigger(0.7)
-	_check(routed.size() == before_trigger + 1 and routed.back() == "kick_right" and player.attack_kind == "kick" and player.attack_side == "right", "R2 starts one right kick")
+	_check(routed.size() == before_right_trigger + 1 and routed.back() == "magic_right"
+		and player.magic_energy == locked_magic_before and player.current_spell == locked_spell_before
+		and player.attack_count == attacks_before_triggers,
+		"locked R2 slot 1 falls back to locked slot 0 without casting or invoking a kick")
 	_send_trigger(0.45)
 	_send_trigger(0.8)
-	_check(routed.size() == before_trigger + 1, "R2 trigger noise cannot double-strike")
-	hud._process(0.19)
-	player._update_attack(0.19)
-	_check(routed.size() == before_trigger + 1, "held R2 has no early repeat")
-	hud._process(0.01)
-	player._update_attack(0.01)
-	_check(routed.size() == before_trigger + 2, "held R2 repeats after 0.20 seconds")
-	for repeat in range(9):
-		for frame in range(20):
-			hud._process(0.01)
-			player._update_attack(0.01)
-	_check(routed.size() == before_trigger + 11 and player.attack_count < attacks_before_trigger + 11 and player._queued_attack_kind == "kick",
-		"held R2 delivers ten repeat inputs while completed kicks retain their native durations")
+	hud._process(0.5)
+	_check(routed.size() == before_right_trigger + 1, "R2 trigger noise and a held trigger cannot repeat magic")
 	_send_trigger(0.0)
-	hud._process(0.4)
-	_check(routed.size() == before_trigger + 11, "releasing R2 stops repeats")
-	for step in range(4):
-		player._update_attack(1.0)
-	_send_trigger(0.8)
-	_check(routed.size() == before_trigger + 12, "R2 makes a new kick after release and press")
-	_send_trigger(0.0)
-	for step in range(4):
-		player._update_attack(1.0)
 
-	var before_negative_rest := routed.size()
-	hud._left_trigger_rest_values[0] = -1.0
-	_send_trigger(0.0, 0, JOY_AXIS_TRIGGER_LEFT)
-	_check(routed.size() == before_negative_rest + 1 and routed.back() == "kick_left" and player.attack_side == "left", "L2 works on controllers whose trigger rests at -1")
-	_send_trigger(-1.0, 0, JOY_AXIS_TRIGGER_LEFT)
-	hud._left_trigger_rest_values[0] = 0.0
-	for step in range(4):
-		player._update_attack(1.0)
-
-	var before_right_negative_rest := routed.size()
-	hud._right_trigger_rest_values[0] = -1.0
-	_send_trigger(0.0)
-	_check(routed.size() == before_right_negative_rest + 1 and routed.back() == "kick_right" and player.attack_side == "right", "R2 works on controllers whose trigger rests at -1")
-	_send_trigger(-1.0)
-	hud._right_trigger_rest_values[0] = 0.0
-	for step in range(4):
-		player._update_attack(1.0)
-
-	for button in [JOY_BUTTON_A, JOY_BUTTON_B, JOY_BUTTON_X, JOY_BUTTON_Y, JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_RIGHT, JOY_BUTTON_DPAD_DOWN, JOY_BUTTON_DPAD_LEFT]:
+	for button in [JOY_BUTTON_A, JOY_BUTTON_B, JOY_BUTTON_X, JOY_BUTTON_Y, JOY_BUTTON_RIGHT_STICK, JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_RIGHT, JOY_BUTTON_DPAD_DOWN, JOY_BUTTON_DPAD_LEFT]:
 		var before := routed.size()
 		_send_pad(button, true)
 		hud._process(1.0)
@@ -742,10 +482,10 @@ func _test_gamepad_controls() -> void:
 		_check(routed.size() == before + 2, "%s can activate on a new press" % buttons[button])
 		_send_pad(button, false)
 
-	player.dash_time = 0.0
-	var attacks_before_x := player.attack_count
+	var before_forward_jump_route := routed.size()
 	_send_pad(JOY_BUTTON_X, true)
-	_check(player.dash_time > 0.0 and player.attack_count == attacks_before_x, "Xbox X dashes without triggering left punch")
+	_check(routed.size() == before_forward_jump_route + 1 and routed.back() == "jump_forward",
+		"Xbox X reaches the forward-jump action without triggering left punch")
 	_send_pad(JOY_BUTTON_X, false)
 
 	player.rage.unlocked_spells.assign(["light"])
@@ -753,12 +493,28 @@ func _test_gamepad_controls() -> void:
 	var before_magic := player.magic_energy
 	_send_pad(JOY_BUTTON_DPAD_UP, true)
 	_send_pad(JOY_BUTTON_DPAD_UP, false)
-	_check(player.current_spell == "light" and player.magic_energy == before_magic - 20.0, "D-pad Up casts unlocked slot 1 via touch spell handler")
+	_check(player.current_spell == "light" and player.magic_energy == before_magic - 20.0, "D-pad Up casts unlocked spell slot 0 through the gamepad handler")
 	var before_selected_cast := player.magic_energy
 	_send_pad(JOY_BUTTON_B, true)
 	hud._process(0.4)
 	_check(player.current_spell == "light" and player.magic_energy == before_selected_cast - 20.0, "B casts the selected spell once while held")
 	_send_pad(JOY_BUTTON_B, false)
+	player.health = 50
+	player.magic_energy = 100.0
+	var before_l2_light := routed.size()
+	_send_trigger(0.7, 0, JOY_AXIS_TRIGGER_LEFT)
+	_check(routed.size() == before_l2_light + 1 and routed.back() == "magic_left"
+		and player.current_spell == "light" and player.health == 80 and player.magic_energy == 80.0,
+		"L2 / LT quick-casts unlocked slot 0 through the normal healing and energy rules")
+	_send_trigger(0.0, 0, JOY_AXIS_TRIGGER_LEFT)
+	player.health = 50
+	player.magic_energy = 100.0
+	var before_r2_fallback := routed.size()
+	_send_trigger(0.7)
+	_check(routed.size() == before_r2_fallback + 1 and routed.back() == "magic_right"
+		and player.current_spell == "light" and player.health == 80 and player.magic_energy == 80.0,
+		"R2 / RT falls back to unlocked slot 0 when it is the only spell")
+	_send_trigger(0.0)
 	for button in [JOY_BUTTON_DPAD_RIGHT, JOY_BUTTON_DPAD_DOWN, JOY_BUTTON_DPAD_LEFT]:
 		var energy_before := player.magic_energy
 		_send_pad(button, true)
@@ -772,6 +528,32 @@ func _test_gamepad_controls() -> void:
 	var blast_direction := -player.global_transform.basis.z
 	blast_direction.y = 0.0
 	blast_target.global_position = player.global_position + blast_direction.normalized() * 4.0
+	player.current_spell = "light"
+	player.magic_energy = 100.0
+	var second_spell_hp_before := blast_target.hp
+	var before_r2_second_spell := routed.size()
+	_send_trigger(0.7)
+	_check(routed.size() == before_r2_second_spell + 1 and routed.back() == "magic_right"
+		and player.current_spell == "fire" and blast_target.hp == second_spell_hp_before - 20
+		and player.magic_energy == 85.0,
+		"R2 / RT quick-casts unlocked slot 1 while preserving fire damage and energy cost")
+	_send_trigger(0.0)
+	player.current_spell = "light"
+	var before_left_negative_rest := routed.size()
+	hud._left_trigger_rest_values[0] = -1.0
+	_send_trigger(0.0, 0, JOY_AXIS_TRIGGER_LEFT)
+	_check(routed.size() == before_left_negative_rest + 1 and routed.back() == "magic_left"
+		and player.current_spell == "light", "L2 quick-cast works when a controller rests at -1")
+	_send_trigger(-1.0, 0, JOY_AXIS_TRIGGER_LEFT)
+	hud._left_trigger_rest_values[0] = 0.0
+	var before_right_negative_rest := routed.size()
+	hud._right_trigger_rest_values[0] = -1.0
+	_send_trigger(0.0)
+	_check(routed.size() == before_right_negative_rest + 1 and routed.back() == "magic_right"
+		and player.current_spell == "fire", "R2 quick-cast works when a controller rests at -1")
+	_send_trigger(-1.0)
+	hud._right_trigger_rest_values[0] = 0.0
+	player.current_spell = "light"
 	var blast_hp_before := blast_target.hp
 	var blast_energy_before := player.magic_energy
 	var blast_routes_before := routed.size()
@@ -808,6 +590,12 @@ func _test_gamepad_controls() -> void:
 	_check(is_equal_approx(arena._camera_pitch, deg_to_rad(Foundation.CAMERA_MIN_PITCH_DEGREES)), "downward stick look obeys lower pitch clamp")
 	Input.action_release(&"camera_down")
 
+# This block checks only HUD routing. Casting another Blast here can hit the
+	# nearby test enemy and open a second aura-selection menu during the check.
+	var gameplay_action_handler := Callable(arena, "_on_hud_action")
+	var had_gameplay_action_handler := hud.action_requested.is_connected(gameplay_action_handler)
+	if had_gameplay_action_handler:
+		hud.action_requested.disconnect(gameplay_action_handler)
 	var before_menu := routed.size()
 	paused = true
 	hud.show_aura_selection(10)
@@ -828,8 +616,12 @@ func _test_gamepad_controls() -> void:
 	_check(routed.size() == before_menu + 1 and routed.back() == "blast", "a fresh Y press after the menu activates Blast")
 	_send_pad(JOY_BUTTON_Y, false)
 	_send_trigger(0.8)
-	_check(routed.size() == before_menu + 2 and routed.back() == "kick_right", "R2 requires a new press after the menu")
+	var last_menu_action: String = str(routed.back()) if not routed.is_empty() else "<none>"
+	_check(routed.size() == before_menu + 2 and last_menu_action == "magic_right",
+		"R2 requires a fresh press after the menu")
 	_send_trigger(0.0)
+	if had_gameplay_action_handler:
+		hud.action_requested.connect(gameplay_action_handler)
 	arena.queue_free()
 	await process_frame
 	root.size = original_size
@@ -848,16 +640,18 @@ func _test_roaming_aggression() -> void:
 	b.position = Vector3(1.5, 0, 0)
 	await physics_frame
 	a._choose_target()
-	_check(a.combat_target == b, "zombie selects nearby rival when player is distant")
+	_check(a.combat_target == null and b.combat_target == null, "unalerted zombie does not hunt nearby rivals")
 	var before := b.hp
 	a._resolve_enemy_attack(1.5)
-	_check(b.hp == before - 12, "zombie infighting damages rival")
-	_check(b.combat_target == a, "surviving rival retaliates")
-	_check(player.rage.rage == 0.0, "infighting awards no player RAGE")
+	_check(b.hp == before, "zombies do not infight when the player is distant")
+	_check(b.combat_target == null, "unalerted rival remains focused on the player")
+	_check(player.rage.rage == 0.0, "no infighting adds player RAGE")
 	player.position = Vector3(0, 0, 10)
 	a._choose_target()
 	_check(a.combat_target == player and b.combat_target == player, "player detection alerts nearby zombies")
 	player.position = Vector3(60, 0, 0)
+	a._choose_target()
+	_check(a.combat_target == player and b.combat_target == player, "alerted pack retains the player target at distance")
 	b.position = Vector3(40, 0, 0)
 	a.combat_target = null
 	a.state = "idle"

@@ -19,20 +19,20 @@ func _run() -> void:
 	fixture.add_child(player)
 	player.set_physics_process(false)
 	var batch := FarVisuals.new() as HordeFarVisuals
-	batch.configure(200)
+	batch.configure(20)
 	batch.player = player
 	fixture.add_child(batch)
 	batch.set_process(false)
 	var director := SpawnDirector.new()
 	fixture.add_child(director)
 	director.set_physics_process(false)
-	director.population_limit = 200 # Debug-only rig stress fixture, not normal gameplay.
+	director.population_limit = 20
 	var crowd: Array[FoundationEnemy] = []
-	for index in range(200):
+	for index in range(20):
 		var enemy := _add_enemy(fixture, batch, director, index)
 		crowd.append(enemy)
 	batch._update_full_rig_selection()
-	_check(batch.get_full_rig_count() == batch.rig_budget, "200 close zombies select exactly 7 detailed rigs")
+	_check(batch.get_full_rig_count() == batch.rig_budget, "20 close zombies select exactly 7 detailed rigs")
 	_check(batch.get_resident_rig_count() == batch.rig_budget and int(batch.get_rig_pool_stats().created) == batch.rig_budget, "resident and created model counts are strictly capped")
 
 	var dying: FoundationEnemy
@@ -63,9 +63,9 @@ func _run() -> void:
 		_check(not is_instance_valid(reduced) and not is_instance_valid(dying), "both completed deaths release their nodes")
 		for index in range(2):
 			director._pending.pop_back()
-			_add_enemy(fixture, batch, director, 200 + index)
+			crowd.append(_add_enemy(fixture, batch, director, 20 + index))
 		batch._update_full_rig_selection()
-		_check(director._live.size() == 200 and batch.get_resident_rig_count() == batch.rig_budget, "population and rig budget restore after mixed death tiers")
+		_check(director._live.size() == 20 and batch.get_resident_rig_count() == batch.rig_budget, "population and rig budget restore after mixed death tiers")
 
 	# Repeated combat/respawn cycles must reuse the same 7 imported models.
 	for cycle in range(25):
@@ -83,9 +83,9 @@ func _run() -> void:
 		_check(batch.get_resident_rig_count() <= batch.rig_budget, "death cycle %d respects resident cap" % cycle)
 		await process_frame
 		director._pending.pop_back()
-		_add_enemy(fixture, batch, director, 202 + cycle)
+		crowd.append(_add_enemy(fixture, batch, director, 22 + cycle))
 		batch._update_full_rig_selection()
-		_check(director._live.size() == 200 and batch.get_resident_rig_count() <= batch.rig_budget, "respawn cycle %d restores 200 without rig growth" % cycle)
+		_check(director._live.size() == 20 and batch.get_resident_rig_count() <= batch.rig_budget, "respawn cycle %d restores 20 without rig growth" % cycle)
 	_check(int(batch.get_rig_pool_stats().created) == batch.rig_budget, "repeated respawns create no additional detailed models")
 	_check(int(batch.get_rig_pool_stats().reused) > 0, "demotions and deaths actually reuse detailed rigs")
 	_check(int(batch.get_rig_pool_stats().overflow) == 0, "scheduler reserves dying rigs without overflow")

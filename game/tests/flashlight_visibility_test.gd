@@ -28,25 +28,26 @@ func _run() -> void:
 	manager.set_aim_yaw(0.0)
 	_check(manager.is_point_in_sector(game.player.global_position + Vector3(0, 0, -10)), "forward point is inside the 180-degree sector")
 	_check(not manager.is_point_in_sector(game.player.global_position + Vector3(0, 0, 10)), "rear point is outside the 180-degree sector")
-	_check(not manager.is_point_in_sector(game.player.global_position + Vector3(0, 0, 31)), "visibility never extends beyond the 30 m radius")
+	_check(not manager.is_point_in_sector(game.player.global_position + Vector3(0, 0, 31)), "rear point remains outside the forward flashlight sector")
 	_check(manager.is_point_in_sector(game.player.global_position + Vector3(0, 0, 0.3), 0.65), "sector hysteresis holds a recently visible actor near the boundary")
-	_check(is_equal_approx(manager.get_radial_weight(22.0), 1.0), "illumination stays bright through 22 m")
-	_check(manager.get_radial_weight(26.0) > 0.0 and manager.get_radial_weight(26.0) < 1.0, "outer 22–30 m band fades smoothly")
-	_check(is_zero_approx(manager.get_radial_weight(30.0)), "illumination reaches black at 30 m")
-	# Tooth glints use an independent extension of the light footprint,
-	# while the normal 22–30 m blackout mask stays exactly as before.
+	_check(is_equal_approx(manager.get_radial_weight(VisibilityManager.BRIGHT_RADIUS), 1.0), "illumination stays bright through 7.33 m")
+	_check(manager.get_radial_weight((VisibilityManager.BRIGHT_RADIUS + VisibilityManager.MAX_RADIUS) * 0.5) > 0.0 and manager.get_radial_weight((VisibilityManager.BRIGHT_RADIUS + VisibilityManager.MAX_RADIUS) * 0.5) < 1.0, "outer 7.33–10 m band fades smoothly")
+	_check(is_zero_approx(manager.get_radial_weight(VisibilityManager.MAX_RADIUS)), "illumination reaches black at 10 m")
+	# Rooftop glints stay off; ground-floor glints remain independent of beam aim and range.
 	var base_position: Vector3 = game.player.global_position
-	_check(manager.get_teeth_reach_weight(base_position + Vector3(0, 0, -15)) > 0.99, "teeth glint in the normal flashlight range")
-	_check(manager.get_teeth_reach_weight(base_position + Vector3(0, 0, -34)) > 0.0, "teeth glint beyond the beam, up to 5 m forward")
-	_check(is_zero_approx(manager.get_teeth_reach_weight(base_position + Vector3(0, 0, -35))), "teeth stop at the +5 m forward boundary")
-	_check(is_zero_approx(manager.get_teeth_reach_weight(base_position + Vector3(0, 0, -36))), "teeth cannot glow beyond 35 m in front")
-	_check(manager.get_teeth_reach_weight(base_position + Vector3(32, 0, -1)) > 0.0, "teeth glint 2 m to the right outside the beam")
-	_check(manager.get_teeth_reach_weight(base_position + Vector3(-32, 0, -1)) > 0.0, "teeth glint 2 m to the left outside the beam")
-	_check(is_zero_approx(manager.get_teeth_reach_weight(base_position + Vector3(33, 0, -1))), "teeth stop at the +3 m right boundary")
-	_check(is_zero_approx(manager.get_teeth_reach_weight(base_position + Vector3(-33, 0, -1))), "teeth stop at the +3 m left boundary")
-	_check(is_zero_approx(manager.get_teeth_reach_weight(base_position + Vector3(0, 0, 2))), "teeth stay invisible behind the player")
-	_check(is_zero_approx(manager.get_teeth_reach_weight(base_position + Vector3(34, 0, -34))), "diagonal positions beyond the expanded beam stay invisible")
-	_check(is_zero_approx(manager.get_radial_weight(31.0)), "ordinary environment light does not extend with teeth")
+	_check(is_zero_approx(manager.get_teeth_glow_weight(base_position + Vector3(0, 0, -15))), "rooftop keeps tooth glints off")
+	game._set_rooftop_render_profile(false)
+	_check(manager.get_teeth_glow_weight(base_position + Vector3(0, 0, -15)) > 0.99, "teeth remain visible beyond the new 10 m flashlight range")
+	_check(manager.get_teeth_glow_weight(base_position + Vector3(0, 0, -34)) > 0.99, "teeth remain visible outside the flashlight beam")
+	_check(manager.get_teeth_glow_weight(base_position + Vector3(0, 0, -35)) > 0.99, "teeth do not stop at the former forward boundary")
+	_check(manager.get_teeth_glow_weight(base_position + Vector3(0, 0, -100)) > 0.99, "teeth remain visible at long range")
+	_check(manager.get_teeth_glow_weight(base_position + Vector3(32, 0, -1)) > 0.99, "teeth remain visible to the right outside the beam")
+	_check(manager.get_teeth_glow_weight(base_position + Vector3(-32, 0, -1)) > 0.99, "teeth remain visible to the left outside the beam")
+	_check(manager.get_teeth_glow_weight(base_position + Vector3(33, 0, -1)) > 0.99, "teeth do not stop at the former right boundary")
+	_check(manager.get_teeth_glow_weight(base_position + Vector3(-33, 0, -1)) > 0.99, "teeth do not stop at the former left boundary")
+	_check(manager.get_teeth_glow_weight(base_position + Vector3(0, 0, 2)) > 0.99, "teeth are not clipped behind the player")
+	_check(manager.get_teeth_glow_weight(base_position + Vector3(34, 0, -34)) > 0.99, "teeth are not clipped by the former diagonal boundary")
+	_check(is_zero_approx(manager.get_radial_weight(11.0)), "ordinary environment light does not extend with teeth beyond 10 m")
 	_check(manager.get_oval_weight(VisibilityManager.OVAL_CENTER_UV) > 0.999, "reference oval center is lit")
 	_check(is_zero_approx(manager.get_oval_weight(Vector2(0.02, 0.60))), "left of the oval is black")
 	_check(is_zero_approx(manager.get_oval_weight(Vector2(0.90, 0.60))), "right of the oval is black")
@@ -54,38 +55,30 @@ func _run() -> void:
 	_check(is_zero_approx(manager.get_oval_weight(Vector2(0.44, 0.95))), "below the oval is black")
 	var feather_uv := VisibilityManager.OVAL_CENTER_UV + Vector2(VisibilityManager.OVAL_RADIUS_UV.x * 0.97, 0.0)
 	_check(manager.get_oval_weight(feather_uv) > 0.0 and manager.get_oval_weight(feather_uv) < 1.0, "oval has a short soft edge")
-	_check((manager._material.get_shader_parameter("oval_center_uv") as Vector2).distance_to(VisibilityManager.OVAL_CENTER_UV) < 0.001, "runtime mask receives oval center")
-	_check((manager._material.get_shader_parameter("oval_radius_uv") as Vector2).distance_to(VisibilityManager.OVAL_RADIUS_UV) < 0.001, "runtime mask receives oval radii")
+	_check(manager._material != null and is_instance_valid(manager._composite), "full-screen blackout mask is allocated")
+	_check(is_instance_valid(manager.spotlight), "3D flashlight beam remains independently active")
 
 	manager.set_aim_yaw(PI * 0.5)
 	_check(manager.is_point_in_sector(game.player.global_position + Vector3(-10, 0, 0)), "positive camera yaw lights the camera's leftward view")
 	_check(not manager.is_point_in_sector(game.player.global_position + Vector3(10, 0, 0)), "rotated sector excludes the opposite half")
 	_check(manager.aim_direction.distance_to(Vector3.LEFT) < 0.001, "aim direction has no rotation lag")
-	_check(manager.get_teeth_reach_weight(game.player.global_position + Vector3(-34, 0, 0)) > 0.0, "teeth range follows the rotated flashlight")
-	_check(is_zero_approx(manager.get_teeth_reach_weight(game.player.global_position + Vector3(34, 0, 0))), "teeth range never glows behind the rotated light")
+	_check(manager.get_teeth_glow_weight(game.player.global_position + Vector3(-34, 0, 0)) > 0.99, "teeth stay visible outside the rotated flashlight")
+	_check(manager.get_teeth_glow_weight(game.player.global_position + Vector3(34, 0, 0)) > 0.99, "teeth are independent of rotated flashlight aim")
 	game._camera_yaw = PI * 0.5
 	game._process(1.0 / 60.0)
-	_check((game._floor_material.get_shader_parameter("flashlight_forward") as Vector3).distance_to(manager.aim_direction) < 0.001, "ground skip follows the same yaw as the flashlight mask")
+	_check((game._floor_material.get_shader_parameter("flashlight_forward") as Vector3).distance_to(manager.aim_direction) < 0.001, "ground beam direction follows camera yaw with the restored fullscreen mask")
 	game._camera_yaw = 0.0
 	manager.set_aim_yaw(-PI * 0.5)
 	_check(manager.aim_direction.distance_to(Vector3.RIGHT) < 0.001, "negative camera yaw lights the camera's rightward view")
 	manager.set_aim_yaw(0.0)
 
-	# Touch camera gestures flow through the same callback used by the HUD.
-	var yaw_before_touch := game._camera_yaw
-	game.hud.camera_dragged.emit(Vector2(18.0, -7.0))
-	_check(not is_equal_approx(game._camera_yaw, yaw_before_touch), "touch drag rotates the camera")
-	var camera_forward := -game.camera.global_transform.basis.z
-	camera_forward.y = 0.0
-	_check(game.flashlight_visibility_manager.aim_direction.distance_to(camera_forward.normalized()) < 0.001, "touch aim points the flashlight along the camera in the same frame")
-
-	# The same input actions used by the right stick update the camera and aim.
+	# The right stick updates camera and flashlight aim in the same frame.
 	var yaw_before_gamepad := game._camera_yaw
 	Input.action_press("camera_right", 1.0)
 	game._update_gamepad_camera(1.0 / 60.0)
 	Input.action_release("camera_right")
 	_check(not is_equal_approx(game._camera_yaw, yaw_before_gamepad), "gamepad camera action rotates the camera")
-	camera_forward = -game.camera.global_transform.basis.z
+	var camera_forward := -game.camera.global_transform.basis.z
 	camera_forward.y = 0.0
 	_check(game.flashlight_visibility_manager.aim_direction.distance_to(camera_forward.normalized()) < 0.001, "gamepad aim points the flashlight along the camera")
 
@@ -111,16 +104,16 @@ func _run() -> void:
 			enemy.global_position = game.player.global_position + Vector3(45.0, 0.0, 0.0)
 		var visible_zombie := test_enemies[0] as FoundationEnemy
 		var dark_zombie := test_enemies[1] as FoundationEnemy
-		visible_zombie.global_position = game.player.global_position + Vector3(0.0, 0.0, -20.0)
+		visible_zombie.global_position = game.player.global_position + Vector3(0.0, 0.0, -8.0)
 		dark_zombie.global_position = game.player.global_position + Vector3(0.0, 0.0, 5.0)
 		var dark_position := dark_zombie.global_position
 		manager._classify_enemies()
-		_check(manager.get_band(visible_zombie) == VisibilityManager.Band.VISIBLE_DISTANT, "distant zombie inside the light is classified as visible")
+		_check(manager.get_band(visible_zombie) == VisibilityManager.Band.VISIBLE_CLOSE, "zombie inside the 10 m light range is classified as visible")
 		_check(manager.get_band(dark_zombie) == VisibilityManager.Band.DARK_CLOSE_COMBAT, "close zombie behind the light remains in the combat simulation but is visually dark")
 		_check(not dark_zombie._visual_root.visible, "dark ordinary zombie detail model is visually hidden")
 		game.horde_far_visuals._update_full_rig_selection()
 		game.horde_far_visuals._process(0.21)
-		_check(game.horde_far_visuals.multimesh.visible_instance_count == 1, "shared MultiMesh compacts the horde to the one visible distant zombie")
+		_check(game.horde_far_visuals.multimesh.visible_instance_count == 0, "zombie inside the 10 m range uses the close render path")
 		manager.set_aim_yaw(PI)
 		manager._classify_enemies()
 		_check(dark_zombie.global_position.distance_to(dark_position) < 0.001, "turning the flashlight never teleports a hidden zombie")
@@ -137,7 +130,7 @@ func _run() -> void:
 	game.player.velocity.y = 6.0
 	game.player.global_position.y += 0.2
 	game._process(1.0 / 60.0)
-	_check(game.camera_rig.global_position.is_finite() and game.camera.global_position.is_finite(), "jump and dash height changes do not destabilize the camera")
+	_check(game.camera_rig.global_position.is_finite() and game.camera.global_position.is_finite(), "jump height changes do not destabilize the camera")
 
 	game.player.global_position = Foundation.PLAYER_BASE_POSITION
 	game.player.velocity = Vector3.ZERO
@@ -147,24 +140,37 @@ func _run() -> void:
 	game.camera_arm.rotation.x = game._effective_camera_pitch()
 	game.flashlight_visibility_manager.set_aim_yaw(0.0)
 	for frame in range(30):
+		await physics_frame
 		await process_frame
 	_check(game.player.try_jump(), "jump input starts while grounded")
-	_check(game.player.try_dash(), "dash input starts without replacing the jump state")
-	var level_camera_forward := -game.camera.global_transform.basis.z
-	level_camera_forward.y = 0.0
-	_check(is_zero_approx(game.player.dash_direction.y) and game.player.dash_direction.dot(level_camera_forward.normalized()) > 0.999, "downward combat camera keeps the default air dash level and forward")
-	game.player._physics_process(1.0 / 60.0)
-	_check(game.player.velocity.y > 0.0, "level air dash preserves upward jump velocity")
+	for frame in range(90):
+		await physics_frame
+		await process_frame
+		if frame > 3 and game.player.is_on_floor() and game.player.velocity.y <= 0.0:
+			break
+	_check(game.player.is_on_floor(), "ordinary Jump lands before the forward-jump check")
+	_check(game.player.try_parabolic_jump(), "forward Jump starts separately after ordinary Jump lands")
+	var player_facing := -game.player.global_transform.basis.z
+	player_facing.y = 0.0
+	_check(is_zero_approx(game.player._parabolic_jump_direction.y)
+		and game.player._parabolic_jump_direction.dot(player_facing.normalized()) > 0.999,
+		"forward Jump follows player facing horizontally under the downward camera")
 	for frame in range(18):
 		await physics_frame
 		await process_frame
-	_check(game.camera_rig.global_position.is_finite() and game.camera.global_position.is_finite(), "camera stays stable while jump and dash move the player")
+	_check(game.camera_rig.global_position.is_finite() and game.camera.global_position.is_finite(), "camera stays stable during the forward Jump")
+	for frame in range(90):
+		await physics_frame
+		await process_frame
+		if not game.player._parabolic_jump_active and game.player.is_on_floor():
+			break
+	_check(not game.player._parabolic_jump_active and game.player.is_on_floor(), "forward Jump lands before camera framing probes")
 	game.player.global_position = Foundation.PLAYER_BASE_POSITION
 	game.player.velocity = Vector3.ZERO
-	game.player.dash_time = 0.0
 	game.camera_rig.global_position = game.player.global_position + Vector3.UP * game._camera_pivot_height()
 	game.camera_rig.rotation.y = 0.0
 	for frame in range(30):
+		await physics_frame
 		await process_frame
 
 	var saved_size := root.size
@@ -179,11 +185,12 @@ func _run() -> void:
 		var normalized := Vector2(feet_screen.x / actual_viewport_size.x, feet_screen.y / actual_viewport_size.y)
 		print("FLASHLIGHT_CAMERA_FRAME " + JSON.stringify({"window": viewport_size, "viewport": actual_viewport_size, "shoulder_offset": game.camera_arm.position.x, "player_feet": normalized}))
 		_check(normalized.x >= 0.34 and normalized.x <= 0.42, "camera keeps player in the lower-left horizontal band at %s" % [viewport_size])
-		_check(normalized.y >= 0.75 and normalized.y <= 0.86, "camera keeps combat area ahead at %s" % [viewport_size])
+		_check(normalized.y >= 0.86 and normalized.y <= 0.91, "camera keeps combat area ahead at %s" % [viewport_size])
 	root.size = saved_size
 
-	_check(Foundation.ZOMBIE_HORDE_SIZE == 4 and Foundation.ZOMBIE_PERFORMANCE_CAPACITY == 200, "game stores four rooftop zombies with 200-zombie debug-only stress capacity")
-	_check(game.burning_horizon.get_child_count() == 4, "Burning Horizon remains present while masked")
+	game._set_rooftop_render_profile(true)
+	_check(Foundation.ZOMBIE_HORDE_SIZE == 4 and Foundation.ZOMBIE_PERFORMANCE_CAPACITY == 20, "game stores four rooftop zombies and never profiles more than 20")
+	_check(game.burning_horizon.get_child_count() == 1, "circular Zombie Fog Horizon is independent of the fullscreen mask")
 	_check(game._boss_enemy != null and game._boss_enemy.hp > 0, "boss simulation remains independent from flashlight visibility")
 	_check(manager._tracked.has(game._boss_enemy.get_instance_id()), "boss is registered for the same whole-body flashlight reveal")
 	_check(is_equal_approx(Foundation.MOBILE_3D_RENDER_SCALE, 0.40), "Android 3D starts at 40 percent resolution with a native-resolution HUD")
@@ -206,14 +213,11 @@ func _run() -> void:
 		_check(bool(game._floor_material.get_shader_parameter("floor_fast_detail")), "profiler enables the fast floor for A/B comparison")
 		game.performance_diagnostics.floor_detail_comparison_requested.emit(false)
 		_check(not bool(game._floor_material.get_shader_parameter("floor_fast_detail")), "profiler restores the full floor for A/B comparison")
-		_check(bool(game._floor_material.get_shader_parameter("floor_skip_enabled")), "covered ground fragments skip their detail work by default")
-		game._set_debug_floor_skip_enabled(false)
-		_check(not bool(game._floor_material.get_shader_parameter("floor_skip_enabled")), "ground skip can be disabled independently for a device comparison")
+		_check(not bool(game._floor_material.get_shader_parameter("floor_skip_enabled")), "ground mesh remains present beneath the restored blackout")
 		game._set_debug_floor_skip_enabled(true)
-		game._set_debug_mask_visible(false)
-		_check(bool(game._floor_material.get_shader_parameter("floor_skip_enabled")), "mask OFF leaves the ground shader fixed for isolated pass timing")
 		game._set_debug_mask_visible(true)
-		_check(bool(game._floor_material.get_shader_parameter("floor_skip_enabled")), "mask ON leaves the ground skip unchanged")
+		_check(not bool(game._floor_material.get_shader_parameter("floor_skip_enabled")), "debug switches cannot re-enable obsolete floor cutout")
+		_check(not manager._composite.visible, "debug mask switch cannot reveal blackout on the rooftop")
 		var original_scale := root.scaling_3d_scale
 		game.performance_diagnostics.render_scale_requested.emit(0.40)
 		_check(is_equal_approx(root.scaling_3d_scale, 0.40), "debug profiler can compare 40 percent 3D rendering")
@@ -223,22 +227,25 @@ func _run() -> void:
 		_check(is_equal_approx(root.scaling_3d_scale, 1.0), "debug profiler can compare full-resolution 3D rendering")
 		root.scaling_3d_scale = original_scale
 		var active_enemies: int = game.horde_far_visuals._enemies.size()
-		game.performance_diagnostics.mask_comparison_requested.emit(false)
-		_check(not manager._composite.visible, "debug comparison removes the fullscreen mask pass")
-		_check(game.horde_far_visuals._enemies.size() == active_enemies, "mask comparison does not change the zombie population")
-		game.performance_diagnostics.mask_comparison_requested.emit(true)
-		_check(not manager._composite.visible, "rooftop keeps the flashlight off even when the profiler enables the mask")
 		game._set_rooftop_render_profile(false)
-		_check(manager._composite.visible, "ground floor restores the flashlight mask")
-		_check(game._pencil_screen_pass.visible, "ground floor restores the Pencil pass")
+		game.performance_diagnostics.mask_comparison_requested.emit(false)
+		_check(not manager._composite.visible, "profiler mask OFF hides the fullscreen overlay")
+		_check(game.horde_far_visuals._enemies.size() == active_enemies, "mask comparison never alters zombie population")
+		game.performance_diagnostics.mask_comparison_requested.emit(true)
+		_check(manager._composite.visible, "profiler mask ON restores fullscreen overlay on ground floor")
+		game._set_rooftop_render_profile(false)
+		var pencil_manager := root.get_node_or_null("PencilSketchStyle")
+		_check(pencil_manager != null and bool(pencil_manager.get("_gameplay_pencil_enabled")), "ground enables mesh-only character Sketch")
+		_check(pencil_manager != null and bool(pencil_manager.get("_character_only")), "ground Sketch excludes environment meshes")
 		game.performance_diagnostics.pencil_comparison_requested.emit(false)
-		_check(not game._pencil_screen_pass.visible, "profiler isolates Pencil without hiding the flashlight mask")
+		_check(pencil_manager != null and not bool(pencil_manager.get("_gameplay_pencil_enabled")), "profiler can disable character Sketch")
 		game._set_rooftop_render_profile(true)
 		game.performance_diagnostics.pencil_comparison_requested.emit(true)
-		_check(not game._pencil_screen_pass.visible, "rooftop keeps Pencil off after the profiler restores it")
+		_check(pencil_manager != null and not bool(pencil_manager.get("_gameplay_pencil_enabled")), "rooftop keeps Sketch disabled")
 		game._set_rooftop_render_profile(false)
-		_check(game._pencil_screen_pass.visible, "ground floor restores Pencil after the profiler toggle")
+		_check(pencil_manager != null and bool(pencil_manager.get("_gameplay_pencil_enabled")), "ground restores mesh-only Sketch after profiler toggle")
 		game._set_rooftop_render_profile(true)
+		_check(not manager._composite.visible and not manager.spotlight.visible, "rooftop hides fullscreen blackout and turns off 3D flashlight")
 		game.performance_diagnostics.map_comparison_requested.emit(false)
 		_check(not game.arena_map.visible, "debug profiler can isolate static map rendering")
 		game.performance_diagnostics.map_comparison_requested.emit(true)
