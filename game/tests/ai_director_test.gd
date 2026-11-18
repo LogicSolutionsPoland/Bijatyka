@@ -26,6 +26,14 @@ func _run() -> void:
 	spawns.player = player
 	fixture.add_child(spawns)
 	spawns.store_upstairs_population(4)
+	_check(Director.required_front_count(20) == 14 and Director.required_front_count(10) == 7 and Director.required_front_count(1) == 1,
+		"relocation requires 70 percent of the currently active ordinary zombie population in front")
+	_check(Director.is_in_front_arc(Vector3.FORWARD, Vector3.FORWARD.rotated(Vector3.UP, deg_to_rad(59.0))),
+		"59 degrees lies inside the forward 120-degree arc")
+	_check(not Director.is_in_front_arc(Vector3.FORWARD, Vector3.FORWARD.rotated(Vector3.UP, deg_to_rad(61.0))),
+		"61 degrees lies outside the forward 120-degree arc")
+	_check(not Director.is_in_front_arc(Vector3.FORWARD, -Vector3.FORWARD),
+		"zombies behind the player are outside the forward arc after a 180-degree turn")
 	var director := Director.new() as BijatykaAIDirector
 	director.configure(player, spawns)
 	fixture.add_child(director)
@@ -45,6 +53,16 @@ func _run() -> void:
 		spawns.register_enemy(enemy)
 	_check(spawns.ordinary_population_count() == 4, "the stored opening four become four actors without duplication")
 	var actors: Array = spawns._live.values()
+	var relocation_subject := actors[0] as FoundationEnemy
+	_check(relocation_subject.begin_relocation_sprint(player) and relocation_subject.state == "relocation_sprint"
+		and relocation_subject._relocation_sprint_active,
+		"an unseen relocated zombie enters the uninterrupted sprint state")
+	_check(is_equal_approx(Vector2(relocation_subject.velocity.x, relocation_subject.velocity.z).length(),
+		relocation_subject.move_speed * 1.45 * 1.5),
+		"relocation sprint starts at 1.5 times the ordinary running speed")
+	relocation_subject._relocation_sprint_active = false
+	relocation_subject.state = "idle"
+	relocation_subject.velocity = Vector3.ZERO
 	var assigned_roles: Dictionary = {}
 	for actor in actors:
 		assigned_roles[actor.get_instance_id()] = "attacker"

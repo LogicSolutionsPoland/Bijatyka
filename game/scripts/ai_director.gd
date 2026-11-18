@@ -20,6 +20,12 @@ const ATTACKER_RING_RADIUS := 1.55
 const RESERVE_RING_RADIUS := 3.1
 const PERIMETER_RING_RADIUS := 3.7
 const ROTATION_COOLDOWN := 1.25
+# Active ordinary zombies are rebalanced around the player's facing, not velocity.
+const FRONT_ARC_COSINE := 0.5 # +/-60 degrees, 120 degrees total.
+const FRONT_POPULATION_SHARE := 0.70
+const RELOCATION_CHECK_INTERVAL := 0.05
+const MAX_RELOCATIONS_PER_CHECK := 2
+const FAILED_RELOCATION_RETRY := 0.15
 
 var player: FoundationPlayer
 var spawns
@@ -50,6 +56,8 @@ var _recent_damage := 0.0
 var _last_health := 0
 var _kills: PackedInt32Array = PackedInt32Array([0, 0, 0, 0, 0, 0])
 var _kill_bucket := 0
+var _relocation_check_elapsed := 0.0
+var _relocation_retry_elapsed := 0.0
 
 func configure(game_player: FoundationPlayer, spawn_manager) -> void:
 	player = game_player
@@ -60,6 +68,71 @@ func configure(game_player: FoundationPlayer, spawn_manager) -> void:
 	player.respawned.connect(deactivate)
 	spawns.attacker_slot_released.connect(_on_attacker_slot_released)
 	_random.seed = 0xB1A7A # Local reproducible variation; no network or inference.
+
+static func required_front_count(living_count: int) -> int:
+	return ceili(float(maxi(0, living_count)) * FRONT_POPULATION_SHARE)
+
+static func is_in_front_arc(facing: Vector3, offset: Vector3) -> bool:
+	var flat_facing := Vector3(facing.x, 0.0, facing.z)
+	var flat_offset := Vector3(offset.x, 0.0, offset.z)
+	if flat_facing.length_squared() < 0.001 or flat_offset.length_squared() < 0.001:
+		return false
+	return flat_facing.normalized().dot(flat_offset.normalized()) >= FRONT_ARC_COSINE
+
+func _player_facing_direction() -> Vector3:
+	var facing := -player.global_basis.z
+	facing.y = 0.0
+	return facing.normalized() if facing.length_squared() > 0.001 else Vector3.FORWARD
+
+func _physics_process(delta: float) -> void:
+	if not active or not is_instance_valid(player) or not is_instance_valid(spawns) or not spawns._ground_active:
+		return
+	_relocation_retry_elapsed = maxf(0.0, _relocation_retry_elapsed - delta)
+	_relocation_check_elapsed += delta
+	if _relocation_check_elapsed < RELOCATION_CHECK_INTERVAL or _relocation_retry_elapsed > 0.0:
+		return
+	_relocation_check_elapsed = 0.0
+	_rebalance_front_horde()
+
+func _rebalance_front_horde() -> void:
+	var facing := _player_facing_direction()
+	var living_count := 0
+	var front_count := 0
+	var candidates: Array[Dictionary] = []
+	# Only the spawn owner's live roster is counted. Dormant data records
+	# cannot be teleported as CharacterBody nodes without waking them.
+	for id in spawns._live:
+		var enemy: FoundationEnemy = spawns._live[id]
+		if not is_instance_valid(enemy) or enemy.is_queued_for_deletion() or enemy.hp <= 0 or enemy.is_boss:
+			continue
+		living_count += 1
+		var offset := enemy.global_position - player.global_position
+		if is_in_front_arc(facing, offset):
+			front_count += 1
+		elif spawns.can_relocate_unseen_enemy(enemy):
+			offset.y = 0.0
+			candidates.append({"enemy": enemy, "alignment": offset.normalized().dot(facing)})
+	var missing := required_front_count(living_count) - front_count
+	if missing <= 0 or candidates.is_empty():
+		return
+	# Move the most rearward unseen enemies first. Attack/grapple states are
+	# protected by the spawn owner and never enter this candidate list.
+	candidates.sort_custom(func(left: Dictionary, right: Dictionary) -> bool:
+		return float(left.alignment) < float(right.alignment)
+	)
+	var occupied: Array[Vector3] = []
+	var relocated := 0
+	for entry in candidates:
+		if relocated >= mini(missing, MAX_RELOCATIONS_PER_CHECK):
+			break
+		if spawns.relocate_unseen_enemy(entry.enemy, facing, occupied):
+			relocated += 1
+	if relocated > 0:
+		_formation_dirty = true
+		call_deferred("_refresh_formation")
+	else:
+		# No legal ground/darkness slot exists; retry without spinning raycasts.
+		_relocation_retry_elapsed = FAILED_RELOCATION_RETRY
 
 func _ready() -> void:
 	_timer = Timer.new()
@@ -75,6 +148,8 @@ func activate() -> void:
 	if active or not is_instance_valid(spawns) or not spawns._ground_active:
 		return
 	active = true
+	_relocation_check_elapsed = RELOCATION_CHECK_INTERVAL
+	_relocation_retry_elapsed = 0.0
 	state = State.PRESSURE
 	intensity = 0.0
 	_nearby_reset()
@@ -97,6 +172,8 @@ func deactivate() -> void:
 	_last_formation_time = -INF
 	_formation_dirty = true
 	_last_requested_deficit = -1
+	_relocation_check_elapsed = 0.0
+	_relocation_retry_elapsed = 0.0
 	local_living_count = 0
 	attacker_role_count = 0
 	reserve_role_count = 0
@@ -272,7 +349,7 @@ func _refresh_formation() -> void:
 	var roster: Array[int] = []
 	for entry in admitted:
 		roster.append(int(entry.id))
-	var forward: Vector3 = spawns.forward_direction()
+	var forward: Vector3 = _player_facing_direction()
 	var movement := player_at - _last_player_at
 	movement.y = 0.0
 	if not _formation_dirty and roster == _last_roster and movement.length_squared() < 0.25 * 0.25 and forward.dot(_last_forward) > 0.96 and now - _last_formation_time < 1.0:

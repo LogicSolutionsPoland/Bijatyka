@@ -1,5 +1,5 @@
 extends Node3D
-## Only new zombies enter this director. Living zombies are never repositioned.
+## Owns births and tightly guarded, invisible relocation of existing ordinary zombies.
 
 signal spawn_requested(at: Vector3)
 signal dormant_enemy_wake_requested(at: Vector3, health: int, kind: String)
@@ -42,9 +42,15 @@ const RECENT_SPACING := 2.0
 const RECENT_SECONDS := 8.0
 # Includes outstretched arms and the health display, not just the physics capsule.
 const VISUAL_EXTENTS := Vector3(1.5, 1.6, 1.5)
+const RELOCATION_HALF_ANGLE := deg_to_rad(55.0) # 5-degree margin inside the 120-degree front.
+const RELOCATION_MIN_DISTANCE := 12.5 # Outside the current 10 m flashlight range.
+const RELOCATION_MAX_DISTANCE := 18.0
+const RELOCATION_CANDIDATE_BUDGET := 8
+const RELOCATION_SPACING_SQUARED := 2.0 * 2.0
 
 var player: FoundationPlayer
 var camera: Camera3D
+var flashlight_visibility_manager: Node
 var population_limit := 4:
 	set(value):
 		population_limit = clampi(value, 0, MAX_ORDINARY_POPULATION)
@@ -72,6 +78,7 @@ var _recent: Array[Dictionary] = []
 var _clock := 0.0
 var _retry_time := 0.0
 var _sample_index := 0
+var _relocation_sample_index := 0
 var _capsule := CapsuleShape3D.new()
 var _formation_capsule := CapsuleShape3D.new()
 var _mobile_spawn_cooldown := 0.0
@@ -774,6 +781,79 @@ func forward_direction() -> Vector3:
 		forward.y = 0.0
 	return forward.normalized() if forward.length_squared() > 0.001 else Vector3.FORWARD
 
+func _flashlight_blackout_active() -> bool:
+	return is_instance_valid(flashlight_visibility_manager) \
+		and bool(flashlight_visibility_manager.get("enabled")) \
+		and not bool(flashlight_visibility_manager.get("_rooftop_mode")) \
+		and flashlight_visibility_manager.has_method("is_world_position_visible")
+
+func can_relocate_unseen_enemy(enemy: FoundationEnemy) -> bool:
+	if not _ground_active or not is_instance_valid(player) or not is_instance_valid(camera) or not camera.is_current():
+		return false
+	if not is_instance_valid(enemy) or enemy.is_queued_for_deletion() or enemy.hp <= 0 or enemy.is_boss:
+		return false
+	if not _live.has(enemy.get_instance_id()) or _attackers.has(enemy.get_instance_id()):
+		return false
+	if enemy._player_grapple_time > 0.0 or enemy.stun_time > 0.0 or enemy.knockback.length_squared() > 0.01:
+		return false
+	if enemy.state in ["windup", "limb_grab_windup", "limb_hold", "hit", "recovery", "dead"]:
+		return false
+	# An actor which can still be illuminated must never jump between positions.
+	if _flashlight_blackout_active():
+		return not bool(flashlight_visibility_manager.call(
+			"is_world_position_visible", enemy.global_position + Vector3.UP * 0.85))
+	return is_concealed(enemy.global_position)
+
+func relocate_unseen_enemy(enemy: FoundationEnemy, facing: Vector3, occupied: Array[Vector3]) -> bool:
+	if not can_relocate_unseen_enemy(enemy):
+		return false
+	var flat_facing := Vector3(facing.x, 0.0, facing.z).normalized()
+	if flat_facing.length_squared() < 0.001:
+		return false
+	# Relocate the existing actor; do not create a new node, consume a population
+	# reservation, clear HP, remove a rig, or interrupt an active combat session.
+	for attempt in range(RELOCATION_CANDIDATE_BUDGET):
+		_relocation_sample_index += 1
+		var sequence := float(_relocation_sample_index)
+		var angle := lerpf(-RELOCATION_HALF_ANGLE, RELOCATION_HALF_ANGLE,
+			fmod(sequence * 0.61803398875, 1.0))
+		var radius := lerpf(RELOCATION_MIN_DISTANCE, RELOCATION_MAX_DISTANCE,
+			fmod(sequence * 0.7548776662466927, 1.0))
+		var raw := player.global_position + flat_facing.rotated(Vector3.UP, angle) * radius
+		var at := _grounded_candidate(raw)
+		if not at.is_finite() or absf(at.y - player.global_position.y) > 1.2:
+			continue
+		if not BijatykaAIDirector.is_in_front_arc(flat_facing, at - player.global_position):
+			continue
+		# Reuse terrain, body, obstacle, player-distance and navigation checks.
+		# A working blackout is sufficient concealment beyond the flashlight.
+		if not is_valid_spawn(at, false, not _flashlight_blackout_active()):
+			continue
+		if _flashlight_blackout_active() and bool(flashlight_visibility_manager.call(
+			"is_world_position_visible", at + Vector3.UP * 0.85)):
+			continue
+		var overlaps := false
+		for previous in occupied:
+			if previous.distance_squared_to(at) < RELOCATION_SPACING_SQUARED:
+				overlaps = true
+				break
+		if overlaps:
+			continue
+		var previous_position := enemy.global_position
+		enemy.global_position = at
+		enemy.velocity = Vector3.ZERO
+		enemy._far_physics_time = 0.0
+		enemy._ai_accumulator = 0.0
+		enemy._pursuit_avoid_remaining = 0.0
+		if not enemy.begin_relocation_sprint(player):
+			enemy.global_position = previous_position
+			return false
+		enemy.reset_physics_interpolation()
+		FoundationEnemy._grid_frame = -1
+		occupied.append(at)
+		return true
+	return false
+
 func _sample_candidate() -> Vector3:
 	# Low discrepancy sampling spreads replacement waves across the forward arc.
 	_sample_index += 1
@@ -807,7 +887,8 @@ func _grounded_candidate(at: Vector3) -> Vector3:
 		return Vector3.INF
 	return hit.position + Vector3.UP * 0.05
 
-func is_valid_spawn(at: Vector3, require_forward: bool = true) -> bool:
+func is_valid_spawn(at: Vector3, require_forward: bool = true,
+		require_camera_concealment: bool = true) -> bool:
 	if not at.is_finite() or absf(at.x) > WORLD_LIMIT or absf(at.z) > WORLD_LIMIT:
 		return false
 	var offset := at - player.global_position
@@ -844,7 +925,7 @@ func is_valid_spawn(at: Vector3, require_forward: bool = true) -> bool:
 		var route := NavigationServer3D.map_get_path(nav_map, at, player.global_position, true)
 		if route.size() < 2 or route[0].distance_to(at) > 0.75 or route[route.size() - 1].distance_to(player.global_position) > 2.0:
 			return false
-	if not is_concealed(at):
+	if require_camera_concealment and not is_concealed(at):
 		return false
 	# Leave room for the first part of the dash instead of spawning against a wall.
 	query.collision_mask = 1

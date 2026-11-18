@@ -25,6 +25,8 @@ const SPATIAL_GRID_REFRESH_HZ := 10
 const FULL_ANIMATION_BUDGET := 7
 const SPAWN_ASSAULT_DURATION := 4.5
 const SPAWN_ASSAULT_SPEED_MULTIPLIER := 3.2
+# Relocated zombies run at 1.5x their usual ordinary chase speed (1.45x move_speed).
+const RELOCATION_SPRINT_RUN_MULTIPLIER := 1.5
 const SPAWN_ASSAULT_HANDOFF_DISTANCE := 6.0
 const PURSUIT_PROBE_DISTANCE := 2.4
 const PURSUIT_AVOID_SECONDS := 0.45
@@ -81,6 +83,7 @@ var _decision_time := 0.0
 var _wander_time := 0.0
 var _wander_direction := Vector3.ZERO
 var _spawn_assault_time := 0.0
+var _relocation_sprint_active := false
 var _base_visual_meshes: Array[MeshInstance3D] = []
 var _quality_shadows_enabled := false
 # Rebuilt once per decision frame, shared by the whole population.
@@ -298,6 +301,7 @@ func begin_spawn_assault(target: FoundationPlayer) -> bool:
 	_player = target
 	combat_target = target
 	_player_alert_shared = false
+	_relocation_sprint_active = false
 	state = "assault"
 	_spawn_assault_time = SPAWN_ASSAULT_DURATION
 	var direction := target.global_position - global_position
@@ -307,6 +311,29 @@ func begin_spawn_assault(target: FoundationPlayer) -> bool:
 	rotation.y = atan2(-direction.x, -direction.z)
 	velocity.x = direction.x * move_speed * SPAWN_ASSAULT_SPEED_MULTIPLIER
 	velocity.z = direction.z * move_speed * SPAWN_ASSAULT_SPEED_MULTIPLIER
+	_set_distance_detail(global_position.distance_to(target.global_position))
+	if _visual_root.visible:
+		_play_animation("Sprint")
+	return true
+
+func begin_relocation_sprint(target: FoundationPlayer) -> bool:
+	if is_boss or hp <= 0 or not is_instance_valid(target) or _player_grapple_time > 0.0:
+		return false
+	if state in ["windup", "limb_grab_windup", "limb_hold", "hit", "recovery", "dead"]:
+		return false
+	_finish_spawn_assault()
+	_player = target
+	combat_target = target
+	_player_alert_shared = false
+	state = "relocation_sprint"
+	_relocation_sprint_active = true
+	_decision_time = 0.0
+	var direction := target.global_position - global_position
+	direction.y = 0.0
+	direction = direction.normalized()
+	rotation.y = atan2(-direction.x, -direction.z)
+	velocity.x = direction.x * move_speed * 1.45 * RELOCATION_SPRINT_RUN_MULTIPLIER
+	velocity.z = direction.z * move_speed * 1.45 * RELOCATION_SPRINT_RUN_MULTIPLIER
 	_set_distance_detail(global_position.distance_to(target.global_position))
 	if _visual_root.visible:
 		_play_animation("Sprint")
@@ -834,7 +861,7 @@ func _resume_animation_for_state() -> void:
 						_animation_player.seek(_attack_contact_time, true)
 						_animation_player.pause()
 		"hit": _play_animation("Hit_React", 1.0, 0.04, true)
-		"assault": _play_animation("Sprint")
+		"assault", "relocation_sprint": _play_animation("Sprint")
 		"wander": _play_animation("Walk")
 		"approach": _play_animation("Sprint" if _is_high_speed_chase() else "Walk")
 		_: _play_animation("Idle")
@@ -865,6 +892,27 @@ func _update_ai(delta: float, distance: float) -> void:
 		return
 	if _spawn_assault_time > 0.0 and _update_spawn_assault(delta):
 		return
+	if _relocation_sprint_active and state == "relocation_sprint":
+		var sprint_offset := _player.global_position - global_position
+		sprint_offset.y = 0.0
+		var sprint_distance := sprint_offset.length()
+		if sprint_distance > maxf(attack_range + 0.3, 2.2):
+			var sprint_direction := _pursuit_direction(sprint_offset.normalized(), delta, sprint_distance)
+			var separation := _crowd_separation_direction()
+			if separation.length_squared() > 0.001:
+				sprint_direction = (sprint_direction + separation * CROWD_SEPARATION_STRENGTH).normalized()
+			rotation.y = atan2(-sprint_direction.x, -sprint_direction.z)
+			velocity.x = sprint_direction.x * move_speed * 1.45 * RELOCATION_SPRINT_RUN_MULTIPLIER * slow_factor
+			velocity.z = sprint_direction.z * move_speed * 1.45 * RELOCATION_SPRINT_RUN_MULTIPLIER * slow_factor
+			if _visual_root.visible:
+				_play_animation("Sprint")
+			return
+		_relocation_sprint_active = false
+		state = "approach"
+		_decision_time = 0.0
+	elif _relocation_sprint_active:
+		# Hit/grapple states preempt the rush rather than being overwritten.
+		_relocation_sprint_active = false
 	_decision_time -= delta
 	if _decision_time <= 0.0 and state not in ["windup", "limb_grab_windup"]:
 		_decision_time = randf_range(0.35, 0.55)
@@ -1271,7 +1319,7 @@ func _play_animation(animation_name: String, playback_speed: float = 1.0, blend:
 	return true
 
 func _is_high_speed_chase() -> bool:
-	return _spawn_assault_time > 0.0 or (not is_boss and move_speed * 1.45 >= 4.5)
+	return _spawn_assault_time > 0.0 or _relocation_sprint_active or (not is_boss and move_speed * 1.45 >= 4.5)
 
 func _attack_clip_contact_time(animation_name: String) -> float:
 	if _animation_player != null and _animation_player.has_animation(animation_name):

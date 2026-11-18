@@ -786,6 +786,7 @@ func _spawn_enemies() -> void:
 	spawn_director.name = "ConcealedForwardSpawns"
 	spawn_director.player = player
 	spawn_director.camera = camera
+	spawn_director.flashlight_visibility_manager = flashlight_visibility_manager
 	spawn_director.population_limit = ZOMBIE_HORDE_SIZE
 	spawn_director.spawn_distance = ZOMBIE_SPAWN_DISTANCE
 	spawn_director.visibility_radius = VISIBILITY_RADIUS
