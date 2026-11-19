@@ -6,6 +6,10 @@ on:
       - feat/bijatyka-darkness-teeth-crowd-20261119
     paths:
       - .github/workflows/darkness-teeth-arm64-20261119.yml
+      - game/scripts/distant_zombie_teeth.gd
+      - game/scripts/flashlight_visibility.gd
+      - game/tests/darkness_teeth_crowd_test.gd
+      - game/tests/zombie_teeth_glint_render_probe.gd
   workflow_dispatch:
 
 permissions:
