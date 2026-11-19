@@ -23,6 +23,11 @@ func _run() -> void:
 	game.player.global_position.y = 0.0
 	game._set_rooftop_render_profile(false)
 	manager.set_process(false)
+	# This probe isolates real enemy glints; the persistent synthetic horde is
+	# tested separately and must not contaminate the empty-glint baseline.
+	var virtual_mouths: Array = manager._teeth_overlay.get("_synthetic_mouths")
+	_check(virtual_mouths.size() == 420, "ground overlay has the persistent synthetic horde")
+	manager._teeth_overlay.set("_synthetic_mouths", [])
 	game.hud._root.visible = false
 	var viewport_size := root.get_visible_rect().size
 	var center := viewport_size * Vector2(0.85, 0.75)
