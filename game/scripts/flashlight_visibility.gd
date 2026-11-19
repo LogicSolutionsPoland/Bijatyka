@@ -216,6 +216,9 @@ func _build_distant_teeth_overlay() -> void:
 	add_child(_teeth_canvas)
 	_teeth_overlay = DISTANT_TEETH_OVERLAY.new()
 	_teeth_overlay.name = "DistantTeethGlints"
+	# Keep the existing tracked-enemy glints; add a continuous visual-only
+	# crowd whose masks do not depend on spawn or jump events.
+	_teeth_overlay.call("configure", camera, player, self)
 	_teeth_canvas.add_child(_teeth_overlay)
 
 func _build_composite() -> void:
