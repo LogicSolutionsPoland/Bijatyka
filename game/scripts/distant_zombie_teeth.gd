@@ -246,4 +246,4 @@ func _draw_synthetic_horde() -> void:
 		painted += 1
 		if painted >= MAX_DRAWN_SYNTHETIC_MOUTHS:
 			break
-	draw_set_transform()
+	draw_set_transform(Vector2.ZERO)
