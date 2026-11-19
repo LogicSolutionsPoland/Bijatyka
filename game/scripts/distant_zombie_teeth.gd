@@ -187,6 +187,12 @@ func _draw_synthetic_horde() -> void:
 		return
 	var painted := 0
 	for index in range(_synthetic_mouths.size()):
+		if painted >= MAX_DRAWN_SYNTHETIC_MOUTHS:
+			break
+		# Reserve one of the 96 draw slots for the charging mouth, even if
+		# its index falls after the other visible mouths in the 420-entry cloud.
+		if _active_charge_index >= 0 and index != _active_charge_index 				and painted >= MAX_DRAWN_SYNTHETIC_MOUTHS - 1:
+			continue
 		var entry: Dictionary = _synthetic_mouths[index]
 		var phase: float = entry["phase"]
 		var speed: float = entry["speed"]
