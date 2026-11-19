@@ -4,6 +4,13 @@ extends SceneTree
 
 const TEETH_OVERLAY := preload("res://scripts/distant_zombie_teeth.gd")
 
+class AlwaysDarkManager:
+	extends Node
+	func get_teeth_glow_weight(_world_position: Vector3) -> float:
+		return 1.0
+	func get_oval_weight(_screen_uv: Vector2) -> float:
+		return 0.0
+
 var _failures: Array[String] = []
 var _checks := 0
 
@@ -63,7 +70,48 @@ func _run() -> void:
 			break
 	_check(unchanged, "synthetic positions remain stable across redraws and animation")
 
+	# The sprint is a single event at exactly five-second intervals, not a
+	# per-zombie animation that multiplies with the 420 synthetic mouths.
+	var darkness := AlwaysDarkManager.new()
+	root.add_child(darkness)
+	overlay.set("_visibility_manager", darkness)
+	camera.position = Vector3(0.0, 1.6, 0.0)
+	camera.make_current()
+	await process_frame
+	overlay.set("_elapsed", 0.0)
+	overlay._process(4.99)
+	_check(int(overlay.get("_charge_event_count")) == 0 and int(overlay.get("_active_charge_index")) == -1,
+		"no sprint starts before the first five-second boundary")
+	overlay._process(0.01)
+	var first_index := int(overlay.get("_active_charge_index"))
+	_check(int(overlay.get("_charge_event_count")) == 1 and first_index >= 0,
+		"the first scheduled sprint selects exactly one visible mouth")
+	overlay._process(1.5)
+	_check(int(overlay.get("_charge_event_count")) == 1
+		and int(overlay.get("_active_charge_index")) == first_index,
+		"only one mouth remains selected during its approach and turn")
+	overlay._process(1.5)
+	_check(int(overlay.get("_active_charge_index")) == -1,
+		"the sprint ends after three seconds and frees its only slot")
+	overlay._process(1.99)
+	_check(int(overlay.get("_charge_event_count")) == 1,
+		"there is a two-second quiet gap before the next event")
+	overlay._process(0.01)
+	_check(int(overlay.get("_charge_event_count")) == 2
+		and int(overlay.get("_active_charge_index")) >= 0,
+		"the next single sprint begins at ten seconds, without overlap")
+	_check(overlay.get_charge_proximity(0.0) <= 0.001
+		and overlay.get_charge_proximity(1.2) >= 0.999
+		and overlay.get_charge_proximity(3.0) <= 0.001,
+		"apparent distance grows on approach and returns after retreat")
+	_check(absf(overlay.get_charge_turn_scale(1.425)) < 0.02
+		and overlay.get_charge_turn_scale(1.65) < -0.99,
+		"180-degree turn passes through edge-on profile then mirrors the mask")
+	_check(overlay.get_synthetic_mouth_count() == 420,
+		"charging does not change the visual population")
+
 	overlay.queue_free()
+	darkness.queue_free()
 	camera.queue_free()
 	player.queue_free()
 	await process_frame
