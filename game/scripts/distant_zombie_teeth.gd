@@ -106,7 +106,7 @@ func _draw_synthetic_horde() -> void:
 		return
 	if not _camera.is_current() or not is_instance_valid(_visibility_manager):
 		return
-	if not bool(_visibility_manager.get_teeth_glow_weight(Vector3.ZERO) > 0.0):
+	if float(_visibility_manager.call("get_teeth_glow_weight", Vector3.ZERO)) <= 0.0:
 		return
 	var viewport_size := _camera.get_viewport().get_visible_rect().size
 	if viewport_size.x < 2.0 or viewport_size.y < 2.0:
@@ -131,7 +131,7 @@ func _draw_synthetic_horde() -> void:
 			continue
 		# Use the *same* camera-space flashlight footprint as the black mask.
 		# Teeth never appear over the lit scene, even at the soft oval edge.
-		var light_weight: float = _visibility_manager.get_oval_weight(screen_position / viewport_size)
+		var light_weight := float(_visibility_manager.call("get_oval_weight", screen_position / viewport_size))
 		var dark_weight := 1.0 - clampf(light_weight, 0.0, 1.0)
 		if dark_weight < 0.06:
 			continue
