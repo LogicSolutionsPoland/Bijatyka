@@ -1,0 +1,102 @@
+name: Bijatyka darkness teeth — validation and Android ARM64 APK
+
+on:
+  push:
+    branches:
+      - feat/bijatyka-darkness-teeth-crowd-20261119
+    paths:
+      - .github/workflows/darkness-teeth-arm64-20261119.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-export:
+    name: Godot tests + one ARM64 debug APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Godot 4.7.2 with Android export templates
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: true
+
+      - name: Verify toolchain and import the project
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d "$ANDROID_HOME"
+          godot --version
+          java -version
+          godot --headless --editor --path game --import --quit 2>&1 | tee "$RUNNER_TEMP/import.log"
+          if grep -E 'SCRIPT ERROR:|ERROR: Failed to load' "$RUNNER_TEMP/import.log"; then exit 1; fi
+
+      - name: Test teeth crowds, charge interval, real glints, spawn and gameplay
+        shell: bash
+        run: |
+          set -euo pipefail
+          for suite in darkness_teeth_crowd_test zombie_teeth_integration_test flashlight_visibility_test concealed_spawn_test ai_director_test; do
+            echo "RUN: $suite"
+            timeout 180s godot --headless --path game --script "res://tests/$suite.gd" 2>&1 | tee "$RUNNER_TEMP/$suite.log"
+            grep -q 'PASS:' "$RUNNER_TEMP/$suite.log"
+            if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/$suite.log"; then exit 1; fi
+          done
+
+      - name: Validate glint pixels with Compatibility renderer
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 180s xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 godot --audio-driver Dummy --rendering-driver opengl3 --path game --script res://tests/zombie_teeth_glint_render_probe.gd 2>&1 | tee "$RUNNER_TEMP/teeth-pixels.log"
+          grep -q 'PASS: zombie teeth Compatibility glint overlay' "$RUNNER_TEMP/teeth-pixels.log"
+          if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/teeth-pixels.log"; then exit 1; fi
+
+      - name: Smoke test scene startup
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 180s godot --headless --fixed-fps 60 --path game --quit-after 240 2>&1 | tee "$RUNNER_TEMP/scene-smoke.log"
+          if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/scene-smoke.log"; then exit 1; fi
+
+      - name: Export exactly one Android ARM64 debug APK to /temp
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo install -d -m 0777 /temp
+          godot --headless --path game --export-debug 'Android ARM64' /temp/Bijatyka-darkness-teeth-ARM64.apk 2>&1 | tee "$RUNNER_TEMP/android-export.log"
+          if grep -E 'SCRIPT ERROR:|ERROR:' "$RUNNER_TEMP/android-export.log"; then exit 1; fi
+          test -s /temp/Bijatyka-darkness-teeth-ARM64.apk
+
+      - name: Verify ZIP, only ARM64 libraries, package, debug flag and signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=/temp/Bijatyka-darkness-teeth-ARM64.apk
+          unzip -tqq "$apk"
+          unzip -Z1 "$apk" > "$RUNNER_TEMP/apk-files.txt"
+          for entry in lib/arm64-v8a/libgodot_android.so assets/project.binary assets/scripts/distant_zombie_teeth.gdc assets/scripts/flashlight_visibility.gdc; do
+            grep -Fxq "$entry" "$RUNNER_TEMP/apk-files.txt"
+            test "$(unzip -p "$apk" "$entry" | wc -c)" -gt 0
+          done
+          if grep -Eq '^lib/(armeabi-v7a|x86|x86_64)/' "$RUNNER_TEMP/apk-files.txt"; then
+            echo 'Unexpected non-ARM64 library' >&2
+            exit 1
+          fi
+          aapt_bin="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
+          test -n "$aapt_bin"
+          "$aapt_bin" dump badging "$apk" > "$RUNNER_TEMP/apk-badging.txt"
+          grep -F "package: name='org.logicsolutionspoland.bijatyka'" "$RUNNER_TEMP/apk-badging.txt"
+          grep -Fxq 'application-debuggable' "$RUNNER_TEMP/apk-badging.txt"
+          "$(dirname "$aapt_bin")/apksigner" verify --verbose "$apk"
+          sha256sum "$apk"
+
+      - name: Upload raw Android ARM64 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bijatyka-darkness-teeth-ARM64
+          path: /temp/Bijatyka-darkness-teeth-ARM64.apk
+          if-no-files-found: error
