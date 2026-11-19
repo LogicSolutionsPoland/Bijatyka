@@ -48,7 +48,8 @@ func _run() -> void:
 	var real_points: Array[Dictionary] = []
 	overlay.set_glints(real_points)
 	overlay._process(1.0)
-	overlay.set_glints([{"center": Vector2(100.0, 100.0), "strength": 1.0, "scale": 1.0}])
+	var bright_points: Array[Dictionary] = [{"center": Vector2(100.0, 100.0), "strength": 1.0, "scale": 1.0}]
+	overlay.set_glints(bright_points)
 	overlay._process(1.0)
 	overlay.set_glints(real_points)
 	_check(overlay.get_synthetic_mouth_count() == 420,
