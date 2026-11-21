@@ -48,7 +48,7 @@ func _run() -> void:
 	world._set_rooftop_render_profile(false)
 	check(not world._rooftop_sky_active and torch.spotlight.visible, "ground restores 3D flashlight")
 	check(pencil.visible, "ground restores Pencil Sketch")
-	check(torch._composite.visible, "ground restores blackout mask")
+	check(not torch._composite.visible and torch._composite.mesh == null, "ground keeps fullscreen blackout quad removed")
 	check(world._environment.sky == world._ground_sky, "ground uses original burning horizon sky")
 	check(not torch.spotlight.shadow_enabled, "ground flashlight remains shadow-free")
 	check(director.ordinary_population_count() == 4, "render profile alone cannot start zombie spawn")

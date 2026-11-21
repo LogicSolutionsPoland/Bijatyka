@@ -40,6 +40,12 @@ func _run() -> void:
 			if enemy._animation_player != null:
 				enemy._animation_player.pause()
 	var mask: MeshInstance3D = game.flashlight_visibility_manager._composite as MeshInstance3D
+	if mask.mesh == null:
+		print("SKIP: historical mask shader A/B is obsolete; fullscreen mask is removed")
+		game.queue_free()
+		await process_frame
+		quit(0)
+		return
 	var optimized := mask.material_override as ShaderMaterial
 	var stage4 := optimized.duplicate(true) as ShaderMaterial
 	stage4.shader = STAGE4_MASK

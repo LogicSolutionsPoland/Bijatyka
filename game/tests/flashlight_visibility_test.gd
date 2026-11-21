@@ -55,7 +55,7 @@ func _run() -> void:
 	_check(is_zero_approx(manager.get_oval_weight(Vector2(0.44, 0.95))), "below the oval is black")
 	var feather_uv := VisibilityManager.OVAL_CENTER_UV + Vector2(VisibilityManager.OVAL_RADIUS_UV.x * 0.97, 0.0)
 	_check(manager.get_oval_weight(feather_uv) > 0.0 and manager.get_oval_weight(feather_uv) < 1.0, "oval has a short soft edge")
-	_check(manager._material != null and is_instance_valid(manager._composite), "full-screen blackout mask is allocated")
+	_check(is_instance_valid(manager._composite) and manager._composite.mesh == null and not manager._composite.visible, "fullscreen blackout quad is absent")
 	_check(is_instance_valid(manager.spotlight), "3D flashlight beam remains independently active")
 
 	manager.set_aim_yaw(PI * 0.5)
@@ -66,7 +66,7 @@ func _run() -> void:
 	_check(manager.get_teeth_glow_weight(game.player.global_position + Vector3(34, 0, 0)) > 0.99, "teeth are independent of rotated flashlight aim")
 	game._camera_yaw = PI * 0.5
 	game._process(1.0 / 60.0)
-	_check((game._floor_material.get_shader_parameter("flashlight_forward") as Vector3).distance_to(manager.aim_direction) < 0.001, "ground beam direction follows camera yaw with the restored fullscreen mask")
+	_check((game._floor_material.get_shader_parameter("flashlight_forward") as Vector3).distance_to(manager.aim_direction) < 0.001, "ground beam direction follows camera yaw without the fullscreen mask")
 	game._camera_yaw = 0.0
 	manager.set_aim_yaw(-PI * 0.5)
 	_check(manager.aim_direction.distance_to(Vector3.RIGHT) < 0.001, "negative camera yaw lights the camera's rightward view")
@@ -213,7 +213,7 @@ func _run() -> void:
 		_check(bool(game._floor_material.get_shader_parameter("floor_fast_detail")), "profiler enables the fast floor for A/B comparison")
 		game.performance_diagnostics.floor_detail_comparison_requested.emit(false)
 		_check(not bool(game._floor_material.get_shader_parameter("floor_fast_detail")), "profiler restores the full floor for A/B comparison")
-		_check(not bool(game._floor_material.get_shader_parameter("floor_skip_enabled")), "ground mesh remains present beneath the restored blackout")
+		_check(not bool(game._floor_material.get_shader_parameter("floor_skip_enabled")), "ground mesh remains present without the blackout overlay")
 		game._set_debug_floor_skip_enabled(true)
 		game._set_debug_mask_visible(true)
 		_check(not bool(game._floor_material.get_shader_parameter("floor_skip_enabled")), "debug switches cannot re-enable obsolete floor cutout")
@@ -232,7 +232,7 @@ func _run() -> void:
 		_check(not manager._composite.visible, "profiler mask OFF hides the fullscreen overlay")
 		_check(game.horde_far_visuals._enemies.size() == active_enemies, "mask comparison never alters zombie population")
 		game.performance_diagnostics.mask_comparison_requested.emit(true)
-		_check(manager._composite.visible, "profiler mask ON restores fullscreen overlay on ground floor")
+		_check(not manager._composite.visible and manager._composite.mesh == null, "profiler cannot re-enable the removed mask")
 		game._set_rooftop_render_profile(false)
 		var pencil_manager := root.get_node_or_null("PencilSketchStyle")
 		_check(pencil_manager != null and bool(pencil_manager.get("_gameplay_pencil_enabled")), "ground enables mesh-only character Sketch")

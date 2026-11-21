@@ -12,6 +12,10 @@ func _initialize() -> void:
 	call_deferred("_run")
 
 func _run() -> void:
+	# Historical mask-on/off measurements are invalid after removal.
+	print("SKIP: mask/pencil A/B includes a fullscreen mask that no longer renders")
+	quit(0)
+	return
 	root.scaling_3d_scale = 0.40
 	Engine.max_fps = 60
 	var game := SCENE.instantiate()

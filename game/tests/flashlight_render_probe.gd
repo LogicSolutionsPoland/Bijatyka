@@ -1,5 +1,5 @@
 extends SceneTree
-## Software OpenGL pixel probe for the Compatibility flashlight mask.
+## Compatibility pixel probe: no fullscreen blackout, with 3D flashlight preserved.
 
 const Foundation := preload("res://scripts/foundation.gd")
 
@@ -15,7 +15,7 @@ func _run() -> void:
 	for frame in range(12):
 		await process_frame
 		# The lower skyline band must show the photo's zombie-filled streets above
-	# the rooftop guard, then return to black on the ground floor.
+	# the rooftop guard, independent of the removed blackout pass.
 	var city_view_point := root.get_visible_rect().size * Vector2(0.50, 0.56)
 	game.hud._root.visible = false
 	await RenderingServer.frame_post_draw
@@ -37,17 +37,16 @@ func _run() -> void:
 	# actual arena geometry. Sample a clear sky pixel above the skyline.
 	var clear_sky_point := root.get_visible_rect().size * Vector2(0.50, 0.02)
 	var ground_sky := _sample(root.get_texture().get_image(), clear_sky_point)
-	_check(maxf(ground_sky.r, maxf(ground_sky.g, ground_sky.b)) < 0.03, "ground-level sky stays black with the flashlight")
-	# Keep the player on the GROUND for flashlight blackout pixel checks.
-	# The rooftop now has no flashlight, so a rooftop pixel should never
-	# be expected to turn black outside the oval.
+	_check(is_finite(ground_sky.r) and is_finite(ground_sky.g) and is_finite(ground_sky.b), "ground sky sample stays valid after removing the mask")
+	# Keep the player on the GROUND to verify both lit and unmasked pixels.
 	game._rooftop_camera_blend = 0.0
 	game.camera_rig.global_position = game.player.global_position + Vector3.UP * Foundation.CAMERA_PIVOT_HEIGHT
 	game.camera_arm.spring_length = Foundation.CAMERA_FOLLOW_DISTANCE
 	game.camera_arm.rotation.x = game._effective_camera_pitch()
 	game._update_camera_framing()
-	_check(not game._rooftop_sky_active and game.flashlight_visibility_manager._composite.visible,
-		"ground floor restores the real blackout pass before pixel probes")
+	_check(not game._rooftop_sky_active and not game.flashlight_visibility_manager._composite.visible
+		and game.flashlight_visibility_manager._composite.mesh == null,
+		"ground floor no longer renders the fullscreen blackout")
 	# Hold the camera and player still while projecting colored pixel probes;
 	# the roof's camera profile otherwise moves during projection.
 	game.set_process(false)
@@ -64,7 +63,7 @@ func _run() -> void:
 	var lit_probe := _add_probe(game, lit_world, Color(1.0, 0.05, 0.03))
 	var dark_probe := _add_probe(game, dark_world, Color(0.02, 1.0, 0.04))
 	_check(game.flashlight_visibility_manager.is_point_in_sector(lit_world) and lit_world.distance_to(game.player.global_position) < 10.0, "lit probe is within the original range and sector")
-	_check(game.flashlight_visibility_manager.is_point_in_sector(dark_world) and dark_world.distance_to(game.player.global_position) < 10.0, "dark probe differs only by its position outside the oval")
+	_check(game.flashlight_visibility_manager.is_point_in_sector(dark_world) and dark_world.distance_to(game.player.global_position) < 10.0, "unmasked green probe is outside the former oval")
 	for scale in [1.0, Foundation.MOBILE_BALANCED_RENDER_SCALE, Foundation.MOBILE_3D_RENDER_SCALE]:
 		root.scaling_3d_scale = scale
 		for frame in range(6):
@@ -73,7 +72,7 @@ func _run() -> void:
 		var image := root.get_texture().get_image()
 		_check(image != null and not image.is_empty(), "Compatibility frame readback is available at %.2fx" % scale)
 		if image != null and not image.is_empty():
-			_save_capture(image, "ground-blackout-%.2f.png" % scale)
+			_save_capture(image, "ground-no-blackout-%.2f.png" % scale)
 		if image != null and not image.is_empty():
 			var lit_point := game.camera.unproject_position(lit_probe.global_position)
 			var dark_point := game.camera.unproject_position(dark_probe.global_position)
@@ -83,30 +82,20 @@ func _run() -> void:
 			var lit_pixel := _sample(image, lit_point)
 			var dark_pixel := _sample(image, dark_point)
 			var player_pixel := _sample(image, player_point)
-			# Assert fullscreen darkness over nearby tower posts, not just a
-			# deliberately green probe. The legacy height-only player exemption
-			# used to leak tall scenery at these off-axis screen coordinates.
-			for sample_uv in [
-				Vector2(0.063, 0.37), Vector2(0.625, 0.21),
-				Vector2(0.095, 0.86), Vector2(0.305, 0.33)
-			]:
-				var outside_pixel := _sample(image, Vector2(image.get_size()) * sample_uv)
-				_check(maxf(outside_pixel.r, maxf(outside_pixel.g, outside_pixel.b)) < 0.04,
-					"tower posts outside the effective flashlight remain black at %.2fx screen %s" % [scale, sample_uv])
 			print("FLASHLIGHT_RENDER_SAMPLE " + JSON.stringify({"renderer": "GL Compatibility software desktop", "render_scale": scale, "lit_pixel": lit_pixel, "dark_pixel": dark_pixel, "player_pixel": player_pixel, "lit_uv": lit_point / Vector2(image.get_width(), image.get_height()), "dark_uv": dark_point / Vector2(image.get_width(), image.get_height()), "player_uv": player_point / Vector2(image.get_width(), image.get_height())}))
 			_check(lit_pixel.r > 0.45 and lit_pixel.g < 0.35, "red object is visible inside the oval at %.2fx" % scale)
-			_check(dark_pixel.g < 0.12, "green object is black outside the oval at %.2fx" % scale)
+			_check(dark_pixel.g > 0.45, "green object remains visible outside the former flashlight oval at %.2fx" % scale)
 			_check(maxf(player_pixel.r, maxf(player_pixel.g, player_pixel.b)) > 0.04, "player remains readable at %.2fx" % scale)
-	_check(game.hud._root != null and game.hud._root.visible, "HUD remains visible above the 3D darkness mask")
+	_check(game.hud._root != null and game.hud._root.visible, "HUD remains visible without a fullscreen blackout mask")
 	_check(game.hud._boss_marker != null and game.hud._boss_marker.visible, "red boss locator remains visible outside the flashlight oval")
 	game.queue_free()
 	await process_frame
 	if failures.is_empty():
-		print("PASS: flashlight Compatibility render mask (%d checks)" % checks)
+		print("PASS: flashlight Compatibility unmasked render (%d checks)" % checks)
 	else:
 		for failure in failures:
 			push_error(failure)
-		print("FAIL: flashlight Compatibility render mask (%d failures)" % failures.size())
+		print("FAIL: flashlight Compatibility unmasked render (%d failures)" % failures.size())
 	quit(0 if failures.is_empty() else 1)
 
 func _add_probe(parent: Node, at: Vector3, color: Color) -> MeshInstance3D:
