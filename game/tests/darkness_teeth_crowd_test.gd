@@ -1,15 +1,8 @@
 extends SceneTree
-## Headless structural regression for the visual-only synthetic teeth horde.
+## Regression: visual-only floating teeth are removed while real enemy glints work.
 ## Run: godot --headless --path game --script res://tests/darkness_teeth_crowd_test.gd
 
 const TEETH_OVERLAY := preload("res://scripts/distant_zombie_teeth.gd")
-
-class AlwaysDarkManager:
-	extends Node
-	func get_teeth_glow_weight(_world_position: Vector3) -> float:
-		return 1.0
-	func get_oval_weight(_screen_uv: Vector2) -> float:
-		return 0.0
 
 var _failures: Array[String] = []
 var _checks := 0
@@ -18,106 +11,40 @@ func _initialize() -> void:
 	call_deferred("_run")
 
 func _run() -> void:
-	var camera := Camera3D.new()
-	var player := Node3D.new()
-	root.add_child(player)
-	root.add_child(camera)
 	var overlay := TEETH_OVERLAY.new()
 	root.add_child(overlay)
-	overlay.configure(camera, player, null)
+	overlay.configure(null, null, null)
 
-	_check(overlay.get_synthetic_mouth_count() == 420,
-		"visual teeth population does not depend on real enemy or spawn count")
-	var synthetic: Array = overlay.get("_synthetic_mouths")
-	var offsets_before: Array[Vector3] = []
-	var inside_minimum := false
-	for entry_variant in synthetic:
-		var entry: Dictionary = entry_variant
-		var offset: Vector3 = entry["offset"]
-		offsets_before.append(offset)
-		var distance := Vector2(offset.x, offset.z).length()
-		if distance < 14.0 - 0.001 or distance > 68.0 + 0.001:
-			inside_minimum = true
-	_check(not inside_minimum, "all synthetic teeth stay beyond 10 m flashlight range")
+	var property_names := {}
+	for entry in overlay.get_property_list():
+		property_names[String(entry["name"])] = true
+	_check(not property_names.has("_synthetic_mouths"), "no synthetic mouth population")
+	_check(not property_names.has("_mouth_texture"), "no generated teeth-mask texture")
+	_check(not property_names.has("_active_charge_index"), "no scheduled charging mouth")
 
-	var texture: Texture2D = overlay.get("_mouth_texture")
-	_check(texture != null and texture.get_width() == 96 and texture.get_height() == 48,
-		"all masks share one 96x48 texture")
-	if texture != null:
-		var image := texture.get_image()
-		var visible_pixels := 0
-		for y in range(image.get_height()):
-			for x in range(image.get_width()):
-				if image.get_pixel(x, y).a > 0.5:
-					visible_pixels += 1
-		_check(visible_pixels > 100, "teeth texture contains visible tooth-shaped pixels")
+	var method_names := {}
+	for entry in overlay.get_method_list():
+		method_names[String(entry["name"])] = true
+	_check(not method_names.has("_build_synthetic_mouths"), "no synthetic-mouth generator")
+	_check(not method_names.has("_build_mouth_texture"), "no teeth texture generator")
+	_check(not method_names.has("_draw_synthetic_horde"), "no synthetic overlay renderer")
 
-	var real_points: Array[Dictionary] = []
+	var real_points: Array[Dictionary] = [
+		{"center": Vector2(100.0, 100.0), "strength": 1.0, "scale": 1.0}
+	]
 	overlay.set_glints(real_points)
-	overlay._process(1.0)
-	var bright_points: Array[Dictionary] = [{"center": Vector2(100.0, 100.0), "strength": 1.0, "scale": 1.0}]
-	overlay.set_glints(bright_points)
-	overlay._process(1.0)
-	overlay.set_glints(real_points)
-	_check(overlay.get_synthetic_mouth_count() == 420,
-		"clearing real enemy glints never clears the synthetic crowd")
-	var unchanged := true
-	var after: Array = overlay.get("_synthetic_mouths")
-	for index in range(after.size()):
-		var at: Dictionary = after[index]
-		if at["offset"] != offsets_before[index]:
-			unchanged = false
-			break
-	_check(unchanged, "synthetic positions remain stable across redraws and animation")
-
-	# The sprint is a single event at exactly five-second intervals, not a
-	# per-zombie animation that multiplies with the 420 synthetic mouths.
-	var darkness := AlwaysDarkManager.new()
-	root.add_child(darkness)
-	overlay.set("_visibility_manager", darkness)
-	camera.position = Vector3(0.0, 1.6, 0.0)
-	camera.make_current()
-	await process_frame
-	overlay.set("_elapsed", 0.0)
-	overlay._process(4.99)
-	_check(int(overlay.get("_charge_event_count")) == 0 and int(overlay.get("_active_charge_index")) == -1,
-		"no sprint starts before the first five-second boundary")
-	overlay._process(0.01)
-	var first_index := int(overlay.get("_active_charge_index"))
-	_check(int(overlay.get("_charge_event_count")) == 1 and first_index >= 0,
-		"the first scheduled sprint selects exactly one visible mouth")
-	overlay._process(1.5)
-	_check(int(overlay.get("_charge_event_count")) == 1
-		and int(overlay.get("_active_charge_index")) == first_index,
-		"only one mouth remains selected during its approach and turn")
-	overlay._process(1.5)
-	_check(int(overlay.get("_active_charge_index")) == -1,
-		"the sprint ends after three seconds and frees its only slot")
-	overlay._process(1.99)
-	_check(int(overlay.get("_charge_event_count")) == 1,
-		"there is a two-second quiet gap before the next event")
-	overlay._process(0.01)
-	_check(int(overlay.get("_charge_event_count")) == 2
-		and int(overlay.get("_active_charge_index")) >= 0,
-		"the next single sprint begins at ten seconds, without overlap")
-	_check(overlay.get_charge_proximity(0.0) <= 0.001
-		and overlay.get_charge_proximity(1.2) >= 0.999
-		and overlay.get_charge_proximity(3.0) <= 0.001,
-		"apparent distance grows on approach and returns after retreat")
-	_check(absf(overlay.get_charge_turn_scale(1.425)) < 0.02
-		and overlay.get_charge_turn_scale(1.65) < -0.99,
-		"180-degree turn passes through edge-on profile then mirrors the mask")
-	_check(overlay.get_synthetic_mouth_count() == 420,
-		"charging does not change the visual population")
+	var glints: Array = overlay.get("_glints")
+	_check(glints.size() == 1 and glints[0]["center"] == Vector2(100.0, 100.0),
+		"glints from real tracked zombies remain supported")
+	var empty_points: Array[Dictionary] = []
+	overlay.set_glints(empty_points)
+	_check((overlay.get("_glints") as Array).is_empty(), "clearing real glints removes all overlay content")
 
 	overlay.queue_free()
-	darkness.queue_free()
-	camera.queue_free()
-	player.queue_free()
 	await process_frame
-	for message in _failures:
-		push_error(message)
-	print("%s: darkness teeth crowd (%d checks)" % ["PASS" if _failures.is_empty() else "FAIL", _checks])
+	for failure in _failures:
+		push_error(failure)
+	print("%s: darkness teeth removal (%d checks)" % ["PASS" if _failures.is_empty() else "FAIL", _checks])
 	quit(0 if _failures.is_empty() else 1)
 
 func _check(ok: bool, description: String) -> void:
