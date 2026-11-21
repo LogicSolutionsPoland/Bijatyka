@@ -23,6 +23,10 @@ func _run() -> void:
 	scene.add_child(manager)
 	manager.set_aim_yaw(0.0)
 	_check(manager.spotlight != null and manager.spotlight.visible, "one player-owned 3D spotlight is active")
+	var sheets := manager.spotlight.get_node_or_null("PlayerFlashlightBeamSheets") as MultiMeshInstance3D
+	var sections := manager.spotlight.get_node_or_null("PlayerFlashlightBeamSections") as MeshInstance3D
+	_check(sheets != null and sections != null and not sheets.visible and not sections.visible,
+		"visible beam-shaft graphics are disabled while the 3D spotlight remains active")
 	_check(is_equal_approx(manager.spotlight.spot_range, Visibility.MAX_RADIUS), "the surface light shares the 10 m beam range")
 	_check(manager.get_beam_density(Vector3(0.0, 1.55, -7.0)) > 0.9, "air above the ground lies inside the 3D beam")
 	_check(manager.get_beam_density(Vector3(5.0, 1.55, -7.0)) < 0.01, "air well outside the cone remains dark")
@@ -46,7 +50,7 @@ func _run() -> void:
 	var center := Vector2i(image.get_width() / 2, image.get_height() / 2)
 	var sky_light := image.get_pixelv(center)
 	var outside := image.get_pixel(int(image.get_width() * 0.06), int(image.get_height() * 0.06))
-	_check(sky_light.b > 0.045, "visible shaft glows in empty air without a floor surface")
+	_check(sky_light.b < 0.025, "empty air contains no graphical beam shaft")
 	_check(outside.b < 0.02, "air outside the beam stays black")
 	var wall := MeshInstance3D.new()
 	var box := BoxMesh.new()
@@ -62,7 +66,7 @@ func _run() -> void:
 		await process_frame
 	await RenderingServer.frame_post_draw
 	var behind_wall := root.get_texture().get_image().get_pixelv(center)
-	_check(behind_wall.b < sky_light.b * 0.6, "depth stops the air beam behind an opaque wall")
+	_check(behind_wall.b < 0.025, "opaque wall does not reveal any leftover graphical beam shaft")
 	print("FLASHLIGHT_VOLUME_SAMPLE " + JSON.stringify({"open_air": sky_light, "off_axis": outside, "wall": behind_wall}))
 	scene.queue_free()
 	await process_frame

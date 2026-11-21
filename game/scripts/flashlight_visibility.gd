@@ -256,8 +256,8 @@ func _build_beam_light() -> void:
 	spotlight.spot_range = MAX_RADIUS
 	spotlight.spot_angle = BEAM_HALF_ANGLE_DEGREES
 	spotlight.spot_attenuation = 1.4
-	# One unshadowed local light lights surfaces. The translucent, depth-tested
-	# sheets below make its shaft visible in the air on Compatibility/mobile.
+	# The unshadowed SpotLight3D lights surfaces; the legacy translucent
+	# shaft meshes remain hidden in regular gameplay.
 	spotlight.shadow_enabled = false
 	player.add_child(spotlight)
 	_build_visible_beam_volume()
@@ -293,6 +293,8 @@ func _build_visible_beam_volume() -> void:
 	sheets.name = "PlayerFlashlightBeamSheets"
 	sheets.multimesh = instances
 	sheets.material_override = material
+	# Keep the legacy probe geometry allocated, but remove the air-shaft visual in gameplay.
+	sheets.visible = false
 	sheets.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	# All three sheets occupy a cone from z=0 to z=-MAX_RADIUS in spotlight space.
 	# Include the shader-expanded radii for conservative whole-batch culling.
@@ -349,6 +351,8 @@ func _build_visible_beam_sections() -> void:
 	sections.name = "PlayerFlashlightBeamSections"
 	sections.mesh = mesh
 	sections.material_override = material
+	# Keep the real SpotLight3D and blackout; do not render a second beam mask.
+	sections.visible = false
 	sections.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var maximum_width := MAX_RADIUS * BEAM_TANGENT
 	sections.custom_aabb = AABB(

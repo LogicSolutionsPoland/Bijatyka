@@ -42,6 +42,7 @@ func _run() -> void:
 	check(is_instance_valid(sheets) and sheets.multimesh.instance_count == 3, "shared 3D beam still has three crossed sheets")
 	var sections = torch.spotlight.get_node_or_null("PlayerFlashlightBeamSections") as MeshInstance3D
 	check(is_instance_valid(sections) and (sections.mesh as ArrayMesh).get_surface_count() == 1, "7 beam cross-sections still share one surface")
+	check(not sheets.visible and not sections.visible, "graphical beam-shaft layers are disabled without disabling the spotlight")
 
 	# The elevator loading coordinator calls this only when ground preparation
 	# reaches the render profile step. Test the full scene's actual instances.

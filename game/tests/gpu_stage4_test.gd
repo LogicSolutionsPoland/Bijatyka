@@ -76,7 +76,10 @@ func _run() -> void:
 	check(world._pencil_screen_pass.visible and world.flashlight_visibility_manager.spotlight.visible,
 		"ground restores both Pencil Sketch and the full 3D flashlight")
 	var sheets := world.flashlight_visibility_manager.spotlight.get_node_or_null("PlayerFlashlightBeamSheets") as MultiMeshInstance3D
-	check(sheets != null and sheets.multimesh.instance_count == 3, "all crossed 3D beam sheets remain")
+	check(sheets != null and sheets.multimesh.instance_count == 3 and not sheets.visible,
+		"crossed beam sheets stay allocated for historical probes but hidden in gameplay")
+	var sections := world.flashlight_visibility_manager.spotlight.get_node_or_null("PlayerFlashlightBeamSections") as MeshInstance3D
+	check(sections != null and not sections.visible, "beam cross-sections no longer render in gameplay")
 	check(BEAM_SECTIONS.code.contains("if (radial >= 1.0)") and BEAM_SECTIONS.code.contains("ALPHA = section_opacity"),
 		"only zero-opacity section corners skip blending")
 	check(world.horde_far_visuals.rig_budget == 7 and world.spawn_director.ordinary_population_count() == 4,

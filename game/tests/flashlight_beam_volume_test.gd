@@ -50,7 +50,10 @@ func _run() -> void:
 		(node as MeshInstance3D).visible = false
 
 	var sections := manager.spotlight.get_node_or_null("PlayerFlashlightBeamSections") as MeshInstance3D
-	_check(sections != null and sections.mesh != null, "flashlight creates the depth-tested shaft cross-sections")
+	_check(sections != null and sections.mesh != null and not sections.visible,
+		"flashlight cross-section artwork stays disabled")
+	var sheets := manager.spotlight.get_node_or_null("PlayerFlashlightBeamSheets") as MultiMeshInstance3D
+	_check(sheets != null and not sheets.visible, "crossed beam-sheet artwork stays disabled")
 	for frame in range(5):
 		await process_frame
 	await RenderingServer.frame_post_draw
@@ -64,7 +67,7 @@ func _run() -> void:
 	_check(Rect2(Vector2.ZERO, Vector2(image.get_width(), image.get_height())).has_point(beam_screen), "beam axis projects inside the view")
 	var visible_blue := _sample_blue_max(image, beam_screen, 4)
 	print("FLASHLIGHT_AIR_BEAM_PIXEL " + JSON.stringify({"blue": visible_blue, "screen": beam_screen, "size": image.get_size()}))
-	_check(visible_blue > 0.12, "a blue shaft is visible in air along the camera aim")
+	_check(visible_blue < 0.08, "no blue graphical beam shaft appears in empty air")
 
 	# A black wall before the far sections should leave only the near sections
 	# visible. The beam must not draw through the opaque depth buffer.
@@ -87,7 +90,7 @@ func _run() -> void:
 	_save_stage6_capture(blocked_image, "beam-air-behind-wall.png")
 	var blocked_blue := _sample_blue_max(blocked_image, beam_screen, 4)
 	print("FLASHLIGHT_WALL_CUTOFF_PIXEL " + JSON.stringify({"before": visible_blue, "after": blocked_blue}))
-	_check(blocked_blue < visible_blue * 0.70, "opaque wall cuts off the far flashlight shaft")
+	_check(blocked_blue < 0.08, "wall does not reveal any beam-shaft overlay behind it")
 
 	# The real rooftop has a bright, warm city panorama. Probe the live
 	# composite and the entire beam against warm sky with the geometry off/on:
